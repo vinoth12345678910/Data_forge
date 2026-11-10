@@ -58,7 +58,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 
 ## Current state (UPDATE EACH SESSION)
 - Date: 2026-11-10
-- Directory `/Users/vinothanandgani/Dev/Data_forge` was EMPTY; NOT a git repo yet (`git init` happens in Session 0.1 on its own branch).
+- Directory the project directory was empty at start; git initialised in Session 0.1.
 - Phase/week: none started. Only planning docs saved.
 - Next: Session 0.1 (Gradle multi-module skeleton + GitHub Actions + MIT) -> start with Prompt 1 (plan mode), branch `p0-skeleton`.
 - Open: design brief needs the user's 2-3 reference tools. When hooks are set up, test each once (commit a URL into `ui/src`; edit `modules/cleanup` without safety-reviewer).
