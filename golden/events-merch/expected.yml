@@ -1,0 +1,240 @@
+# Business rules for events-merch. Each rule is a name, a description and either
+#   violations_sql  a query returning the offending rows (0 rows = rule holds), or
+#   enforced_by: db the database itself rejects the bad row (constraint + SQLSTATE given).
+# Dataset clock is meta.generated_at, never the wall clock.
+
+schema: events-merch
+
+rules:
+  - name: event_times_ordered
+    description: "An event starts before it ends."
+    enforced_by: db
+    constraint: events_times_ordered
+    sqlstate: "23514"
+
+  - name: referral_not_self
+    description: "A user cannot refer themselves."
+    enforced_by: db
+    constraint: users_referral_not_self
+    sqlstate: "23514"
+
+  - name: order_item_one_target
+    description: "Exactly one of ticket_type_id or merch_id is set on an order item."
+    enforced_by: db
+    constraint: order_items_one_target
+    sqlstate: "23514"
+
+  - name: registration_unique_per_user_event
+    description: "A user has at most one registration per event."
+    enforced_by: db
+    constraint: registrations_user_event_key
+    sqlstate: "23505"
+
+  - name: registration_ticket_matches_event
+    description: "The registered ticket type belongs to the registered event."
+    enforced_by: db
+    constraint: registrations_ticket_event_fk
+    sqlstate: "23503"
+
+  - name: event_status_valid_for_time
+    description: "on_sale and sold_out events have not ended; closed events have ended (dataset clock = meta.generated_at)."
+    violations_sql: |
+      select e.id from events e, meta m
+      where (e.status = 'closed' and e.ends_at > m.generated_at)
+         or (e.status in ('on_sale', 'sold_out') and e.ends_at <= m.generated_at)
+
+  - name: sold_out_means_full
+    description: "A sold_out event has registered quantity equal to the sum of its ticket type quantities."
+    violations_sql: |
+      select e.id from events e
+      where e.status = 'sold_out'
+        and coalesce((select sum(r.quantity) from registrations r where r.event_id = e.id), 0)
+         <> coalesce((select sum(t.quantity) from ticket_types t where t.event_id = e.id), 0)
+
+  - name: ticket_quantity_within_capacity
+    description: "The sum of ticket type quantities per event is at most the event capacity."
+    violations_sql: |
+      select e.id from events e
+      where (select coalesce(sum(t.quantity), 0) from ticket_types t where t.event_id = e.id) > e.capacity
+
+  - name: registration_within_ticket_quantity
+    description: "The sum of registration quantity per ticket type is at most the ticket type quantity."
+    violations_sql: |
+      select t.id from ticket_types t
+      where (select coalesce(sum(r.quantity), 0) from registrations r where r.ticket_type_id = t.id) > t.quantity
+
+  - name: registration_before_event
+    description: "A registration is created before its event starts."
+    violations_sql: |
+      select r.id from registrations r
+      join events e on e.id = r.event_id
+      where r.created_at >= e.starts_at
+
+  - name: referrer_joined_first
+    description: "A referrer joined no later than the user they referred."
+    violations_sql: |
+      select u.id from users u
+      join users ref on ref.id = u.referred_by
+      where ref.created_at > u.created_at
+
+  - name: order_total_matches_items
+    description: "orders.total_paise equals the sum of quantity * unit_price_paise over its items."
+    violations_sql: |
+      select o.id from orders o
+      where o.total_paise <> coalesce((select sum(i.quantity * i.unit_price_paise) from order_items i where i.order_id = o.id), 0)
+
+  - name: paid_order_has_one_succeeded_payment
+    description: "Paid, fulfilled and refunded orders have exactly one succeeded payment (failed or initiated attempts may sit beside it)."
+    violations_sql: |
+      select o.id from orders o
+      where o.status in ('paid', 'fulfilled', 'refunded')
+        and (select count(*) from payments p where p.order_id = o.id and p.status = 'succeeded') <> 1
+
+  - name: unpaid_order_has_no_succeeded_payment
+    description: "Pending and cancelled orders have no succeeded payment."
+    violations_sql: |
+      select o.id from orders o
+      where o.status in ('pending', 'cancelled')
+        and exists (select 1 from payments p where p.order_id = o.id and p.status = 'succeeded')
+
+  - name: succeeded_amount_equals_total
+    description: "A succeeded payment equals the order total."
+    violations_sql: |
+      select p.id from payments p
+      join orders o on o.id = p.order_id
+      where p.status = 'succeeded' and p.amount_paise <> o.total_paise
+
+  - name: latest_payment_belongs_to_order
+    description: "orders.latest_payment_id points at one of the order's own payments."
+    violations_sql: |
+      select o.id from orders o
+      join payments p on p.id = o.latest_payment_id
+      where p.order_id <> o.id
+
+  - name: latest_payment_is_latest
+    description: "latest_payment_id is the newest payment of the order by created_at, and is set whenever the order has payments."
+    violations_sql: |
+      select o.id from orders o
+      where (o.latest_payment_id is null and exists (select 1 from payments p where p.order_id = o.id))
+         or (o.latest_payment_id is not null and exists (
+               select 1 from payments p, payments l
+               where p.order_id = o.id and l.id = o.latest_payment_id and p.created_at > l.created_at))
+
+  - name: payment_completed_after_created
+    description: "A payment completes no earlier than it was created."
+    violations_sql: |
+      select p.id from payments p
+      where p.completed_at < p.created_at
+
+  - name: refund_only_on_succeeded_payment
+    description: "Refunds only attach to succeeded payments."
+    violations_sql: |
+      select f.id from refunds f
+      join payments p on p.id = f.payment_id
+      where p.status <> 'succeeded'
+
+  - name: refund_within_payment
+    description: "The sum of refunds per payment is at most the payment amount."
+    violations_sql: |
+      select p.id from payments p
+      where (select coalesce(sum(f.amount_paise), 0) from refunds f where f.payment_id = p.id) > p.amount_paise
+
+  - name: refund_after_payment
+    description: "A refund is created no earlier than its payment completed."
+    violations_sql: |
+      select f.id from refunds f
+      join payments p on p.id = f.payment_id
+      where f.created_at < p.completed_at
+
+  - name: refunded_order_fully_refunded
+    description: "An order is refunded exactly when its refunds sum to its total; partial refunds leave it paid or fulfilled."
+    violations_sql: |
+      select o.id from orders o,
+        lateral (select coalesce(sum(f.amount_paise), 0) as refunded
+                 from refunds f join payments p on p.id = f.payment_id
+                 where p.order_id = o.id) r
+      where (o.status = 'refunded' and r.refunded <> o.total_paise)
+         or (o.status <> 'refunded' and o.total_paise > 0 and r.refunded = o.total_paise)
+
+  - name: order_time_after_user_joined
+    description: "An order is placed no earlier than the user joined."
+    violations_sql: |
+      select o.id from orders o
+      join users u on u.id = o.user_id
+      where o.placed_at < u.created_at
+
+  - name: merch_not_oversold
+    description: "Merch sold on paid and fulfilled orders is at most the total stocked."
+    violations_sql: |
+      select m.id from merchandise m
+      where (select coalesce(sum(i.quantity), 0) from order_items i
+               join orders o on o.id = i.order_id
+               where i.merch_id = m.id and o.status in ('paid', 'fulfilled'))
+          > (select coalesce(sum(s.stocked), 0) from stock s where s.merch_id = m.id)
+
+  - name: stock_on_hand_matches_sales
+    description: "Per merch item: sum of on_hand = sum of stocked minus sold (paid and fulfilled lines; refunded returns to stock)."
+    violations_sql: |
+      select m.id from merchandise m
+      where (select coalesce(sum(s.on_hand), 0) from stock s where s.merch_id = m.id)
+         <> (select coalesce(sum(s.stocked), 0) from stock s where s.merch_id = m.id)
+            - (select coalesce(sum(i.quantity), 0) from order_items i
+               join orders o on o.id = i.order_id
+               where i.merch_id = m.id and o.status in ('paid', 'fulfilled'))
+
+  - name: registration_backed_by_paid_order
+    description: "A registration's order item belongs to an order that is paid or fulfilled."
+    violations_sql: |
+      select r.id from registrations r
+      join order_items i on i.id = r.order_item_id
+      join orders o on o.id = i.order_id
+      where o.status not in ('paid', 'fulfilled')
+
+  - name: registration_matches_order_item
+    description: "A registration has the same user and ticket type as its order item, and no more quantity than the item."
+    violations_sql: |
+      select r.id from registrations r
+      join order_items i on i.id = r.order_item_id
+      join orders o on o.id = i.order_id
+      where i.ticket_type_id is distinct from r.ticket_type_id
+         or o.user_id <> r.user_id
+         or r.quantity > i.quantity
+
+state_machines:
+  events:
+    states: [draft, on_sale, sold_out, closed, cancelled]
+    start: draft
+    transitions:
+      - draft -> on_sale
+      - on_sale -> sold_out
+      - on_sale -> closed
+      - sold_out -> closed
+      - draft -> cancelled
+      - on_sale -> cancelled
+      - sold_out -> cancelled
+    notes:
+      - closed is time-driven: it applies once ends_at has passed.
+      - sold_out requires registered quantity = sum of ticket type quantities.
+  orders:
+    states: [pending, paid, fulfilled, cancelled, refunded]
+    start: pending
+    transitions:
+      - pending -> paid
+      - paid -> fulfilled
+      - pending -> cancelled
+      - paid -> refunded
+      - fulfilled -> refunded
+    required_children:
+      - paid, fulfilled, refunded: exactly one succeeded payment
+      - refunded: refunds sum to the order total (partial refunds keep paid or fulfilled)
+      - pending, cancelled: no succeeded payment
+      - registrations only on paid or fulfilled orders
+  payments:
+    states: [initiated, succeeded, failed]
+    start: initiated
+    transitions:
+      - initiated -> succeeded
+      - initiated -> failed
+    notes:
+      - succeeded and failed are final; completed_at is set exactly when not initiated.
+

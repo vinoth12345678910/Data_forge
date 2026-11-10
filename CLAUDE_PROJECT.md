@@ -63,6 +63,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Repo: github.com/vinoth12345678910/Data_forge (private). Only this repo; the `data-forge` duplicate is to be deleted.
 - Done: Phase 0.1 skeleton (10 modules, MIT, ci.yml, zero-test check) merged to main. `scripts/verify.sh` + pre-push hook on `p0-verify`.
 - Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. `.github/workflows/ci.yml` is kept as is.
-- Next: golden schemas (events-merch first, branch p0-golden-events-merch), only when the user says so. Then (`CLAUDE.md`, `.claude/` on `p0-claude-config`).
+- Done: `golden/events-merch` (27 rules, 8-test container gate green on Postgres). Run container tests with `./gradlew containerTest` (needs Docker); `test` excludes them.
+- Next: `ecommerce` and `saas-multitenant` golden schemas, then `CLAUDE.md` and `.claude/` (`p0-claude-config`), each only when the user says so.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
 - Open: `docs/SPEC.md` missing (user to export). Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
