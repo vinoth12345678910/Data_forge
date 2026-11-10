@@ -165,6 +165,27 @@ abstract class GoldenContainerTest {
         assertEquals(stateMachines(), machines.keySet());
     }
 
+    /** Every status of every state machine appears in the seed, so no state goes untested. */
+    @Test
+    void everyStatusAppearsInSeed() throws Exception {
+        Map<?, ?> top = YAML.readValue(read("expected.yml"), Map.class);
+        Map<?, ?> machines = (Map<?, ?>) top.get("state_machines");
+        List<String> missing = new ArrayList<>();
+        try (Connection c = open()) {
+            for (Map.Entry<?, ?> m : machines.entrySet()) {
+                String table = (String) m.getKey();
+                List<?> states = (List<?>) ((Map<?, ?>) m.getValue()).get("states");
+                for (Object state : states) {
+                    String sql = "select 1 from " + table + " where status = '" + state + "'";
+                    if (count(c, sql) == 0) {
+                        missing.add(table + "." + state);
+                    }
+                }
+            }
+        }
+        assertTrue(missing.isEmpty(), "statuses never seen in the seed: " + missing);
+    }
+
     @Test
     void forgeYamlHasTheDeclaredScenarios() throws Exception {
         Map<?, ?> top = YAML.readValue(read("forge.yml"), Map.class);

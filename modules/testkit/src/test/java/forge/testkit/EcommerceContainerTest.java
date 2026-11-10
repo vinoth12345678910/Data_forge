@@ -3,9 +3,7 @@ package forge.testkit;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -39,27 +37,6 @@ class EcommerceContainerTest extends GoldenContainerTest {
     @Override
     List<String> scenarios() {
         return List.of("default", "flash-sale", "coupon-heavy", "return-season", "all-edge-cases");
-    }
-
-    /** Every status of every state machine appears in the seed, so no state goes untested. */
-    @Test
-    void everyStatusAppearsInSeed() throws Exception {
-        Map<?, ?> top = YAML.readValue(read("expected.yml"), Map.class);
-        Map<?, ?> machines = (Map<?, ?>) top.get("state_machines");
-        List<String> missing = new ArrayList<>();
-        try (Connection c = open()) {
-            for (Map.Entry<?, ?> m : machines.entrySet()) {
-                String table = (String) m.getKey();
-                List<?> states = (List<?>) ((Map<?, ?>) m.getValue()).get("states");
-                for (Object state : states) {
-                    String sql = "select 1 from " + table + " where status = '" + state + "'";
-                    if (count(c, sql) == 0) {
-                        missing.add(table + "." + state);
-                    }
-                }
-            }
-        }
-        assertTrue(missing.isEmpty(), "statuses never seen in the seed: " + missing);
     }
 
     /** The seed sits exactly on both coupon limits, so the boundary is proven valid. */
