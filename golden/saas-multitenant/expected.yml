@@ -1,0 +1,517 @@
+# Business rules for saas-multitenant. Each rule is a name, a description (ending in where it
+# applies) and either
+#   violations_sql  a query returning the offending rows (0 rows = rule holds), or
+#   enforced_by: db the database itself rejects the bad row (SQLSTATE, and constraint when it has one).
+# Dataset clock is meta.generated_at, never the wall clock. Currency is meta.currency.
+# This is the last golden schema: no more rules are added to the golden schemas after it.
+
+schema: saas-multitenant
+
+rules:
+  - name: member_role_same_tenant
+    description: "A member's role belongs to the member's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: members_role_fk
+    sqlstate: "23503"
+
+  - name: role_permission_same_tenant
+    description: "A role grant is on a role of the same tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: role_permissions_role_fk
+    sqlstate: "23503"
+
+  - name: team_parent_same_tenant
+    description: "A team's parent is a team of the same tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: teams_parent_fk
+    sqlstate: "23503"
+
+  - name: team_member_team_same_tenant
+    description: "A team membership points at a team of the same tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: team_members_team_fk
+    sqlstate: "23503"
+
+  - name: team_member_member_same_tenant
+    description: "A team membership points at a member of the same tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: team_members_member_fk
+    sqlstate: "23503"
+
+  - name: project_team_same_tenant
+    description: "A project's team belongs to the project's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: projects_team_fk
+    sqlstate: "23503"
+
+  - name: project_creator_same_tenant
+    description: "A project's creator is a member of the project's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: projects_creator_fk
+    sqlstate: "23503"
+
+  - name: api_key_project_same_tenant
+    description: "An API key's project belongs to the key's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: api_keys_project_fk
+    sqlstate: "23503"
+
+  - name: api_key_creator_same_tenant
+    description: "An API key's creator is a member of the key's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: api_keys_creator_fk
+    sqlstate: "23503"
+
+  - name: usage_event_project_same_tenant
+    description: "A usage event's project belongs to the event's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: usage_events_project_fk
+    sqlstate: "23503"
+
+  - name: usage_daily_project_same_tenant
+    description: "A usage rollup's project belongs to the rollup's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: usage_daily_project_fk
+    sqlstate: "23503"
+
+  - name: invoice_subscription_same_tenant
+    description: "An invoice's subscription belongs to the invoice's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoices_subscription_fk
+    sqlstate: "23503"
+
+  - name: invoice_line_invoice_same_tenant
+    description: "An invoice line's invoice belongs to the line's tenant. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoice_lines_invoice_fk
+    sqlstate: "23503"
+
+  - name: active_tenant_slug_unique
+    description: "Live tenants have distinct slugs (a deleted tenant frees its slug). Applies to: all tenants; deleted tenants are exempt by the partial index."
+    enforced_by: db
+    constraint: tenants_active_slug_key
+    sqlstate: "23505"
+
+  - name: active_user_email_unique
+    description: "Live users have distinct emails, ignoring case. Applies to: all users; deleted users are exempt by the partial index."
+    enforced_by: db
+    constraint: users_active_email_key
+    sqlstate: "23505"
+
+  - name: active_member_unique_per_user
+    description: "A user has at most one live membership per tenant. Applies to: all tenants; removed members are exempt by the partial index."
+    enforced_by: db
+    constraint: members_active_user_key
+    sqlstate: "23505"
+
+  - name: active_project_slug_unique
+    description: "Live projects of a tenant have distinct generated slugs. Applies to: all tenants; deleted projects are exempt by the partial index."
+    enforced_by: db
+    constraint: projects_active_slug_key
+    sqlstate: "23505"
+
+  - name: active_team_sibling_name_unique
+    description: "Live sibling teams (same parent, roots included) of a tenant have distinct names. Applies to: all tenants; deleted teams are exempt by the partial index."
+    enforced_by: db
+    constraint: teams_active_sibling_name_key
+    sqlstate: "23505"
+
+  - name: role_name_unique_per_tenant
+    description: "A tenant's roles have distinct names. Applies to: all tenants."
+    enforced_by: db
+    constraint: roles_tenant_name_key
+    sqlstate: "23505"
+
+  - name: invoice_number_unique_per_tenant
+    description: "A tenant's invoice numbers are distinct. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoices_tenant_number_key
+    sqlstate: "23505"
+
+  - name: one_live_subscription_per_tenant
+    description: "A tenant has at most one live subscription (trialing, active or past_due). Applies to: all tenants."
+    enforced_by: db
+    constraint: subscriptions_one_live_key
+    sqlstate: "23505"
+
+  - name: subscription_period_ordered
+    description: "A subscription period starts before it ends. Applies to: all tenants."
+    enforced_by: db
+    constraint: subscriptions_period_ordered
+    sqlstate: "23514"
+
+  - name: invoice_status_times_valid
+    description: "draft has no issue or paid time; open and uncollectible are issued with a due time and unpaid; paid is issued and paid, not before issue; void is unpaid. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoices_status_times_valid
+    sqlstate: "23514"
+
+  - name: invoice_total_formula
+    description: "total_minor = subtotal_minor + tax_minor. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoices_total_formula
+    sqlstate: "23514"
+
+  - name: invoice_line_amount_formula
+    description: "amount_minor = quantity * unit_amount_minor. Applies to: all tenants."
+    enforced_by: db
+    constraint: invoice_lines_amount_formula
+    sqlstate: "23514"
+
+  - name: team_not_own_parent
+    description: "A team is not its own parent. Applies to: all tenants."
+    enforced_by: db
+    constraint: teams_not_own_parent
+    sqlstate: "23514"
+
+  - name: project_slug_generated
+    description: "projects.slug is a stored generated column; inserting a value into it is rejected (no constraint name). Applies to: all tenants."
+    enforced_by: db
+    sqlstate: "428C9"
+
+  - name: usage_event_attrs_object
+    description: "usage_events.attrs is a JSON object. Applies to: all tenants."
+    enforced_by: db
+    constraint: usage_events_attrs_object
+    sqlstate: "23514"
+
+  - name: api_key_expiry_after_creation
+    description: "An API key expires after it was created. Applies to: all tenants."
+    enforced_by: db
+    constraint: api_keys_expiry_after_creation
+    sqlstate: "23514"
+
+  - name: api_key_scopes_nonempty
+    description: "An API key has at least one scope. Applies to: all tenants."
+    enforced_by: db
+    constraint: api_keys_scopes_nonempty
+    sqlstate: "23514"
+
+  - name: member_removed_iff_deleted
+    description: "A member is removed exactly when deleted_at is set. Applies to: all tenants."
+    enforced_by: db
+    constraint: members_removed_iff_deleted
+    sqlstate: "23514"
+
+  - name: tenant_closed_iff_deleted
+    description: "A tenant is closed exactly when deleted_at is set. Applies to: all tenants."
+    enforced_by: db
+    constraint: tenants_closed_iff_deleted
+    sqlstate: "23514"
+
+  - name: member_joined_matches_status
+    description: "invited has no joined_at; active and suspended have one; removed may have either. Applies to: all tenants."
+    enforced_by: db
+    constraint: members_joined_matches_status
+    sqlstate: "23514"
+
+  - name: no_live_team_under_deleted_team
+    description: "A live team does not sit under a deleted parent team. Applies to: live teams of all tenants."
+    violations_sql: |
+      select c.id from teams c
+      join teams p on p.tenant_id = c.tenant_id and p.id = c.parent_id
+      where c.deleted_at is null and p.deleted_at is not null
+
+  - name: no_live_project_under_deleted_team
+    description: "A live project does not belong to a deleted team. Applies to: live projects of all tenants."
+    violations_sql: |
+      select j.id from projects j
+      join teams t on t.tenant_id = j.tenant_id and t.id = j.team_id
+      where j.deleted_at is null and t.deleted_at is not null
+
+  - name: deleted_tenant_has_no_live_children
+    description: "A deleted (closed) tenant has no live member, project or team, no live subscription and no unrevoked API key. Applies to: deleted tenants only."
+    violations_sql: |
+      select t.id from tenants t
+      where t.deleted_at is not null and (
+           exists (select 1 from members m where m.tenant_id = t.id and m.deleted_at is null)
+        or exists (select 1 from projects j where j.tenant_id = t.id and j.deleted_at is null)
+        or exists (select 1 from teams x where x.tenant_id = t.id and x.deleted_at is null)
+        or exists (select 1 from subscriptions s where s.tenant_id = t.id and s.status in ('trialing', 'active', 'past_due'))
+        or exists (select 1 from api_keys k where k.tenant_id = t.id and k.revoked_at is null))
+
+  - name: no_live_api_key_on_deleted_project
+    description: "An unrevoked API key does not point at a deleted project. Applies to: all tenants."
+    violations_sql: |
+      select k.id from api_keys k
+      join projects j on j.tenant_id = k.tenant_id and j.id = k.project_id
+      where k.revoked_at is null and j.deleted_at is not null
+
+  - name: team_member_refs_live
+    description: "A team membership points at a live team and a live member. Applies to: all tenants."
+    violations_sql: |
+      select tm.team_id as id from team_members tm
+      join teams t on t.tenant_id = tm.tenant_id and t.id = tm.team_id
+      join members m on m.tenant_id = tm.tenant_id and m.id = tm.member_id
+      where t.deleted_at is not null or m.deleted_at is not null
+
+  - name: live_member_has_live_user
+    description: "A live member belongs to a live user. Applies to: live members of all tenants."
+    violations_sql: |
+      select m.id from members m
+      join users u on u.id = m.user_id
+      where m.deleted_at is null and u.deleted_at is not null
+
+  - name: deleted_not_before_created
+    description: "deleted_at is not before the row was created (tenants, users, members, teams, projects). Applies to: all tenants."
+    violations_sql: |
+      select t.id::text as id from tenants t where t.deleted_at < t.created_at
+      union all select u.id::text from users u where u.deleted_at < u.created_at
+      union all select m.id::text from members m where m.deleted_at < m.invited_at
+      union all select x.id::text from teams x where x.deleted_at < x.created_at
+      union all select j.id::text from projects j where j.deleted_at < j.created_at
+
+  - name: active_members_within_plan_seats
+    description: "Active and suspended members (not invited, not removed) are at most the plan's seats. Applies to: live tenants only (closed and deleted tenants are exempt)."
+    violations_sql: |
+      select t.id from tenants t
+      join plans p on p.id = t.plan_id
+      where t.deleted_at is null
+        and (select count(*) from members m where m.tenant_id = t.id
+             and m.status in ('active', 'suspended') and m.deleted_at is null) > p.seats
+
+  - name: live_projects_within_plan_limit
+    description: "Live (not deleted) projects are at most the plan's max_projects. Applies to: live tenants only (closed and deleted tenants are exempt)."
+    violations_sql: |
+      select t.id from tenants t
+      join plans p on p.id = t.plan_id
+      where t.deleted_at is null
+        and (select count(*) from projects j where j.tenant_id = t.id and j.deleted_at is null) > p.max_projects
+
+  - name: tenant_plan_matches_live_subscription
+    description: "A tenant's plan is the plan of its live subscription. Applies to: tenants that have a live subscription (closed tenants have none)."
+    violations_sql: |
+      select t.id from tenants t
+      join subscriptions s on s.tenant_id = t.id and s.status in ('trialing', 'active', 'past_due')
+      where t.plan_id <> s.plan_id
+
+  - name: tenant_status_matches_subscription_status
+    description: "trialing goes with a trialing subscription, active with active, suspended with past_due; a closed tenant has no live subscription. Applies to: all tenants."
+    violations_sql: |
+      select t.id from tenants t
+      where (t.status = 'trialing' and not exists (select 1 from subscriptions s where s.tenant_id = t.id and s.status = 'trialing'))
+         or (t.status = 'active' and not exists (select 1 from subscriptions s where s.tenant_id = t.id and s.status = 'active'))
+         or (t.status = 'suspended' and not exists (select 1 from subscriptions s where s.tenant_id = t.id and s.status = 'past_due'))
+         or (t.status = 'closed' and exists (select 1 from subscriptions s where s.tenant_id = t.id and s.status in ('trialing', 'active', 'past_due')))
+
+  - name: trial_dates_valid
+    description: "A trialing subscription has trial_ends_at inside its period. Applies to: trialing subscriptions of all tenants."
+    violations_sql: |
+      select s.id from subscriptions s
+      where s.status = 'trialing'
+        and not coalesce(s.trial_ends_at between s.period_start and s.period_end, false)
+
+  - name: usage_daily_event_count_matches
+    description: "usage_daily.event_count equals the number of raw events on that local day (day = date in the tenant's time zone). Applies to: all tenants, including closed ones."
+    violations_sql: |
+      select d.project_id as id from usage_daily d
+      join tenants t on t.id = d.tenant_id
+      where d.event_count <> (select count(*) from usage_events e
+          where e.tenant_id = d.tenant_id and e.project_id = d.project_id and e.kind = d.kind
+            and (e.occurred_at at time zone t.timezone)::date = d.day)
+
+  - name: usage_daily_quantity_matches
+    description: "usage_daily.quantity_total equals the sum of event quantities on that local day. Applies to: all tenants, including closed ones."
+    violations_sql: |
+      select d.project_id as id from usage_daily d
+      join tenants t on t.id = d.tenant_id
+      where d.quantity_total <> (select coalesce(sum(e.quantity), 0) from usage_events e
+          where e.tenant_id = d.tenant_id and e.project_id = d.project_id and e.kind = d.kind
+            and (e.occurred_at at time zone t.timezone)::date = d.day)
+
+  - name: usage_events_have_rollup
+    description: "Every raw event has a usage_daily row for its local day, project and kind. Applies to: all tenants, including closed ones."
+    violations_sql: |
+      select e.id from usage_events e
+      join tenants t on t.id = e.tenant_id
+      where not exists (select 1 from usage_daily d
+          where d.tenant_id = e.tenant_id and d.project_id = e.project_id and d.kind = e.kind
+            and d.day = (e.occurred_at at time zone t.timezone)::date)
+
+  - name: usage_not_in_future
+    description: "No event is after the dataset clock (meta.generated_at), and no rollup day is after the clock's local date. Applies to: all tenants."
+    violations_sql: |
+      select e.id::text as id from usage_events e, meta m where e.occurred_at > m.generated_at
+      union all
+      select d.project_id::text from usage_daily d
+      join tenants t on t.id = d.tenant_id, meta m
+      where d.day > (m.generated_at at time zone t.timezone)::date
+
+  - name: usage_event_after_project_created
+    description: "An event is not earlier than its project was created. Applies to: all tenants."
+    violations_sql: |
+      select e.id from usage_events e
+      join projects j on j.tenant_id = e.tenant_id and j.id = e.project_id
+      where e.occurred_at < j.created_at
+
+  - name: invoice_subtotal_matches_lines
+    description: "subtotal_minor equals the sum of the invoice's line amounts. Applies to: all tenants, all invoice statuses."
+    violations_sql: |
+      select i.id from invoices i
+      where i.subtotal_minor <> coalesce((select sum(l.amount_minor) from invoice_lines l
+          where l.tenant_id = i.tenant_id and l.invoice_id = i.id), 0)
+
+  - name: proration_line_matches_formula
+    description: "A proration line is round(price * covered_seconds / cycle_seconds), half away from zero, computed in numeric; a credit is negative. The cycle is the calendar month in the tenant's zone, so DST months are 23 or 25 hours shorter or longer. Applies to: all tenants, proration lines only."
+    violations_sql: |
+      select l.id from invoice_lines l
+      join tenants t on t.id = l.tenant_id
+      join plans p on p.id = l.plan_id
+      cross join lateral (select date_trunc('month', l.period_start at time zone t.timezone) as ls) c
+      where l.kind in ('proration_charge', 'proration_credit')
+        and l.unit_amount_minor <> (case when l.kind = 'proration_credit' then -1 else 1 end)
+            * round(p.monthly_price_minor::numeric * extract(epoch from (l.period_end - l.period_start))
+                    / extract(epoch from (((c.ls + interval '1 month') at time zone t.timezone)
+                                          - (c.ls at time zone t.timezone))))
+
+  - name: invoice_period_within_subscription
+    description: "An invoice period lies inside its subscription period. Applies to: all tenants."
+    violations_sql: |
+      select i.id from invoices i
+      join subscriptions s on s.tenant_id = i.tenant_id and s.id = i.subscription_id
+      where i.period_start < s.period_start or i.period_end > s.period_end
+
+  - name: plan_line_matches_plan_price
+    description: "A plan line's unit amount equals the line plan's monthly price. Applies to: all tenants, plan lines only."
+    violations_sql: |
+      select l.id from invoice_lines l
+      join plans p on p.id = l.plan_id
+      where l.kind = 'plan' and l.unit_amount_minor <> p.monthly_price_minor
+
+  - name: owner_role_has_all_permissions
+    description: "A system 'owner' role holds every permission. Applies to: live tenants only (closed and deleted tenants are exempt)."
+    violations_sql: |
+      select r.id from roles r
+      join tenants t on t.id = r.tenant_id
+      where t.deleted_at is null and r.is_system and r.name = 'owner'
+        and exists (select 1 from permissions p where not exists (
+            select 1 from role_permissions rp where rp.role_id = r.id and rp.permission_id = p.id))
+
+  - name: tenant_has_active_owner
+    description: "A tenant has at least one active member with the system 'owner' role. Applies to: live tenants only (closed and deleted tenants are exempt)."
+    violations_sql: |
+      select t.id from tenants t
+      where t.deleted_at is null
+        and not exists (select 1 from members m
+            join roles r on r.tenant_id = m.tenant_id and r.id = m.role_id
+            where m.tenant_id = t.id and m.status = 'active' and m.deleted_at is null
+              and r.is_system and r.name = 'owner')
+
+  - name: api_key_scopes_known
+    description: "Every API key scope is a known permission code. Applies to: all tenants."
+    violations_sql: |
+      select k.id from api_keys k
+      where exists (select 1 from unnest(k.scopes) s
+          where not exists (select 1 from permissions p where p.code = s))
+
+  - name: api_key_scopes_within_creator_permissions
+    description: "Every scope of an API key is a permission of its creator's role. Applies to: all tenants."
+    violations_sql: |
+      select k.id from api_keys k
+      join members m on m.tenant_id = k.tenant_id and m.id = k.created_by
+      where exists (select 1 from unnest(k.scopes) s
+          where not exists (select 1 from role_permissions rp
+              join permissions p on p.id = rp.permission_id
+              where rp.role_id = m.role_id and p.code = s))
+
+  - name: team_tree_acyclic
+    description: "No team is its own ancestor (walk stays inside one tenant). Applies to: all tenants."
+    violations_sql: |
+      with recursive walk(start_id, tenant_id, id, parent_id, depth) as (
+        select t.id, t.tenant_id, t.id, t.parent_id, 1 from teams t
+        union all
+        select w.start_id, p.tenant_id, p.id, p.parent_id, w.depth + 1
+        from walk w join teams p on p.tenant_id = w.tenant_id and p.id = w.parent_id
+        where w.depth < 20)
+      select distinct start_id as id from walk where id = start_id and depth > 1
+
+  - name: team_depth_bounded
+    description: "The team tree is at most 4 levels deep. Applies to: all tenants."
+    violations_sql: |
+      with recursive walk(start_id, tenant_id, id, parent_id, depth) as (
+        select t.id, t.tenant_id, t.id, t.parent_id, 1 from teams t
+        union all
+        select w.start_id, p.tenant_id, p.id, p.parent_id, w.depth + 1
+        from walk w join teams p on p.tenant_id = w.tenant_id and p.id = w.parent_id
+        where w.depth < 6)
+      select distinct start_id as id from walk where depth > 4
+
+  - name: tenant_timezone_valid
+    description: "tenants.timezone is a name in pg_timezone_names (depends on the pinned Postgres image's tz data). Applies to: all tenants."
+    violations_sql: |
+      select t.id from tenants t
+      where not exists (select 1 from pg_timezone_names z where z.name = t.timezone)
+
+  - name: tenant_settings_valid
+    description: "settings.locale is a non-empty string. Applies to: live tenants only (closed and deleted tenants are exempt)."
+    violations_sql: |
+      select t.id from tenants t
+      where t.deleted_at is null
+        and not coalesce(jsonb_typeof(t.settings -> 'locale') = 'string' and length(t.settings ->> 'locale') > 0, false)
+
+  - name: project_retention_valid
+    description: "If a project's settings has retention_days, it is a whole number from 1 to 365. Applies to: all projects of all tenants."
+    violations_sql: |
+      select j.id from projects j
+      where j.settings ? 'retention_days'
+        and not (case when jsonb_typeof(j.settings -> 'retention_days') = 'number'
+              then (j.settings ->> 'retention_days')::numeric between 1 and 365
+               and (j.settings ->> 'retention_days')::numeric = trunc((j.settings ->> 'retention_days')::numeric)
+              else false end)
+
+  - name: usage_source_ip_allowed
+    description: "If the tenant has an ip_allowlist, an event's source_ip lies inside one of its ranges (a null source_ip is allowed). Applies to: tenants with a non-empty ip_allowlist."
+    violations_sql: |
+      select e.id from usage_events e
+      join tenants t on t.id = e.tenant_id
+      where cardinality(t.ip_allowlist) > 0 and e.source_ip is not null
+        and not (e.source_ip <<= any (t.ip_allowlist::inet[]))
+
+state_machines:
+  tenants:
+    states: [trialing, active, suspended, closed]
+    start: trialing
+    transitions:
+      - trialing -> active
+      - active -> suspended
+      - suspended -> active
+      - trialing -> closed
+      - active -> closed
+      - suspended -> closed
+    notes:
+      - closed goes with deleted_at; a closed tenant has no live children.
+      - trialing, active, suspended match a trialing, active, past_due subscription.
+  members:
+    states: [invited, active, suspended, removed]
+    start: invited
+    transitions:
+      - invited -> active
+      - active -> suspended
+      - suspended -> active
+      - invited -> removed
+      - active -> removed
+      - suspended -> removed
+    notes:
+      - active and suspended members use a seat; invited and removed do not.
+      - removed goes with deleted_at.
+  subscriptions:
+    states: [trialing, active, past_due, cancelled]
+    start: trialing
+    transitions:
+      - trialing -> active
+      - active -> past_due
+      - past_due -> active
+      - trialing -> cancelled
+      - active -> cancelled
+      - past_due -> cancelled
+    notes:
+      - live = trialing, active or past_due; one per tenant.
+  invoices:
+    states: [draft, open, paid, void, uncollectible]
+    start: draft
+    transitions:
+      - draft -> open
+      - open -> paid
+      - open -> void
+      - open -> uncollectible
+
