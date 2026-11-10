@@ -1,4 +1,4 @@
-package forge.schema;
+package forge.core;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,27 +9,27 @@ import java.util.Set;
  * It knows columns, literals, casts, function calls, arithmetic, comparisons, AND/OR/NOT,
  * IS NULL and "= ANY (ARRAY[...])". Anything else throws, and the caller keeps only the raw text.
  */
-final class Expr {
+public final class Expr {
 
-    sealed interface Node permits Col, Lit, Call, Bin, Not, IsNull, Any, Arr {}
+    public sealed interface Node permits Col, Lit, Call, Bin, Not, IsNull, Any, Arr {}
 
-    record Col(String name) implements Node {}
+    public record Col(String name) implements Node {}
 
     /** A literal. str is true for a quoted literal; type is the cast applied to it, if any. */
-    record Lit(String text, boolean str, String type) implements Node {}
+    public record Lit(String text, boolean str, String type) implements Node {}
 
-    record Call(String name, List<Node> args) implements Node {}
+    public record Call(String name, List<Node> args) implements Node {}
 
-    record Bin(String op, Node l, Node r) implements Node {}
+    public record Bin(String op, Node l, Node r) implements Node {}
 
-    record Not(Node e) implements Node {}
+    public record Not(Node e) implements Node {}
 
-    record IsNull(Node e, boolean not) implements Node {}
+    public record IsNull(Node e, boolean not) implements Node {}
 
     /** e = ANY (ARRAY[items]). */
-    record Any(Node e, List<Node> items) implements Node {}
+    public record Any(Node e, List<Node> items) implements Node {}
 
-    record Arr(List<Node> items) implements Node {}
+    public record Arr(List<Node> items) implements Node {}
 
     private record Tok(char kind, String text) {}
 
@@ -45,7 +45,7 @@ final class Expr {
         lex(s);
     }
 
-    static Node parse(String s) {
+    public static Node parse(String s) {
         Expr p = new Expr(s);
         Node n = p.or();
         if (p.pos != p.toks.size()) {

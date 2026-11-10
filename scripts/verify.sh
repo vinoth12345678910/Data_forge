@@ -38,7 +38,12 @@ fi
 # b. determinism: same seed, two runs, byte-identical
 echo ">> b. determinism test"
 if has_tests '*DeterminismTest.java'; then
-  if ./gradlew test --tests '*DeterminismTest'; then
+  # Only the modules that have such a test (Gradle fails a module where the filter matches nothing).
+  det_ok=1
+  for m in $(find modules -path '*/src/test/*' -name '*DeterminismTest.java' | cut -d/ -f2 | sort -u); do
+    ./gradlew ":$m:test" --tests '*DeterminismTest' || det_ok=0
+  done
+  if [ "$det_ok" = 1 ]; then
     record "PASS   " "b. determinism"
   else
     fail "b. determinism"

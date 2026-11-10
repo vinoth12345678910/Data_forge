@@ -1,6 +1,6 @@
-# forge.yml keys (approved, frozen in P1.3)
+# forge.yml keys (frozen)
 
-Status: approved by the user on 2026-11-10 (Phase 1 Step 0). P1.3 freezes it and this line changes to "frozen". `docs/SPEC.md` section 7 is the starting point; where this file differs, the difference is listed under "Differences from SPEC section 7".
+Status: approved by the user on 2026-11-10 (Phase 1 Step 0). Frozen in P1.3: `ConfigReader` and `ConfigCheck` enforce exactly this, and `ConfigReaderTest` parses the example below. `docs/SPEC.md` section 7 is the starting point; where this file differs, the difference is listed under "Differences from SPEC section 7".
 
 One YAML file in git, named `forge.yml`. The CLI and the UI both read and write this file and nothing else.
 

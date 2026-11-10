@@ -67,6 +67,10 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Done on `p0-claude-config`: `CLAUDE.md`, `.claude/` agents, skills, hooks (see `docs/HOOKS.md`). Merged (PR #8). The user's live hook checks are still to be run in a fresh session.
 - Phase 1 runs as six stacked branches (user-approved for this phase only): each PR targets the previous feature's branch. Design docs approved 2026-11-10: `docs/CONFIG.md`, `docs/design/SEEDED_RANDOM.md`.
 - Done P1.1 `p1-schema-reader`: `SchemaGraph` in `core`, `PgReader`, `DdlReader` (scratch database), `CheckParser`, snapshot gate `SchemaReaderContainerTest` green on Postgres 16.
-- Next: P1.2 planner (`p1-planner`), then P1.3 config and CLI, P1.4 generator core, P1.5 inference and locale generators, P1.6 holdout gate. Do not start Phase 2.
+- Done P1.2 `p1-planner`: `Planner`, `Plan`, `Scc`, `PlanError` in `gen`; gates `PlannerTest`, `PlannerPropertyTest` (jqwik), `PlannerContainerTest` green.
+- Done P1.3 `p1-config-cli`: `Config*` in `core`, Picocli `forge` with real `init`, stubs for the rest; `ConfigReaderTest`, `CliTest`, `InitContainerTest` green; `docs/CONFIG.md` frozen.
+- Done P1.4 `p1-generator-core`: `Mix`, `Keys`, `Cell`, `Perm`, `Uniq`, `Dom`, `RowGen`, `Out` in `gen`; `GeneratorDeterminismTest` (verify.sh step b now runs), `MixTest`, `GeneratorStructureTest` green.
+- Done P1.5 `p1-inference-locale`: `Infer`, `Gstin`, `Iban`, `Phone`, `Pincode`, `Names` (en_IN lists) in `gen`; `LocaleGenTest`, `InferTest`, `GeneratorInferenceTest` green.
+- Done P1.6 `p1-holdout-gate`: test-only `TestInsert` and `StructureCheck` in `testkit`; zero-config structure gate green on Pagila and the three goldens (and at 1000 rows per table); `gen` extended (see `docs/design/SEEDED_RANDOM.md`, P1.6 additions, for the user to review). Phase 1 complete pending merge of the six stacked PRs. Do not start Phase 2.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
 - Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.

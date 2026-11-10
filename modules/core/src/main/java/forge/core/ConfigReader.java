@@ -1,0 +1,218 @@
+package forge.core;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import forge.core.Config.ColConf;
+import forge.core.Config.Conn;
+import forge.core.Config.TableConf;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.regex.Pattern;
+
+/** Reads forge.yml text and checks it against docs/CONFIG.md. Every error names the key by its path. */
+public final class ConfigReader {
+
+    private static final ObjectMapper YAML =
+        new ObjectMapper(new YAMLFactory()).enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+    private static final Pattern URL = Pattern.compile("postgres://[^/@:?\\s]+(:\\d+)?/[^/@?\\s]+");
+
+    private ConfigReader() {}
+
+    public static Config read(String text) {
+        JsonNode root;
+        try {
+            root = YAML.readTree(text);
+        } catch (JsonProcessingException e) {
+            throw new ConfigError("forge.yml is not valid YAML: " + e.getOriginalMessage());
+        }
+        if (root == null || !root.isObject()) {
+            throw new ConfigError("forge.yml must be a map of keys.");
+        }
+        keys(root, "", "version", "seed", "clock", "locale", "connection", "ddl", "use", "tables",
+            "rules", "states", "scenarios", "cleanup");
+
+        JsonNode version = root.get("version");
+        if (version == null || !version.isInt() || version.intValue() != 1) {
+            throw new ConfigError("version: must be 1.");
+        }
+        JsonNode seed = root.get("seed");
+        if (seed == null || !seed.isIntegralNumber() || !seed.canConvertToLong()) {
+            throw new ConfigError("seed: a whole number (signed 64-bit) is required.");
+        }
+        String clock = text(root, "clock", "");
+        if (clock == null) {
+            throw new ConfigError("clock: required, an instant such as \"2025-01-01T00:00:00Z\".");
+        }
+        try {
+            Instant.parse(clock);
+        } catch (DateTimeParseException e) {
+            throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
+        }
+        String locale = text(root, "locale", "");
+        for (String reserved : List.of("use", "rules", "states", "scenarios", "cleanup")) {
+            JsonNode n = root.get(reserved);
+            if (n != null && !n.isNull() && !n.isEmpty()) {
+                throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
+            }
+        }
+        Conn conn = connection(root.get("connection"));
+        String ddl = text(root, "ddl", "");
+        if (conn == null && ddl == null) {
+            throw new ConfigError("One of connection.url or ddl is required.");
+        }
+        JsonNode tables = root.get("tables");
+        if (tables == null || !tables.isObject()) {
+            throw new ConfigError("tables: required, a map of table name to settings.");
+        }
+        Map<String, TableConf> out = new TreeMap<>();
+        for (Iterator<Map.Entry<String, JsonNode>> it = tables.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
+        }
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out);
+    }
+
+    private static Conn connection(JsonNode n) {
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        keys(n, "connection", "url", "schema", "env", "user", "password_env", "backup_cmd");
+        String url = text(n, "url", "connection");
+        if (url == null) {
+            throw new ConfigError("connection.url: required when connection is present.");
+        }
+        if (url.contains("@")) {
+            throw new ConfigError("connection.url: must not carry a user or password; use connection.user and connection.password_env.");
+        }
+        if (!URL.matcher(url).matches()) {
+            throw new ConfigError("connection.url: expected postgres://host:port/database, got " + url);
+        }
+        String env = text(n, "env", "connection");
+        if (env == null || !Config.ENVS.contains(env)) {
+            throw new ConfigError("connection.env: required, one of dev, test, staging, prod.");
+        }
+        String schema = text(n, "schema", "connection");
+        return new Conn(url, schema == null ? "public" : schema, env, text(n, "user", "connection"),
+            text(n, "password_env", "connection"), text(n, "backup_cmd", "connection"));
+    }
+
+    private static TableConf table(JsonNode n, String path) {
+        if (n == null || n.isNull()) {
+            return new TableConf(null, false, new TreeMap<>());
+        }
+        keys(n, path, "rows", "keep", "columns");
+        Integer rows = null;
+        JsonNode r = n.get("rows");
+        if (r != null) {
+            if (!r.isInt() || r.intValue() < 0) {
+                throw new ConfigError(path + ".rows: a whole number of 0 or more is required.");
+            }
+            rows = r.intValue();
+        }
+        boolean keep = bool(n, "keep", path) == Boolean.TRUE;
+        if (keep && rows != null) {
+            throw new ConfigError(path + ": a table with keep: true is never generated, so it must not have rows.");
+        }
+        Map<String, ColConf> cols = new TreeMap<>();
+        JsonNode c = n.get("columns");
+        if (c != null && !c.isNull()) {
+            if (!c.isObject()) {
+                throw new ConfigError(path + ".columns: a map of column name to settings is required.");
+            }
+            for (Iterator<Map.Entry<String, JsonNode>> it = c.fields(); it.hasNext(); ) {
+                Map.Entry<String, JsonNode> e = it.next();
+                cols.put(e.getKey(), column(e.getValue(), path + ".columns." + e.getKey()));
+            }
+        }
+        return new TableConf(rows, keep, cols);
+    }
+
+    private static ColConf column(JsonNode n, String path) {
+        keys(n, path, "gen", "locale", "unique", "null_rate", "values", "min", "max");
+        String gen = text(n, "gen", path);
+        if (gen != null && !Config.GENS.contains(gen)) {
+            throw new ConfigError(path + ".gen: unknown generator " + gen + ". Known: " + Config.GENS);
+        }
+        Integer nullPer10k = null;
+        JsonNode rate = n.get("null_rate");
+        if (rate != null) {
+            BigDecimal parts = rate.isNumber() ? rate.decimalValue().movePointRight(4) : null;
+            if (parts == null || parts.stripTrailingZeros().scale() > 0 || parts.signum() < 0 || parts.intValue() > 10000) {
+                throw new ConfigError(path + ".null_rate: a number from 0 to 1 with at most 4 decimals is required.");
+            }
+            nullPer10k = parts.intValue();
+        }
+        List<String> values = null;
+        JsonNode v = n.get("values");
+        if (v != null) {
+            if (!v.isArray() || v.isEmpty()) {
+                throw new ConfigError(path + ".values: a list with at least one value is required.");
+            }
+            values = new ArrayList<>();
+            for (JsonNode item : v) {
+                values.add(item.asText());
+            }
+        }
+        if ("pick".equals(gen) && values == null) {
+            throw new ConfigError(path + ": gen: pick needs values.");
+        }
+        return new ColConf(gen, text(n, "locale", path), bool(n, "unique", path), nullPer10k, values,
+            scalar(n, "min", path), scalar(n, "max", path));
+    }
+
+    private static void keys(JsonNode n, String path, String... allowed) {
+        if (!n.isObject()) {
+            throw new ConfigError((path.isEmpty() ? "forge.yml" : path) + ": a map of keys is required.");
+        }
+        Set<String> ok = Set.of(allowed);
+        for (Iterator<String> it = n.fieldNames(); it.hasNext(); ) {
+            String key = it.next();
+            if (!ok.contains(key)) {
+                throw new ConfigError((path.isEmpty() ? "" : path + ".") + key + ": unknown key. Allowed here: " + List.of(allowed));
+            }
+        }
+    }
+
+    private static String text(JsonNode n, String key, String path) {
+        JsonNode v = n.get(key);
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (!v.isTextual()) {
+            throw new ConfigError((path.isEmpty() ? "" : path + ".") + key + ": text is required.");
+        }
+        return v.textValue();
+    }
+
+    private static String scalar(JsonNode n, String key, String path) {
+        JsonNode v = n.get(key);
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (v.isContainerNode()) {
+            throw new ConfigError(path + "." + key + ": a single value is required.");
+        }
+        return v.asText();
+    }
+
+    private static Boolean bool(JsonNode n, String key, String path) {
+        JsonNode v = n.get(key);
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (!v.isBoolean()) {
+            throw new ConfigError(path + "." + key + ": true or false is required.");
+        }
+        return v.booleanValue();
+    }
+}
