@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 P1.2 planner (branch p1-planner, stacked on p1-schema-reader)
+- Done: `Planner`, `Plan`, `Scc`, `PlanError` in `gen`. Parents before children in name order; a cycle is broken at a deferrable key first, else at an all-nullable key (insert NULL, update later); a cycle with neither fails naming tables, keys and columns. Self-references and junction tables are reported; row counts are checked (missing, negative, unknown table, NOT NULL child of an empty parent). Gate green: `PlannerTest` (12), `PlannerPropertyTest` (jqwik, 2000 random schemas, checked against an independent cycle test), `PlannerContainerTest` (three goldens and Pagila; events-merch breaks `orders_latest_payment_fk` as deferred).
+- Not done: speed and memory not measured (the fast suite runs in under a second); the break choice is legal and repeatable but not proven to be the smallest set of breaks.
+- Next: P1.3 config and CLI on `p1-config-cli`.
+- Decisions: none new from the user. Builder choices: ties are broken by table name, then key name; a self-reference is never a cycle.
+- Open: capacity checks for unique columns (rows versus room) belong to the generator features, not here.
+
 ## 2026-11-10 P1.1 schema reader (branch p1-schema-reader)
 - Done: `SchemaGraph` records in `core`; `PgReader` (JDBC metadata for tables, columns, primary and foreign keys; pg_catalog for types, enums, domains, identity, generated columns, unique and partial/expression indexes, checks, partitions); `DdlReader` (applies the DDL to a scratch database it creates and drops, then uses `PgReader`); `CheckParser` (IN lists, ranges, lengths, two-column comparisons; raw text always kept). Gate `SchemaReaderContainerTest` green: three goldens equal their committed snapshots, DDL path equals live path, Pagila reads as 15 tables. verify.sh: a PASS, b SKIPPED, c PASS, d SKIPPED, e PASS.
 - Not done: memory was not measured (the whole gate runs in about 4 s); only Postgres 16 was tried; schemas other than `public` are untested; the competitor check (SPEC section 12, user) is still open.
