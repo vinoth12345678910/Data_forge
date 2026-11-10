@@ -1,0 +1,436 @@
+# Business rules for ecommerce. Each rule is a name, a description and either
+#   violations_sql  a query returning the offending rows (0 rows = rule holds), or
+#   enforced_by: db the database itself rejects the bad row (constraint + SQLSTATE given).
+# Dataset clock is meta.generated_at, never the wall clock. Currency is meta.currency.
+
+schema: ecommerce
+
+rules:
+  - name: category_not_own_parent
+    description: "A category is not its own parent."
+    enforced_by: db
+    constraint: categories_not_own_parent
+    sqlstate: "23514"
+
+  - name: sibling_category_names_unique
+    description: "Sibling categories (same parent, roots included) have different names."
+    enforced_by: db
+    constraint: categories_sibling_name_key
+    sqlstate: "23505"
+
+  - name: coupon_value_valid
+    description: "A percent coupon is 1 to 100; a fixed coupon is above 0."
+    enforced_by: db
+    constraint: coupons_value_valid
+    sqlstate: "23514"
+
+  - name: coupon_window_ordered
+    description: "A coupon starts before it ends."
+    enforced_by: db
+    constraint: coupons_window_ordered
+    sqlstate: "23514"
+
+  - name: coupon_redemption_once_per_order
+    description: "An order redeems at most one coupon."
+    enforced_by: db
+    constraint: coupon_redemptions_order_key
+    sqlstate: "23505"
+
+  - name: reservation_expires_after_creation
+    description: "A reservation expires after it is created."
+    enforced_by: db
+    constraint: reservations_expires_after_creation
+    sqlstate: "23514"
+
+  - name: reservation_ttl_bounded
+    description: "A reservation is held for at most 24 hours."
+    enforced_by: db
+    constraint: reservations_ttl_bounded
+    sqlstate: "23514"
+
+  - name: reserved_within_on_hand
+    description: "Reserved units are between 0 and on_hand."
+    enforced_by: db
+    constraint: inventory_reserved_within_on_hand
+    sqlstate: "23514"
+
+  - name: reservation_product_matches_item
+    description: "A reservation's product is the product of its order item."
+    enforced_by: db
+    constraint: reservations_item_product_fk
+    sqlstate: "23503"
+
+  - name: shipment_item_same_order
+    description: "A shipment item and its shipment belong to the same order."
+    enforced_by: db
+    constraint: shipment_items_order_item_fk
+    sqlstate: "23503"
+
+  - name: shipment_status_times_valid
+    description: "preparing has no times; shipped has shipped_at; delivered has both, delivered_at not before shipped_at."
+    enforced_by: db
+    constraint: shipments_status_times_valid
+    sqlstate: "23514"
+
+  - name: return_restock_valid
+    description: "A received return has restocked_qty (0 to quantity) and received_at; any other status has neither."
+    enforced_by: db
+    constraint: returns_restock_valid
+    sqlstate: "23514"
+
+  - name: payment_attempt_unique
+    description: "Each payment attempt number is used once per order."
+    enforced_by: db
+    constraint: payments_order_attempt_key
+    sqlstate: "23505"
+
+  - name: payment_completion_valid
+    description: "completed_at is null only for initiated payments, and is not before created_at."
+    enforced_by: db
+    constraint: payments_completion_valid
+    sqlstate: "23514"
+
+  - name: category_tree_acyclic
+    description: "No category is its own ancestor."
+    violations_sql: |
+      with recursive walk(start_id, id, parent_id, depth) as (
+        select c.id, c.id, c.parent_id, 1 from categories c
+        union all
+        select w.start_id, p.id, p.parent_id, w.depth + 1
+        from walk w join categories p on p.id = w.parent_id
+        where w.depth < 20)
+      select distinct start_id as id from walk where id = start_id and depth > 1
+
+  - name: category_depth_bounded
+    description: "The category tree is at most 4 levels deep."
+    violations_sql: |
+      with recursive walk(start_id, id, parent_id, depth) as (
+        select c.id, c.id, c.parent_id, 1 from categories c
+        union all
+        select w.start_id, p.id, p.parent_id, w.depth + 1
+        from walk w join categories p on p.id = w.parent_id
+        where w.depth < 6)
+      select distinct start_id as id from walk where depth > 4
+
+  - name: product_in_leaf_category
+    description: "Products sit in leaf categories only."
+    violations_sql: |
+      select p.id from products p
+      where exists (select 1 from categories c where c.parent_id = p.category_id)
+
+  - name: inventory_reserved_matches_active
+    description: "inventory.reserved equals the quantity held by active reservations."
+    violations_sql: |
+      select i.product_id as id from inventory i
+      where i.reserved <> (select coalesce(sum(r.quantity), 0) from reservations r
+                           where r.product_id = i.product_id and r.status = 'active')
+
+  - name: stock_on_hand_matches_movements
+    description: "on_hand = opening - shipped (shipped and delivered shipments) + restocked (received returns)."
+    violations_sql: |
+      select i.product_id as id from inventory i
+      where i.on_hand <> i.opening_qty
+        - (select coalesce(sum(si.quantity), 0) from shipment_items si
+           join shipments s on s.id = si.shipment_id
+           join order_items oi on oi.id = si.order_item_id
+           where oi.product_id = i.product_id and s.status in ('shipped', 'delivered'))
+        + (select coalesce(sum(r.restocked_qty), 0) from returns r
+           join order_items oi on oi.id = r.order_item_id
+           where oi.product_id = i.product_id and r.status = 'received')
+
+  - name: active_reservation_not_expired
+    description: "An active reservation has not passed its expiry (dataset clock = meta.generated_at)."
+    violations_sql: |
+      select r.id from reservations r, meta m
+      where r.status = 'active' and r.expires_at <= m.generated_at
+
+  - name: expired_reservation_has_passed
+    description: "An expired reservation has passed its expiry."
+    violations_sql: |
+      select r.id from reservations r, meta m
+      where r.status = 'expired' and r.expires_at > m.generated_at
+
+  - name: reservation_quantity_matches_item
+    description: "A reservation holds exactly the quantity of its order item."
+    violations_sql: |
+      select r.id from reservations r
+      join order_items i on i.id = r.order_item_id
+      where r.quantity <> i.quantity
+
+  - name: reservation_status_matches_order
+    description: "active goes with a pending order; converted with a paid or later order; expired and released with a cancelled order."
+    violations_sql: |
+      select r.id from reservations r
+      join order_items i on i.id = r.order_item_id
+      join orders o on o.id = i.order_id
+      where not (
+           (r.status = 'active' and o.status = 'pending')
+        or (r.status = 'converted' and o.status in ('paid', 'partially_shipped', 'shipped', 'returned'))
+        or (r.status in ('expired', 'released') and o.status = 'cancelled'))
+
+  - name: coupon_total_uses_within_limit
+    description: "A coupon is redeemed at most max_uses times."
+    violations_sql: |
+      select c.id from coupons c
+      where c.max_uses is not null
+        and (select count(*) from coupon_redemptions r where r.coupon_id = c.id) > c.max_uses
+
+  - name: coupon_per_user_within_limit
+    description: "A user redeems a coupon at most per_user_limit times."
+    violations_sql: |
+      select c.id from coupons c
+      where c.per_user_limit is not null
+        and exists (select 1 from coupon_redemptions r where r.coupon_id = c.id
+                    group by r.user_id having count(*) > c.per_user_limit)
+
+  - name: redemption_within_coupon_window
+    description: "A coupon is redeemed inside its start and end window."
+    violations_sql: |
+      select r.id from coupon_redemptions r
+      join coupons c on c.id = r.coupon_id
+      where r.redeemed_at < c.starts_at or r.redeemed_at > c.ends_at
+
+  - name: redemption_user_matches_order
+    description: "The redeeming user is the order's user."
+    violations_sql: |
+      select r.id from coupon_redemptions r
+      join orders o on o.id = r.order_id
+      where r.user_id <> o.user_id
+
+  - name: redemption_not_on_cancelled_order
+    description: "A cancelled order holds no coupon redemption (the use is returned)."
+    violations_sql: |
+      select r.id from coupon_redemptions r
+      join orders o on o.id = r.order_id
+      where o.status = 'cancelled'
+
+  - name: order_discount_matches_coupon
+    description: "discount_minor is 0 without a coupon; percent gives floor(subtotal * value / 100); fixed gives min(value, subtotal)."
+    violations_sql: |
+      select o.id from orders o
+      left join coupon_redemptions r on r.order_id = o.id
+      left join coupons c on c.id = r.coupon_id
+      where o.discount_minor <> case
+        when c.id is null then 0
+        when c.discount_type = 'percent' then o.subtotal_minor * c.value / 100
+        else least(c.value, o.subtotal_minor) end
+
+  - name: order_subtotal_matches_items
+    description: "subtotal_minor equals the sum of quantity * unit_price_minor over the items."
+    violations_sql: |
+      select o.id from orders o
+      where o.subtotal_minor <> coalesce((select sum(i.quantity * i.unit_price_minor) from order_items i where i.order_id = o.id), 0)
+
+  - name: order_total_formula
+    description: "total_minor = subtotal_minor - discount_minor + shipping_minor."
+    violations_sql: |
+      select o.id from orders o
+      where o.total_minor <> o.subtotal_minor - o.discount_minor + o.shipping_minor
+
+  - name: order_after_user_joined
+    description: "An order is placed no earlier than the user joined."
+    violations_sql: |
+      select o.id from orders o
+      join users u on u.id = o.user_id
+      where o.placed_at < u.created_at
+
+  - name: payment_after_order
+    description: "A payment attempt is created no earlier than the order was placed."
+    violations_sql: |
+      select p.id from payments p
+      join orders o on o.id = p.order_id
+      where p.created_at < o.placed_at
+
+  - name: payment_attempts_contiguous
+    description: "Attempt numbers per order run 1..n with no gaps."
+    violations_sql: |
+      select p.order_id as id from payments p
+      group by p.order_id
+      having max(p.attempt_no) <> count(*)
+
+  - name: no_attempt_after_success
+    description: "No payment attempt comes after the succeeded one."
+    violations_sql: |
+      select p.id from payments p
+      join payments s on s.order_id = p.order_id and s.status = 'succeeded'
+      where p.attempt_no > s.attempt_no
+
+  - name: paid_order_has_one_succeeded_payment
+    description: "Paid, partially shipped, shipped and returned orders have exactly one succeeded payment."
+    violations_sql: |
+      select o.id from orders o
+      where o.status in ('paid', 'partially_shipped', 'shipped', 'returned')
+        and (select count(*) from payments p where p.order_id = o.id and p.status = 'succeeded') <> 1
+
+  - name: unpaid_order_has_no_succeeded_payment
+    description: "Pending and cancelled orders have no succeeded payment."
+    violations_sql: |
+      select o.id from orders o
+      where o.status in ('pending', 'cancelled')
+        and exists (select 1 from payments p where p.order_id = o.id and p.status = 'succeeded')
+
+  - name: succeeded_amount_equals_total
+    description: "A succeeded payment equals the order total."
+    violations_sql: |
+      select p.id from payments p
+      join orders o on o.id = p.order_id
+      where p.status = 'succeeded' and p.amount_minor <> o.total_minor
+
+  - name: shipped_quantity_within_ordered
+    description: "Quantity placed on shipments per order item is at most the quantity ordered."
+    violations_sql: |
+      select i.id from order_items i
+      where (select coalesce(sum(si.quantity), 0) from shipment_items si where si.order_item_id = i.id) > i.quantity
+
+  - name: shipment_requires_paid_order
+    description: "An order only ships after a succeeded payment completed."
+    violations_sql: |
+      select s.id from shipments s
+      where not exists (
+        select 1 from payments p
+        where p.order_id = s.order_id and p.status = 'succeeded'
+          and (s.shipped_at is null or p.completed_at <= s.shipped_at))
+
+  - name: order_status_matches_shipments
+    description: "pending, cancelled and paid orders have nothing shipped; partially_shipped has some but not all; shipped has all; returned has some shipped."
+    violations_sql: |
+      select o.id from orders o
+      where (o.status in ('pending', 'cancelled', 'paid') and (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) <> 0)
+         or (o.status = 'partially_shipped' and not ((select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) > 0 and (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) < (select coalesce(sum(i.quantity), 0) from order_items i where i.order_id = o.id)))
+         or (o.status = 'shipped' and (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) <> (select coalesce(sum(i.quantity), 0) from order_items i where i.order_id = o.id))
+         or (o.status = 'returned' and (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) = 0)
+
+  - name: return_within_shipped
+    description: "Non-rejected returns per order item are at most the quantity shipped."
+    violations_sql: |
+      select i.id from order_items i
+      where (select coalesce(sum(r.quantity), 0) from returns r
+             where r.order_item_id = i.id and r.status <> 'rejected') > (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_item_id = i.id and s.status in ('shipped', 'delivered'))
+
+  - name: return_after_shipment
+    description: "A return is created no earlier than the item first shipped."
+    violations_sql: |
+      select r.id from returns r
+      left join lateral (
+        select min(s.shipped_at) as first_shipped
+        from shipment_items si join shipments s on s.id = si.shipment_id
+        where si.order_item_id = r.order_item_id and s.status in ('shipped', 'delivered')) f on true
+      where f.first_shipped is null or r.created_at < f.first_shipped
+
+  - name: received_return_has_one_refund
+    description: "A received return has exactly one refund; any other return has none."
+    violations_sql: |
+      select r.id from returns r
+      where (select count(*) from refunds f where f.return_id = r.id)
+         <> case when r.status = 'received' then 1 else 0 end
+
+  - name: refund_only_on_succeeded_payment
+    description: "Refunds only attach to succeeded payments."
+    violations_sql: |
+      select f.id from refunds f
+      join payments p on p.id = f.payment_id
+      where p.status <> 'succeeded'
+
+  - name: refund_within_payment
+    description: "The sum of refunds per payment is at most the payment amount."
+    violations_sql: |
+      select p.id from payments p
+      where (select coalesce(sum(f.amount_minor), 0) from refunds f where f.payment_id = p.id) > p.amount_minor
+
+  - name: refund_for_return_within_value
+    description: "A refund for a return is at most quantity * unit price of the returned item."
+    violations_sql: |
+      select f.id from refunds f
+      join returns r on r.id = f.return_id
+      join order_items i on i.id = r.order_item_id
+      where f.amount_minor > r.quantity * i.unit_price_minor
+
+  - name: refund_after_return_received
+    description: "A refund for a return is created no earlier than the return was received."
+    violations_sql: |
+      select f.id from refunds f
+      join returns r on r.id = f.return_id
+      where f.created_at < r.received_at
+
+  - name: refund_matches_return_order
+    description: "A refund for a return is paid back on a payment of the same order."
+    violations_sql: |
+      select f.id from refunds f
+      join returns r on r.id = f.return_id
+      join order_items i on i.id = r.order_item_id
+      join payments p on p.id = f.payment_id
+      where p.order_id <> i.order_id
+
+  - name: returned_order_fully_returned
+    description: "An order is returned exactly when something shipped and every shipped unit has a received return."
+    violations_sql: |
+      select o.id from orders o
+      where (o.status = 'returned') <> ((select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')) > 0 and (select coalesce(sum(r.quantity), 0) from returns r
+               join order_items i on i.id = r.order_item_id
+               where i.order_id = o.id and r.status = 'received') = (select coalesce(sum(si.quantity), 0) from shipment_items si
+               join shipments s on s.id = si.shipment_id
+               where si.order_id = o.id and s.status in ('shipped', 'delivered')))
+
+state_machines:
+  orders:
+    states: [pending, paid, partially_shipped, shipped, cancelled, returned]
+    start: pending
+    transitions:
+      - pending -> paid
+      - pending -> cancelled
+      - paid -> partially_shipped
+      - paid -> shipped
+      - partially_shipped -> shipped
+      - shipped -> returned
+    required_children:
+      - pending: reservations active, no succeeded payment
+      - cancelled: reservations expired or released, no succeeded payment, no coupon redemption (cancelled only before payment)
+      - paid and later: exactly one succeeded payment, reservations converted
+      - returned: something shipped and every shipped unit has a received return
+  reservations:
+    states: [active, converted, expired, released]
+    start: active
+    transitions:
+      - active -> converted
+      - active -> expired
+      - active -> released
+    notes:
+      - expiry uses the dataset clock; a hold lasts at most 24 hours.
+  payments:
+    states: [initiated, succeeded, failed]
+    start: initiated
+    transitions:
+      - initiated -> succeeded
+      - initiated -> failed
+    notes:
+      - attempts are numbered 1..n per order; none after the succeeded one.
+  shipments:
+    states: [preparing, shipped, delivered]
+    start: preparing
+    transitions:
+      - preparing -> shipped
+      - shipped -> delivered
+  returns:
+    states: [requested, approved, received, rejected]
+    start: requested
+    transitions:
+      - requested -> approved
+      - requested -> rejected
+      - approved -> received
+    required_children:
+      - received: exactly one refund and a restocked_qty
+
