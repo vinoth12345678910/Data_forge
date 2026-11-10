@@ -2,7 +2,7 @@
 
 This is the single source for repo layout; it wins over any other file.
 
-Status: TARGET LAYOUT ONLY. Nothing created yet. Scaffolding happens on its own branch in Phase 0 after the user approves. This file has no week-wise plan (the plan is phase-wise); build order stays in `docs/PLAN.md`.
+Status: the skeleton, `golden/` schemas, `CLAUDE.md` and `.claude/` (agents, skills, hooks) exist. `packs/`, `ui/` and most module code are still empty; they arrive phase by phase. This file has no week-wise plan (the plan is phase-wise); build order stays in `docs/PLAN.md`.
 
 ## Monorepo skeleton
 

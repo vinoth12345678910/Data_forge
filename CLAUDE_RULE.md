@@ -21,7 +21,7 @@ Applies to every session, every agent. Short on purpose. Context lives in `CLAUD
 ## Review separation
 - Builders never review their own work. `determinism-auditor`, `safety-reviewer`, `scope-guard`, `ui-reviewer` run in a separate session from the builder.
 - Phase 5 safety tests are written by the user. Claude runs and reports them, never edits or grades them.
-- Any edit under `modules/cleanup` needs a `safety-reviewer` run first (hook-enforced).
+- A commit that stages anything under `modules/cleanup` needs a `safety-reviewer` run that finished after the latest edit to those files (hook-enforced; the marker is cleared after every commit). Edits to `modules/cleanup/src/test/` are blocked for Claude (hook-enforced).
 
 ## Code style
 Plain Java 21. Short names, small classes, no clever abstractions, no needless interfaces. Strict TypeScript in `ui/`. Match surrounding code.
@@ -32,8 +32,12 @@ Always use bash for generated files, loops and scripts, never zsh. (zsh does not
 ## Honesty
 Report outcomes as they are. If something was not tested, say so. Never claim it works without proof. If you differ from an instruction, say exactly where and why.
 
-## Hooks (to configure in `.claude/settings.json`, during setup branch)
-- Run fast tests before commit.
-- Block edits under `modules/cleanup` unless `safety-reviewer` has run.
-- Block commits that add a URL to `ui/src`.
-- Each hook must be triggered once on purpose to prove it works (commit a URL into `ui/src`; edit `modules/cleanup` without the reviewer).
+## Golden schemas
+Exactly three (`events-merch`, `ecommerce`, `saas-multitenant`) plus a holdout schema. They are complete: no more rules are added to them. Do not tune the engine to any one of them.
+
+## Hooks (`.claude/settings.json`, scripts in `.claude/hooks/`)
+- Run fast tests before a commit (skipped when every staged file is `*.md` or under `docs/`).
+- Block a commit that adds a URL under `ui/src`.
+- Block a commit that stages anything under `modules/cleanup` unless the `safety-reviewer` finished after the latest edit to those files. The marker is cleared after every commit.
+- Block Edit, Write and MultiEdit under `modules/cleanup/src/test/`. The user writes those tests.
+- Each hook is proven by triggering it on purpose (see `docs/STATUS.md` for how).
