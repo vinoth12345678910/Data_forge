@@ -41,12 +41,12 @@ Modules (10, under `modules/`): `core`, `schema`, `gen`, `rules`, `load`, `clean
 | Phase | Content | Gate | Tag |
 |---|---|---|---|
 | 0 Setup | skeleton, local gate, 3 golden schemas, CLAUDE.md | local `scripts/verify.sh` green; competitor check in DECISIONS.md | - |
-| 1 Foundation | schema reader, graph, planner + cycles, CLI skeleton, seeded random, auto-inference, locale generators | `forge init` drafts valid forge.yml from events-merch; determinism test | phase-1 |
+| 1 Foundation | schema reader, graph, planner + cycles, CLI skeleton, seeded random, auto-inference, locale generators | `forge init` reads all three golden schemas and the holdout; determinism test; zero-config structure gate on the holdout | phase-1 |
 | 2 Relations, rules, loading | COPY loader, composite/self-ref/M2M, manifest, rule engine, independent verify | zero FK violations on random schemas; all rules pass verify on events-merch + ecommerce | phase-2 |
 | 3 Realism | state machines, temporal, skewed distributions, correlations, seasonality, scenarios, edge cases, MySQL/SQLite | status mix within 1pp; suite green on 3 DBs | phase-3 |
 | 4 Team/CI | drift, verify any DB, SQL/CSV/JSON out, Testcontainers + JUnit, 1M-row test | drift fails on changed column; 1M rows pass | phase-4 |
 | 5 Go-live cleanup | cleanup, classify, purge rules, readiness, 8 guards, audit log, sequence reset | user-written cleanup tests pass | phase-5 |
-| 6 Web UI | Connect, Schema graph, Rules, Scenarios, Preview, Run, Verify, Drift, Go-live wizard, History | browser smoke test | phase-6 |
+| 6 Web UI | Connect, Schema graph, Rules, Scenarios, Preview, Run, Verify, Drift, Go-live wizard, History | browser smoke test and a full cutover rehearsal | phase-6 |
 | 7 Packs, release | 5 packs, golden schemas on 3 DBs, no-network, docs, release | all golden schemas pass every rule | v1.0 |
 
 User owns: seeded-random and generator design (Phase 1), rule language + verify pass (Phase 2), whole cleanup safety design (Phase 5).
