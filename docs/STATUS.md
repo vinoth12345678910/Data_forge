@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 P1.1 schema reader (branch p1-schema-reader)
+- Done: `SchemaGraph` records in `core`; `PgReader` (JDBC metadata for tables, columns, primary and foreign keys; pg_catalog for types, enums, domains, identity, generated columns, unique and partial/expression indexes, checks, partitions); `DdlReader` (applies the DDL to a scratch database it creates and drops, then uses `PgReader`); `CheckParser` (IN lists, ranges, lengths, two-column comparisons; raw text always kept). Gate `SchemaReaderContainerTest` green: three goldens equal their committed snapshots, DDL path equals live path, Pagila reads as 15 tables. verify.sh: a PASS, b SKIPPED, c PASS, d SKIPPED, e PASS.
+- Not done: memory was not measured (the whole gate runs in about 4 s); only Postgres 16 was tried; schemas other than `public` are untested; the competitor check (SPEC section 12, user) is still open.
+- Next: P1.2 planner on `p1-planner`, stacked on this branch.
+- Decisions (user, Step 0): DDL is read through a scratch Postgres; `docs/CONFIG.md` and `docs/design/SEEDED_RANDOM.md` approved; name and city data as text resources in `gen`. Reader: a partitioned table is one table and a foreign key declared on any partition counts for the whole table (Pagila's July partition declares none).
+- Open: 15 golden checks are not "simple" (listed as `full: false` in the snapshots); the P1.6 structure gate needs more check shapes. The Pagila dump needs a `postgres` role on the scratch server.
+
 ## 2026-11-10 gate wording aligned with SPEC.md (branch p0-align-gate)
 - Done: `docs/PLAN.md` Phase 1 gate now reads all three golden schemas plus the holdout, determinism, and the zero-config structure gate on the holdout; Phase 6 gate adds the full cutover rehearsal; `CLAUDE_PROJECT.md` roadmap table matches.
 - Not done: Pagila holdout files; the competitor check (user); Phase 1 not started.
