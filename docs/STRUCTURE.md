@@ -2,7 +2,7 @@
 
 This is the single source for repo layout; it wins over any other file.
 
-Status: TARGET LAYOUT ONLY. Nothing created yet. Scaffolding happens on its own branch in Phase 0 after the user approves. This file has no week-wise plan; build order stays in `docs/PLAN.md`.
+Status: TARGET LAYOUT ONLY. Nothing created yet. Scaffolding happens on its own branch in Phase 0 after the user approves. This file has no week-wise plan (the plan is phase-wise); build order stays in `docs/PLAN.md`.
 
 ## Monorepo skeleton
 
@@ -33,7 +33,7 @@ data-forge/
 │   ├── junit/                 # JUnit 5 + Testcontainers extension
 │   └── testkit/               # golden schemas, test base classes, assertions
 ├── packs/                     # generic, ecommerce, events, saas, banking (yaml)
-├── golden/                    # events-merch, ecommerce, ledgerboard (DDL + expected)
+├── golden/                    # events-merch, ecommerce, saas-multitenant (DDL + expected)
 ├── ui/                        # React + Vite + TS
 │   ├── src/{screens,components,api,state,styles}
 │   ├── e2e/                   # Playwright
@@ -50,7 +50,7 @@ Why:
 
 | Agent | Job | Access |
 |---|---|---|
-| `planner` | Reads SPEC and PLAN, plans one week, lists decisions for the user. Never writes code | Read-only |
+| `planner` | Reads SPEC and PLAN, plans one feature, lists decisions for the user. Never writes code | Read-only |
 | `java-builder` | Implements backend tasks in plain Java style, one module at a time | Read and write |
 | `test-first` | Writes the gate test before any build, runs it, shows it fails | Read and write (tests only) |
 | `dialect-specialist` | Postgres COPY, MySQL, SQLite loader and cycle-handling differences | Read and write |

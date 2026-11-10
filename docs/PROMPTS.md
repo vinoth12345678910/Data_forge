@@ -1,17 +1,17 @@
 # Reusable prompts
 
-Swap the bracketed parts per week. Order: 1 -> review -> 2 -> 3 -> (4 only if a check failed) -> next week's 1.
+Swap the bracketed parts per feature. Order: 1 -> review -> 2 -> 3 -> (4 only if a check failed) -> next feature's 1. Phase-wise plan only: no weeks.
 All prompts obey the strict rule: ONE FEATURE = ONE BRANCH.
 
-## Prompt 1: Plan the week (no code yet)
+## Prompt 1: Plan the feature (no code yet)
 
 ```
-Read CLAUDE.md, docs/SPEC.md and docs/PLAN.md. We are starting [Week 2: generator core].
+Read CLAUDE.md, docs/SPEC.md and docs/PLAN.md. We are starting [Phase 1, feature: seeded random].
 
 Work in plan mode. Change no code yet.
 
 1. List the exact files, classes and interfaces you will add. Keep names short and plain.
-2. Write the gate test first, as a test class name and what it asserts. For Week 2 the gate is: same seed, same spec, two runs, byte-identical output.
+2. Write the gate test first, as a test class name and what it asserts. For the seeded-random feature the gate is: same seed, same spec, two runs, byte-identical output.
 3. List the design decisions you need from me (for example how the seed is hashed per row). Do NOT decide these yourself.
 4. List what could break the hard rules: no network, no unseeded randomness, no HashMap iteration order in generation code.
 
@@ -21,23 +21,23 @@ Report as a short plan with a numbered task list. Then stop and wait for me.
 ## Prompt 2: Build with the gate first
 
 ```
-Plan approved. Go ahead with [Week 2], one task at a time.
+Plan approved. Go ahead with [seeded random], one task at a time.
 
 1. Write the gate test first. Run it and show me it fails.
-2. Build until it passes. One commit per task, on branch w02-generator-core.
+2. Build until it passes. One commit per task, on branch p1-seeded-random, cut from latest main.
 3. If you hit a design choice I have not decided, stop and ask. Do not guess.
-4. Do not touch code outside this week's scope.
+4. Do not touch code outside this feature's scope.
 5. When the gate is green, update docs/STATUS.md (done, not done, next, decisions, open questions) and tell me which gate passed.
 
-Then stop and wait for me. Do not start the next week.
+Then stop and wait for me. Do not start the next feature.
 ```
 
 ## Prompt 3: Checks before the next feature
 
 ```
-Gate is green. Before the next week, three checks. Change no feature code unless I agree.
+Gate is green. Before the next feature, three checks. Change no feature code unless I agree.
 
-1. Determinism. Run generate 5 times with the same seed on [golden schema: ledgerboard]. Compare output hashes. Then run with a different JVM, with -XX:+UseSerialGC and default GC, and with the table order shuffled in forge.yml. Any difference: find the line that causes it (HashMap order, parallel stream, time, locale, unseeded Random) and propose a fix.
+1. Determinism. Run generate 5 times with the same seed on [golden schema: events-merch]. Compare output hashes. Then run with a different JVM, with -XX:+UseSerialGC and default GC, and with the table order shuffled in forge.yml. Any difference: find the line that causes it (HashMap order, parallel stream, time, locale, unseeded Random) and propose a fix.
 
 2. Memory and speed. Release build. Generate 1M rows into Postgres. Report peak heap and peak RSS (use /usr/bin/time -l and a JFR recording), rows per second, and startup time of `forge --help`. Then run it 3 times in a row and tell me whether memory grows. Tell me what holds the most memory.
 
