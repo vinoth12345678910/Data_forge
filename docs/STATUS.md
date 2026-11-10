@@ -1,11 +1,11 @@
 # STATUS
 
-## 2026-11-10 Pagila holdout (branch p0-holdout-pagila)
-- Done: `golden/holdout/pagila/` with `pagila-schema.sql`, `LICENSE.txt` (MIT licence text at this tag) and `SOURCE.md` (tag, commit, blob ids, sha256). Unedited upstream files; no data. Loads on `postgres:16-alpine`: 22 tables, 36 FKs.
-- Not done: a committed load test for the holdout (not requested); the competitor check (user); Phase 1 not started.
-- Next: Phase 1 only when told.
-- Decisions: used `pagila-v3.1.0`, not the latest. The latest (v4.1.2) needs PostgreSQL 18, pgvector and `uuidv7()` and fails to load on the pinned `postgres:16-alpine`. The version choice is the user's to confirm.
-- Open: confirm Pagila v3.1.0, or move the pinned image to a PostgreSQL 18 + pgvector image.
+## 2026-11-10 gate wording aligned with SPEC.md (branch p0-align-gate)
+- Done: `docs/PLAN.md` Phase 1 gate now reads all three golden schemas plus the holdout, determinism, and the zero-config structure gate on the holdout; Phase 6 gate adds the full cutover rehearsal; `CLAUDE_PROJECT.md` roadmap table matches.
+- Not done: Pagila holdout files; the competitor check (user); Phase 1 not started.
+- Next: holdout branch, then Phase 1 only when told.
+- Decisions: SPEC.md wins. Left as is and flagged: PLAN's Phase 7 gate also lists the 1M-row run, which SPEC puts in Phase 4 (kept, since removing it would cut a promise).
+- Open: user to confirm whether the Phase 7 1M-row line stays.
 
 ## 2026-11-10 live hook checks (branch p0-hooks-live-proof)
 - Done: all four hook behaviours triggered live in Claude Code 2.1.322 (headless `claude -p` in the trusted repo): URL guard blocked; cleanup commit blocked without review, then allowed after the safety-reviewer ran, marker cleared after the commit; cleanup test edit blocked by the hook (checked with only the hook configured; with full settings the deny rule fires first); failing fast test blocked with the failing test shown. Working tree clean after each. `docs/HOOKS.md` updated with the results and corrected check commands.
