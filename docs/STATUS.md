@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 live hook checks (branch p0-hooks-live-proof)
+- Done: all four hook behaviours triggered live in Claude Code 2.1.322 (headless `claude -p` in the trusted repo): URL guard blocked; cleanup commit blocked without review, then allowed after the safety-reviewer ran, marker cleared after the commit; cleanup test edit blocked by the hook (checked with only the hook configured; with full settings the deny rule fires first); failing fast test blocked with the failing test shown. Working tree clean after each. `docs/HOOKS.md` updated with the results and corrected check commands.
+- Not done: the transcript-search fallback for the marker has not run live; edits through Bash and a bare `git push` on main are still uncaught.
+- Next: the Pagila holdout (the user downloads it), then Phase 1 only when told.
+- Decisions: live checks run each step as its own Bash call, because a hook cannot see a file created in the same call.
+- Open: the competitor check (SPEC section 12) before Phase 1 code.
+
 ## 2026-11-10 docs/SPEC.md (branch p0-spec)
 - Done: `docs/SPEC.md` added verbatim from the user; pointers in `CLAUDE.md` and `CLAUDE_PROJECT.md` updated.
 - Not done: Pagila holdout (waits on the user's download); the 4 live hook checks (need a fresh session; hooks were not active in the authoring session); competitor check (user, 1 hour, before Phase 1 code); Phase 1 not started.
