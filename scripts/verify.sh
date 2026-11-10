@@ -57,7 +57,12 @@ elif ! docker_up; then
   echo "SKIPPED: Docker is not running"
   record "SKIPPED" "c. testcontainers (Docker not running)"
 elif ./gradlew containerTest; then
-  record "PASS   " "c. testcontainers"
+  # A container suite that ran nothing is not a pass.
+  if ls modules/*/build/test-results/containerTest/TEST-*.xml >/dev/null 2>&1; then
+    record "PASS   " "c. testcontainers"
+  else
+    fail "c. testcontainers (ran zero tests)"
+  fi
 else
   fail "c. testcontainers"
 fi

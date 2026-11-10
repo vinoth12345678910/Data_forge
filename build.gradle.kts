@@ -31,6 +31,8 @@ subprojects {
         classpath = sourceSets["test"].runtimeClasspath
         useJUnitPlatform { includeTags("containers") }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
+        // Docker and golden files are inputs Gradle cannot see: never skip as up-to-date.
+        outputs.upToDateWhen { false }
     }
 }
 
