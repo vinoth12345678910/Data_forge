@@ -6,7 +6,7 @@ Used as the holdout for the zero-config structure gate (see `docs/SPEC.md` secti
 |---|---|
 | Source | https://github.com/devrimgunduz/pagila |
 | Tag and commit | `pagila-v3.1.0`, `fef9675714cfba1756df4719b5e36075a7ddf90e` (2022-12-13) |
-| Licence | PostgreSQL licence, copyright Devrim Gündüz (`LICENSE.txt`, copied unchanged) |
+| Licence | MIT licence text, copyright Devrim Gündüz (`LICENSE.txt` at this tag, copied unchanged). The latest Pagila uses the PostgreSQL licence instead; this tag's file says MIT. |
 | Files | `pagila-schema.sql` (52,422 bytes), `LICENSE.txt` (1,100 bytes). No data files |
 | Edited? | No. Byte-for-byte upstream. |
 

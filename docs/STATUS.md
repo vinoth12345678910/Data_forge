@@ -1,7 +1,7 @@
 # STATUS
 
 ## 2026-11-10 Pagila holdout (branch p0-holdout-pagila)
-- Done: `golden/holdout/pagila/` with `pagila-schema.sql`, `LICENSE.txt` (PostgreSQL licence) and `SOURCE.md` (tag, commit, blob ids, sha256). Unedited upstream files; no data. Loads on `postgres:16-alpine`: 22 tables, 36 FKs.
+- Done: `golden/holdout/pagila/` with `pagila-schema.sql`, `LICENSE.txt` (MIT licence text at this tag) and `SOURCE.md` (tag, commit, blob ids, sha256). Unedited upstream files; no data. Loads on `postgres:16-alpine`: 22 tables, 36 FKs.
 - Not done: a committed load test for the holdout (not requested); the competitor check (user); Phase 1 not started.
 - Next: Phase 1 only when told.
 - Decisions: used `pagila-v3.1.0`, not the latest. The latest (v4.1.2) needs PostgreSQL 18, pgvector and `uuidv7()` and fails to load on the pinned `postgres:16-alpine`. The version choice is the user's to confirm.
