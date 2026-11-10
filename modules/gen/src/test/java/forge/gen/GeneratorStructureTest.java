@@ -183,4 +183,21 @@ class GeneratorStructureTest {
             assertEquals(c("payments", "ref", row), more.cell("payments", "ref", row));
         }
     }
+
+    /** Parent rows are dealt out evenly: each block of P child rows uses every parent exactly once. */
+    @Test
+    void parentReferencesAreDealtEvenly() {
+        // payments.order_id: 80 children over 60 orders.
+        int[] counts = new int[61];
+        for (long r = 0; r < 80; r++) {
+            counts[Integer.parseInt(c("payments", "order_id", r))]++;
+        }
+        for (int id = 1; id <= 60; id++) {
+            assertTrue(counts[id] == 1 || counts[id] == 2, "order " + id + " referenced " + counts[id] + " times");
+        }
+        Set<String> firstBlock = new HashSet<>();
+        for (long r = 0; r < 60; r++) {
+            assertTrue(firstBlock.add(c("payments", "order_id", r)), "the first 60 rows use each order once");
+        }
+    }
 }

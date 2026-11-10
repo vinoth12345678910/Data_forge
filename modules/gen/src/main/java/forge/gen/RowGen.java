@@ -39,6 +39,8 @@ public final class RowGen {
     static final int DEFAULT_NULL_PER_10K = 1000;
     private static final long WINDOW = 100_000;
     private static final int MAX_PICKS = 20_000;
+    /** After this many failed tries the anchor is redrawn too (that row is then random, not dealt). */
+    private static final int ANCHOR_TRIES = 2_000;
     private static final int MAX_ATTEMPTS = 5_000;
     private static final Pattern LOWER = Pattern.compile("lower\\(\\s*\"?(\\w+)\"?\\s*\\)");
 
@@ -56,6 +58,10 @@ public final class RowGen {
         long[] keys;
         long[] nullKeys;
         int[] nullRate;
+        /** True for a key to another table that is matched to the earlier keys through an index. */
+        boolean[] indexed;
+        int anchorTries = 1;
+        final java.util.concurrent.ConcurrentHashMap<Integer, Map<String, long[]>> index = new java.util.concurrent.ConcurrentHashMap<>();
     }
 
     /** What a table must satisfy beyond what its columns promise: check expressions, and columns derived by equality. */
@@ -394,6 +400,18 @@ public final class RowGen {
                 if (own && nullable) {
                     cl.nullRate[i] = rate;
                     cl.nullKeys[i] = Keys.column(seed, t.name(), first, "null");
+                }
+            }
+            cl.indexed = new boolean[cl.fks.size()];
+            for (int i = 1; i < cl.fks.size(); i++) {
+                Fk f = cl.fks.get(i);
+                boolean tied = false;
+                for (int[] tie : cl.ties) {
+                    tied |= tie[2] == i && tie[0] < i;
+                }
+                cl.indexed[i] = tied && !f.refTable().equals(t.name()) && !fkGroup.containsKey(t.name() + "." + f.name());
+                if (!cl.indexed[i] && !fkGroup.containsKey(t.name() + "." + f.name())) {
+                    cl.anchorTries = ANCHOR_TRIES;
                 }
             }
         }
@@ -1172,7 +1190,7 @@ public final class RowGen {
             if (self) {
                 parentRow = row == 0 ? 0 : new Cell(k.fkKey, row).below(row);
             } else {
-                parentRow = new Cell(k.fkKey, row).below(parents);
+                parentRow = deal(k.fkKey, row, parents);
             }
         }
         if (parentRow < 0) {
@@ -1202,28 +1220,43 @@ public final class RowGen {
     private long[] findPicks(Cluster cl, String table, long row) {
         long[] p = new long[cl.fks.size()];
         for (int attempt = 0; attempt < MAX_PICKS; attempt++) {
-            for (int i = 0; i < p.length; i++) {
+            boolean empty = false;
+            for (int i = 0; i < p.length && !empty; i++) {
+                // The first key is the anchor: it keeps its dealt pick, and the others are matched to it,
+                // unless no match exists for it (then it is redrawn as well).
+                int a = i == 0 && attempt < cl.anchorTries ? 0 : attempt;
                 String key = table + "." + cl.fks.get(i).name();
                 boolean self = cl.fks.get(i).refTable().equals(table);
                 boolean nullable = cl.nullKeys[i] != 0 || cl.nullRate[i] != 0;
                 if (fkGroup.containsKey(key)) {
                     p[i] = groupRow(fkGroup.get(key), fkGroupIdx.get(key), row);
-                } else if (nullable && new Cell(salt(cl.nullKeys[i], attempt), row).chance(cl.nullRate[i])) {
+                } else if (nullable && new Cell(salt(cl.nullKeys[i], a), row).chance(cl.nullRate[i])) {
                     p[i] = -1;
                 } else if (self) {
                     // A self-reference points at an earlier row; row 0 has none (-1 means NULL).
-                    p[i] = row == 0 ? -1 : new Cell(salt(cl.keys[i], attempt), row).below(row);
+                    p[i] = row == 0 ? -1 : new Cell(salt(cl.keys[i], a), row).below(row);
+                } else if (cl.indexed[i]) {
+                    long[] same = matches(cl, table, i, p);
+                    if (same.length == 0) {
+                        empty = true;
+                    } else {
+                        p[i] = same[(int) new Cell(salt(cl.keys[i], a), row).below(same.length)];
+                    }
                 } else {
-                    p[i] = new Cell(salt(cl.keys[i], attempt), row).below(rows.get(cl.fks.get(i).refTable()));
+                    long parents = rows.get(cl.fks.get(i).refTable());
+                    p[i] = a == 0 ? deal(cl.keys[i], row, parents) : new Cell(salt(cl.keys[i], a), row).below(parents);
                 }
+            }
+            if (empty) {
+                continue;
             }
             boolean agree = true;
             for (int[] tie : cl.ties) {
-                Fk a = cl.fks.get(tie[0]);
-                Fk b = cl.fks.get(tie[2]);
-                if (p[tie[0]] < 0 || p[tie[2]] < 0) {
+                if (cl.indexed[tie[2]] || p[tie[0]] < 0 || p[tie[2]] < 0) {
                     continue;
                 }
+                Fk a = cl.fks.get(tie[0]);
+                Fk b = cl.fks.get(tie[2]);
                 agree &= Objects.equals(cell(a.refTable(), a.refColumns().get(tie[1]), p[tie[0]]),
                     cell(b.refTable(), b.refColumns().get(tie[3]), p[tie[2]]));
                 if (!agree) {
@@ -1236,6 +1269,66 @@ public final class RowGen {
         }
         throw new GenError("Table " + table + " row " + row + ": no parent rows agree on the shared columns of "
             + names(cl.fks) + " after " + MAX_PICKS + " tries.");
+    }
+
+    /**
+     * The parent rows of key i that hold the same shared values as the keys picked before it. The parent table
+     * is read once and grouped by those values, so the match is found, not hoped for.
+     */
+    private long[] matches(Cluster cl, String table, int i, long[] p) {
+        Fk f = cl.fks.get(i);
+        List<int[]> mine = new ArrayList<>();
+        for (int[] tie : cl.ties) {
+            if (tie[2] == i && tie[0] < i && p[tie[0]] >= 0) {
+                mine.add(tie);
+            }
+        }
+        Map<String, long[]> byValue = cl.index.computeIfAbsent(i, n -> {
+            Map<String, List<Long>> tmp = new TreeMap<>();
+            for (long pr = 0; pr < rows.get(f.refTable()); pr++) {
+                tmp.computeIfAbsent(sharedKey(cl, i, pr), k -> new ArrayList<>()).add(pr);
+            }
+            Map<String, long[]> out = new TreeMap<>();
+            tmp.forEach((k, v) -> out.put(k, v.stream().mapToLong(Long::longValue).toArray()));
+            return out;
+        });
+        StringBuilder want = new StringBuilder();
+        for (int[] tie : cl.ties) {
+            if (tie[2] == i && tie[0] < i) {
+                Fk a = cl.fks.get(tie[0]);
+                want.append(p[tie[0]] < 0 ? "\u0002" : String.valueOf(cell(a.refTable(), a.refColumns().get(tie[1]), p[tie[0]]))).append('\u0001');
+            }
+        }
+        if (mine.size() < cl.ties.stream().filter(t -> t[2] == i && t[0] < i).count()) {
+            // An earlier key is NULL: it ties nothing, so any row of its own table matches the rest.
+            long[] all = new long[(int) (long) rows.get(f.refTable())];
+            for (int r = 0; r < all.length; r++) {
+                all[r] = r;
+            }
+            return all;
+        }
+        return byValue.getOrDefault(want.toString(), new long[0]);
+    }
+
+    /** The shared values (as the earlier keys would hold them) of parent row pr of key i, as one string. */
+    private String sharedKey(Cluster cl, int i, long pr) {
+        Fk f = cl.fks.get(i);
+        StringBuilder b = new StringBuilder();
+        for (int[] tie : cl.ties) {
+            if (tie[2] == i && tie[0] < i) {
+                b.append(cell(f.refTable(), f.refColumns().get(tie[3]), pr)).append('\u0001');
+            }
+        }
+        return b.toString();
+    }
+
+    /**
+     * Deals parent rows out evenly: every block of `parents` child rows uses each parent exactly once,
+     * in an order shuffled afresh for each block. Depends on the row and the parent count only.
+     */
+    private static long deal(long key, long row, long parents) {
+        long round = row / parents;
+        return new Perm(Mix.mix(key + (round + 1) * Mix.GAMMA), parents).at(row % parents);
     }
 
     /** Key of draw attempt n: attempt 0 is the plain key, later attempts are mixed from it. */
