@@ -1,0 +1,1372 @@
+schema: "public"
+tables:
+- name: "api_keys"
+  columns:
+  - name: "id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "project_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "created_by"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "key_hash"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "scopes"
+    type:
+      name: "text"
+      dims: 1
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "expires_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "revoked_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "last_used_ip"
+    type:
+      name: "inet"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "api_keys_key_hash_key"
+    columns:
+    - "key_hash"
+    primary: false
+  - name: "api_keys_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "api_keys_creator_fk"
+    columns:
+    - "tenant_id"
+    - "created_by"
+    refTable: "members"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "api_keys_project_fk"
+    columns:
+    - "tenant_id"
+    - "project_id"
+    refTable: "projects"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "api_keys_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "api_keys_expiry_after_creation"
+    expr: "((expires_at IS NULL) OR (expires_at > created_at))"
+    full: false
+  - name: "api_keys_scopes_nonempty"
+    expr: "(cardinality(scopes) > 0)"
+    full: false
+- name: "invoice_lines"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "invoice_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "kind"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "plan_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "description"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "unit_amount_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "amount_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "period_start"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "period_end"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "invoice_lines_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "invoice_lines_invoice_fk"
+    columns:
+    - "tenant_id"
+    - "invoice_id"
+    refTable: "invoices"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "invoice_lines_plan_fk"
+    columns:
+    - "plan_id"
+    refTable: "plans"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "invoice_lines_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "invoice_lines_amount_formula"
+    expr: "(amount_minor = ((quantity)::bigint * unit_amount_minor))"
+    full: false
+  - name: "invoice_lines_kind_valid"
+    expr: "(kind = ANY (ARRAY['plan'::text, 'proration_charge'::text, 'proration_credit'::text,\
+      \ 'usage'::text]))"
+    facts:
+    - kind: "in"
+      column: "kind"
+      op: "="
+      values:
+      - "plan"
+      - "proration_charge"
+      - "proration_credit"
+      - "usage"
+    full: true
+  - name: "invoice_lines_period_ordered"
+    expr: "(period_start < period_end)"
+    facts:
+    - kind: "cmp"
+      column: "period_start"
+      op: "<"
+      other: "period_end"
+    full: true
+  - name: "invoice_lines_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "invoices"
+  columns:
+  - name: "id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "subscription_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "number"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "period_start"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "period_end"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "issued_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "due_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "paid_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "subtotal_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "tax_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "total_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "invoices_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "invoices_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  - name: "invoices_tenant_number_key"
+    columns:
+    - "tenant_id"
+    - "number"
+    primary: false
+  fks:
+  - name: "invoices_subscription_fk"
+    columns:
+    - "tenant_id"
+    - "subscription_id"
+    refTable: "subscriptions"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "invoices_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "invoices_period_ordered"
+    expr: "(period_start < period_end)"
+    facts:
+    - kind: "cmp"
+      column: "period_start"
+      op: "<"
+      other: "period_end"
+    full: true
+  - name: "invoices_status_times_valid"
+    expr: "(((status = 'draft'::text) AND (issued_at IS NULL) AND (paid_at IS NULL))\
+      \ OR ((status = ANY (ARRAY['open'::text, 'uncollectible'::text])) AND (issued_at\
+      \ IS NOT NULL) AND (due_at IS NOT NULL) AND (paid_at IS NULL)) OR ((status =\
+      \ 'paid'::text) AND (issued_at IS NOT NULL) AND (paid_at IS NOT NULL) AND (paid_at\
+      \ >= issued_at)) OR ((status = 'void'::text) AND (paid_at IS NULL)))"
+    full: false
+  - name: "invoices_status_valid"
+    expr: "(status = ANY (ARRAY['draft'::text, 'open'::text, 'paid'::text, 'void'::text,\
+      \ 'uncollectible'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "draft"
+      - "open"
+      - "paid"
+      - "void"
+      - "uncollectible"
+    full: true
+  - name: "invoices_total_formula"
+    expr: "(total_minor = (subtotal_minor + tax_minor))"
+    full: false
+- name: "members"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "user_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "role_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "invited_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "joined_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "deleted_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "members_active_user_key"
+    columns:
+    - "tenant_id"
+    - "user_id"
+    where: "(deleted_at IS NULL)"
+    primary: false
+  - name: "members_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "members_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  fks:
+  - name: "members_role_fk"
+    columns:
+    - "tenant_id"
+    - "role_id"
+    refTable: "roles"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "members_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "members_user_fk"
+    columns:
+    - "user_id"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "members_joined_matches_status"
+    expr: "(((status = 'invited'::text) AND (joined_at IS NULL)) OR ((status = ANY\
+      \ (ARRAY['active'::text, 'suspended'::text])) AND (joined_at IS NOT NULL)) OR\
+      \ (status = 'removed'::text))"
+    full: false
+  - name: "members_removed_iff_deleted"
+    expr: "((status = 'removed'::text) = (deleted_at IS NOT NULL))"
+    full: false
+  - name: "members_status_valid"
+    expr: "(status = ANY (ARRAY['invited'::text, 'active'::text, 'suspended'::text,\
+      \ 'removed'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "invited"
+      - "active"
+      - "suspended"
+      - "removed"
+    full: true
+- name: "meta"
+  columns:
+  - name: "id"
+    type:
+      name: "int2"
+      dims: 0
+    nullable: false
+    def: "1"
+  - name: "generated_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "currency"
+    type:
+      name: "bpchar"
+      dims: 0
+      length: 3
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "meta_pkey"
+    columns:
+    - "id"
+    primary: true
+  checks:
+  - name: "meta_one_row"
+    expr: "(id = 1)"
+    facts:
+    - kind: "in"
+      column: "id"
+      op: "="
+      values:
+      - "1"
+    full: true
+- name: "permissions"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "code"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "description"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "permissions_code_key"
+    columns:
+    - "code"
+    primary: false
+  - name: "permissions_pkey"
+    columns:
+    - "id"
+    primary: true
+- name: "plans"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "code"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "seats"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "max_projects"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "monthly_price_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "features"
+    type:
+      name: "text"
+      dims: 1
+    nullable: false
+    def: "'{}'::text[]"
+  pk:
+  - "id"
+  uniques:
+  - name: "plans_code_key"
+    columns:
+    - "code"
+    primary: false
+  - name: "plans_pkey"
+    columns:
+    - "id"
+    primary: true
+  checks:
+  - name: "plans_limits_positive"
+    expr: "((seats > 0) AND (max_projects > 0))"
+    facts:
+    - kind: "range"
+      column: "seats"
+      op: ">"
+      values:
+      - "0"
+    - kind: "range"
+      column: "max_projects"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "plans_price_nonneg"
+    expr: "(monthly_price_minor >= 0)"
+    facts:
+    - kind: "range"
+      column: "monthly_price_minor"
+      op: ">="
+      values:
+      - "0"
+    full: true
+- name: "projects"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "team_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "slug"
+    type:
+      name: "text"
+      dims: 0
+    nullable: true
+    generated: "lower(regexp_replace(name, '[^a-zA-Z0-9]+'::text, '-'::text, 'g'::text))"
+  - name: "settings"
+    type:
+      name: "jsonb"
+      dims: 0
+    nullable: false
+    def: "'{}'::jsonb"
+  - name: "created_by"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "deleted_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "projects_active_slug_key"
+    columns:
+    - "tenant_id"
+    - "slug"
+    where: "(deleted_at IS NULL)"
+    primary: false
+  - name: "projects_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "projects_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  fks:
+  - name: "projects_creator_fk"
+    columns:
+    - "tenant_id"
+    - "created_by"
+    refTable: "members"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "projects_team_fk"
+    columns:
+    - "tenant_id"
+    - "team_id"
+    refTable: "teams"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "projects_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+- name: "role_permissions"
+  columns:
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "role_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "permission_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "role_id"
+  - "permission_id"
+  uniques:
+  - name: "role_permissions_pkey"
+    columns:
+    - "role_id"
+    - "permission_id"
+    primary: true
+  fks:
+  - name: "role_permissions_permission_fk"
+    columns:
+    - "permission_id"
+    refTable: "permissions"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "role_permissions_role_fk"
+    columns:
+    - "tenant_id"
+    - "role_id"
+    refTable: "roles"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "role_permissions_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+- name: "roles"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "is_system"
+    type:
+      name: "bool"
+      dims: 0
+    nullable: false
+    def: "false"
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "roles_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "roles_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  - name: "roles_tenant_name_key"
+    columns:
+    - "tenant_id"
+    - "name"
+    primary: false
+  fks:
+  - name: "roles_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+- name: "subscriptions"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "plan_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "period_start"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "period_end"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "trial_ends_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "cancelled_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "subscriptions_one_live_key"
+    columns:
+    - "tenant_id"
+    where: "(status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text]))"
+    primary: false
+  - name: "subscriptions_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "subscriptions_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  fks:
+  - name: "subscriptions_plan_fk"
+    columns:
+    - "plan_id"
+    refTable: "plans"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "subscriptions_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "subscriptions_period_ordered"
+    expr: "(period_start < period_end)"
+    facts:
+    - kind: "cmp"
+      column: "period_start"
+      op: "<"
+      other: "period_end"
+    full: true
+  - name: "subscriptions_status_valid"
+    expr: "(status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text,\
+      \ 'cancelled'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "trialing"
+      - "active"
+      - "past_due"
+      - "cancelled"
+    full: true
+- name: "team_members"
+  columns:
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "team_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "member_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "team_id"
+  - "member_id"
+  uniques:
+  - name: "team_members_pkey"
+    columns:
+    - "team_id"
+    - "member_id"
+    primary: true
+  fks:
+  - name: "team_members_member_fk"
+    columns:
+    - "tenant_id"
+    - "member_id"
+    refTable: "members"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "team_members_team_fk"
+    columns:
+    - "tenant_id"
+    - "team_id"
+    refTable: "teams"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "team_members_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+- name: "teams"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "parent_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "deleted_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "teams_active_sibling_name_key"
+    columns:
+    - "tenant_id"
+    - "name"
+    exprs:
+    - "COALESCE(parent_id, 0::bigint)"
+    where: "(deleted_at IS NULL)"
+    primary: false
+  - name: "teams_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "teams_tenant_id_key"
+    columns:
+    - "tenant_id"
+    - "id"
+    primary: false
+  fks:
+  - name: "teams_parent_fk"
+    columns:
+    - "tenant_id"
+    - "parent_id"
+    refTable: "teams"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "teams_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "teams_not_own_parent"
+    expr: "(parent_id <> id)"
+    facts:
+    - kind: "cmp"
+      column: "parent_id"
+      op: "<>"
+      other: "id"
+    full: true
+- name: "tenants"
+  columns:
+  - name: "id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "slug"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "plan_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "timezone"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "settings"
+    type:
+      name: "jsonb"
+      dims: 0
+    nullable: false
+    def: "'{}'::jsonb"
+  - name: "ip_allowlist"
+    type:
+      name: "cidr"
+      dims: 1
+    nullable: false
+    def: "'{}'::cidr[]"
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "deleted_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "tenants_active_slug_key"
+    columns:
+    - "slug"
+    where: "(deleted_at IS NULL)"
+    primary: false
+  - name: "tenants_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "tenants_plan_fk"
+    columns:
+    - "plan_id"
+    refTable: "plans"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "tenants_closed_iff_deleted"
+    expr: "((status = 'closed'::text) = (deleted_at IS NOT NULL))"
+    full: false
+  - name: "tenants_status_valid"
+    expr: "(status = ANY (ARRAY['trialing'::text, 'active'::text, 'suspended'::text,\
+      \ 'closed'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "trialing"
+      - "active"
+      - "suspended"
+      - "closed"
+    full: true
+- name: "usage_daily"
+  columns:
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "project_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "day"
+    type:
+      name: "date"
+      dims: 0
+    nullable: false
+  - name: "kind"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "event_count"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "quantity_total"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "tenant_id"
+  - "project_id"
+  - "day"
+  - "kind"
+  uniques:
+  - name: "usage_daily_pkey"
+    columns:
+    - "tenant_id"
+    - "project_id"
+    - "day"
+    - "kind"
+    primary: true
+  fks:
+  - name: "usage_daily_project_fk"
+    columns:
+    - "tenant_id"
+    - "project_id"
+    refTable: "projects"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "usage_daily_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "usage_daily_counts_positive"
+    expr: "((event_count > 0) AND (quantity_total > 0))"
+    facts:
+    - kind: "range"
+      column: "event_count"
+      op: ">"
+      values:
+      - "0"
+    - kind: "range"
+      column: "quantity_total"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "usage_daily_kind_valid"
+    expr: "(kind = ANY (ARRAY['api_call'::text, 'storage_mb'::text, 'build_minute'::text]))"
+    facts:
+    - kind: "in"
+      column: "kind"
+      op: "="
+      values:
+      - "api_call"
+      - "storage_mb"
+      - "build_minute"
+    full: true
+- name: "usage_events"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "tenant_id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "project_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "kind"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "occurred_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "source_ip"
+    type:
+      name: "inet"
+      dims: 0
+    nullable: true
+  - name: "attrs"
+    type:
+      name: "jsonb"
+      dims: 0
+    nullable: false
+    def: "'{}'::jsonb"
+  pk:
+  - "id"
+  uniques:
+  - name: "usage_events_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "usage_events_project_fk"
+    columns:
+    - "tenant_id"
+    - "project_id"
+    refTable: "projects"
+    refColumns:
+    - "tenant_id"
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "usage_events_tenant_fk"
+    columns:
+    - "tenant_id"
+    refTable: "tenants"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "usage_events_attrs_object"
+    expr: "(jsonb_typeof(attrs) = 'object'::text)"
+    full: false
+  - name: "usage_events_kind_valid"
+    expr: "(kind = ANY (ARRAY['api_call'::text, 'storage_mb'::text, 'build_minute'::text]))"
+    facts:
+    - kind: "in"
+      column: "kind"
+      op: "="
+      values:
+      - "api_call"
+      - "storage_mb"
+      - "build_minute"
+    full: true
+  - name: "usage_events_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "users"
+  columns:
+  - name: "id"
+    type:
+      name: "uuid"
+      dims: 0
+    nullable: false
+  - name: "email"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "display_name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "last_login_ip"
+    type:
+      name: "inet"
+      dims: 0
+    nullable: true
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "deleted_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "users_active_email_key"
+    exprs:
+    - "lower(email)"
+    where: "(deleted_at IS NULL)"
+    primary: false
+  - name: "users_pkey"
+    columns:
+    - "id"
+    primary: true

@@ -1,0 +1,834 @@
+schema: "public"
+tables:
+- name: "events"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "venue"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "city"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "starts_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "ends_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "capacity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_by"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "events_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "events_created_by_fk"
+    columns:
+    - "created_by"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "events_capacity_positive"
+    expr: "(capacity > 0)"
+    facts:
+    - kind: "range"
+      column: "capacity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "events_status_valid"
+    expr: "(status = ANY (ARRAY['draft'::text, 'on_sale'::text, 'sold_out'::text,\
+      \ 'closed'::text, 'cancelled'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "draft"
+      - "on_sale"
+      - "sold_out"
+      - "closed"
+      - "cancelled"
+    full: true
+  - name: "events_times_ordered"
+    expr: "(starts_at < ends_at)"
+    facts:
+    - kind: "cmp"
+      column: "starts_at"
+      op: "<"
+      other: "ends_at"
+    full: true
+- name: "merchandise"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "sku"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "price_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "active"
+    type:
+      name: "bool"
+      dims: 0
+    nullable: false
+    def: "true"
+  pk:
+  - "id"
+  uniques:
+  - name: "merchandise_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "merchandise_sku_key"
+    columns:
+    - "sku"
+    primary: false
+  checks:
+  - name: "merchandise_price_nonneg"
+    expr: "(price_paise >= 0)"
+    facts:
+    - kind: "range"
+      column: "price_paise"
+      op: ">="
+      values:
+      - "0"
+    full: true
+- name: "meta"
+  columns:
+  - name: "id"
+    type:
+      name: "int2"
+      dims: 0
+    nullable: false
+    def: "1"
+  - name: "generated_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "meta_pkey"
+    columns:
+    - "id"
+    primary: true
+  checks:
+  - name: "meta_one_row"
+    expr: "(id = 1)"
+    facts:
+    - kind: "in"
+      column: "id"
+      op: "="
+      values:
+      - "1"
+    full: true
+- name: "order_items"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "ticket_type_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "merch_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "unit_price_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "order_items_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "order_items_merch_fk"
+    columns:
+    - "merch_id"
+    refTable: "merchandise"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "order_items_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "order_items_ticket_type_fk"
+    columns:
+    - "ticket_type_id"
+    refTable: "ticket_types"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "order_items_one_target"
+    expr: "(num_nonnulls(ticket_type_id, merch_id) = 1)"
+    full: false
+  - name: "order_items_price_nonneg"
+    expr: "(unit_price_paise >= 0)"
+    facts:
+    - kind: "range"
+      column: "unit_price_paise"
+      op: ">="
+      values:
+      - "0"
+    full: true
+  - name: "order_items_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "orders"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "user_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "total_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "latest_payment_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "placed_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "updated_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "orders_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "orders_latest_payment_fk"
+    columns:
+    - "latest_payment_id"
+    refTable: "payments"
+    refColumns:
+    - "id"
+    deferrable: true
+    deferred: true
+  - name: "orders_user_fk"
+    columns:
+    - "user_id"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "orders_status_valid"
+    expr: "(status = ANY (ARRAY['pending'::text, 'paid'::text, 'fulfilled'::text,\
+      \ 'cancelled'::text, 'refunded'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "pending"
+      - "paid"
+      - "fulfilled"
+      - "cancelled"
+      - "refunded"
+    full: true
+  - name: "orders_total_nonneg"
+    expr: "(total_paise >= 0)"
+    facts:
+    - kind: "range"
+      column: "total_paise"
+      op: ">="
+      values:
+      - "0"
+    full: true
+- name: "payments"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "amount_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "method"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "completed_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "payments_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "payments_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: true
+    deferred: true
+  checks:
+  - name: "payments_amount_positive"
+    expr: "(amount_paise > 0)"
+    facts:
+    - kind: "range"
+      column: "amount_paise"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "payments_completed_when_done"
+    expr: "((status = 'initiated'::text) = (completed_at IS NULL))"
+    full: false
+  - name: "payments_status_valid"
+    expr: "(status = ANY (ARRAY['initiated'::text, 'succeeded'::text, 'failed'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "initiated"
+      - "succeeded"
+      - "failed"
+    full: true
+- name: "refunds"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "payment_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "amount_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "reason"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "refunds_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "refunds_payment_fk"
+    columns:
+    - "payment_id"
+    refTable: "payments"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "refunds_amount_positive"
+    expr: "(amount_paise > 0)"
+    facts:
+    - kind: "range"
+      column: "amount_paise"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "registrations"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "user_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "event_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "ticket_type_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "order_item_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "registrations_order_item_key"
+    columns:
+    - "order_item_id"
+    primary: false
+  - name: "registrations_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "registrations_user_event_key"
+    columns:
+    - "user_id"
+    - "event_id"
+    primary: false
+  fks:
+  - name: "registrations_event_fk"
+    columns:
+    - "event_id"
+    refTable: "events"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "registrations_order_item_fk"
+    columns:
+    - "order_item_id"
+    refTable: "order_items"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "registrations_ticket_event_fk"
+    columns:
+    - "ticket_type_id"
+    - "event_id"
+    refTable: "ticket_types"
+    refColumns:
+    - "id"
+    - "event_id"
+    deferrable: false
+    deferred: false
+  - name: "registrations_user_fk"
+    columns:
+    - "user_id"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "registrations_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "stock"
+  columns:
+  - name: "warehouse_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "merch_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "stocked"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "on_hand"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  pk:
+  - "warehouse_id"
+  - "merch_id"
+  uniques:
+  - name: "stock_pkey"
+    columns:
+    - "warehouse_id"
+    - "merch_id"
+    primary: true
+  fks:
+  - name: "stock_merch_fk"
+    columns:
+    - "merch_id"
+    refTable: "merchandise"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "stock_warehouse_fk"
+    columns:
+    - "warehouse_id"
+    refTable: "warehouses"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "stock_counts_valid"
+    expr: "((on_hand >= 0) AND (on_hand <= stocked))"
+    facts:
+    - kind: "range"
+      column: "on_hand"
+      op: ">="
+      values:
+      - "0"
+    - kind: "cmp"
+      column: "on_hand"
+      op: "<="
+      other: "stocked"
+    full: true
+- name: "ticket_types"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "event_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "price_paise"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "ticket_types_event_name_key"
+    columns:
+    - "event_id"
+    - "name"
+    primary: false
+  - name: "ticket_types_id_event_key"
+    columns:
+    - "id"
+    - "event_id"
+    primary: false
+  - name: "ticket_types_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "ticket_types_event_fk"
+    columns:
+    - "event_id"
+    refTable: "events"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "ticket_types_price_nonneg"
+    expr: "(price_paise >= 0)"
+    facts:
+    - kind: "range"
+      column: "price_paise"
+      op: ">="
+      values:
+      - "0"
+    full: true
+  - name: "ticket_types_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "users"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "email"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "full_name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "phone"
+    type:
+      name: "text"
+      dims: 0
+    nullable: true
+  - name: "role"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "referred_by"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "users_email_key"
+    columns:
+    - "email"
+    primary: false
+  - name: "users_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "users_referred_by_fk"
+    columns:
+    - "referred_by"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "users_referral_not_self"
+    expr: "(referred_by <> id)"
+    facts:
+    - kind: "cmp"
+      column: "referred_by"
+      op: "<>"
+      other: "id"
+    full: true
+  - name: "users_role_valid"
+    expr: "(role = ANY (ARRAY['customer'::text, 'staff'::text, 'admin'::text]))"
+    facts:
+    - kind: "in"
+      column: "role"
+      op: "="
+      values:
+      - "customer"
+      - "staff"
+      - "admin"
+    full: true
+- name: "warehouses"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "code"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "city"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "warehouses_code_key"
+    columns:
+    - "code"
+    primary: false
+  - name: "warehouses_pkey"
+    columns:
+    - "id"
+    primary: true
