@@ -71,6 +71,6 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Done P1.3 `p1-config-cli`: `Config*` in `core`, Picocli `forge` with real `init`, stubs for the rest; `ConfigReaderTest`, `CliTest`, `InitContainerTest` green; `docs/CONFIG.md` frozen.
 - Done P1.4 `p1-generator-core`: `Mix`, `Keys`, `Cell`, `Perm`, `Uniq`, `Dom`, `RowGen`, `Out` in `gen`; `GeneratorDeterminismTest` (verify.sh step b now runs), `MixTest`, `GeneratorStructureTest` green.
 - Done P1.5 `p1-inference-locale`: `Infer`, `Gstin`, `Iban`, `Phone`, `Pincode`, `Names` (en_IN lists) in `gen`; `LocaleGenTest`, `InferTest`, `GeneratorInferenceTest` green.
-- P1.6 `p1-holdout-gate` is IN PROGRESS and its gate is RED: Pagila and events-merch pass the zero-config structure gate; ecommerce and saas-multitenant fail on a unique pair across two foreign keys that share a column. Committed locally, not pushed. Needs a user design decision (docs/design/SEEDED_RANDOM.md, known gap). Do not start Phase 2.
+- Done P1.6 `p1-holdout-gate`: test-only `TestInsert` and `StructureCheck` in `testkit`; zero-config structure gate green on Pagila and the three goldens (and at 1000 rows per table); `gen` extended (see `docs/design/SEEDED_RANDOM.md`, P1.6 additions, for the user to review). Phase 1 complete pending merge of the six stacked PRs. Do not start Phase 2.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
 - Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
