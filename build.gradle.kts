@@ -1,3 +1,5 @@
+plugins { base }
+
 subprojects {
     apply(plugin = "java-library")
 
@@ -19,3 +21,19 @@ subprojects {
 
     tasks.withType<Test> { useJUnitPlatform() }
 }
+
+// A build that compiles or runs nothing must fail, not pass silently.
+val verifyTestsRan by tasks.registering {
+    dependsOn(subprojects.map { "${it.path}:test" })
+    doLast {
+        val empty = subprojects.filter { p ->
+            val xml = p.layout.buildDirectory.dir("test-results/test").get().asFile
+                .listFiles { f -> f.name.startsWith("TEST-") && f.name.endsWith(".xml") }
+            xml == null || xml.isEmpty()
+        }
+        if (empty.isNotEmpty()) {
+            throw GradleException("No test results in: " + empty.joinToString { it.name })
+        }
+    }
+}
+tasks.named("check") { dependsOn(verifyTestsRan) }
