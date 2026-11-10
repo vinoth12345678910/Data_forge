@@ -54,6 +54,7 @@ Features, one branch each:
 - Locale generators with valid checksums: phone, pincode, GSTIN, IBAN.
 
 Gate: `forge init` reads `events-merch` and drafts a valid `forge.yml`; the determinism test passes (two runs, same seed, byte-identical output).
+Holdout gate: besides `events-merch`, `forge init` and `forge generate` must work with ZERO config on a holdout schema: a public sample database such as Pagila, committed under `golden/holdout/` with its licence file. The result must have zero FK violations and every schema constraint satisfied. Do not tune the engine to any one golden schema.
 User owns: the seeded random and generator design. Tag: `phase-1`
 
 ## Phase 2: Relations, business rules, loading
