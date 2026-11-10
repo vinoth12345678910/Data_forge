@@ -58,9 +58,9 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 
 ## Current state (UPDATE EACH SESSION)
 - Date: 2026-11-10
-- Directory the project directory was empty at start; git initialised in Session 0.1.
-- Phase/week: none started. Only planning docs saved.
-- Next: Session 0.1 (Gradle multi-module skeleton + GitHub Actions + MIT) -> start with Prompt 1 (plan mode), branch `p0-skeleton`.
-- Open: design brief needs the user's 2-3 reference tools. When hooks are set up, test each once (commit a URL into `ui/src`; edit `modules/cleanup` without safety-reviewer).
-- Layout conflict RESOLVED (2026-11-10, user): STRUCTURE.md wins (10 modules, root `golden/`). PLAN.md Phase 0 and a phase-to-module map updated to match.
-- Open: `docs/SPEC.md` does not exist yet; user must supply it. User to do by hand: Snaplet Seed + Datafaker competitor check on LedgerBoard (1h), write rule-language grammar on paper.
+- Repo: github.com/vinoth12345678910/Data_forge (private). Only this repo; the `data-forge` duplicate is to be deleted.
+- Done: Phase 0.1 skeleton (10 modules, MIT, ci.yml, zero-test check) merged to main. `scripts/verify.sh` + pre-push hook on `p0-verify`.
+- Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. `.github/workflows/ci.yml` is kept as is.
+- Next: Session 0.2 (golden schemas, LedgerBoard first) on its own branch, only when the user says so. Then 0.3 (`CLAUDE.md`, `.claude/` on `p0-claude-config`).
+- Layout: STRUCTURE.md wins (10 modules, root `golden/`).
+- Open: `docs/SPEC.md` missing (user to export). Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.

@@ -26,6 +26,9 @@ Applies to every session, every agent. Short on purpose. Context lives in `CLAUD
 ## Code style
 Plain Java 21. Short names, small classes, no clever abstractions, no needless interfaces. Strict TypeScript in `ui/`. Match surrounding code.
 
+## Shell
+Always use bash for generated files, loops and scripts, never zsh. (zsh does not word-split unquoted variables; a zsh loop once wrote all module sources into one wrongly named folder and the build passed with nothing compiled.)
+
 ## Honesty
 Report outcomes as they are. If something was not tested, say so. Never claim it works without proof. If you differ from an instruction, say exactly where and why.
 
