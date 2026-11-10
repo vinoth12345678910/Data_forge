@@ -1,0 +1,61 @@
+# DRAFT. forge.yml keys are frozen in Phase 1 (docs/CONFIG.md); no reader exists yet.
+# Re-validate this file when the keys freeze.
+version: 0
+seed: 42
+dataset_clock: "2026-06-01T00:00:00Z"
+currency: USD
+schema: schema.sql
+expected_rules: expected.yml
+
+scenarios:
+  default:
+    rows:
+      tenants: 50
+      users: 600
+      projects_per_tenant: {kind: zipf, s: 1.2, max: 20}
+      usage_events_per_project: 400
+    mix:
+      tenants.status: {trialing: 0.15, active: 0.65, suspended: 0.10, closed: 0.10}
+      members.status: {invited: 0.10, active: 0.75, suspended: 0.05, removed: 0.10}
+      subscriptions.status: {trialing: 0.15, active: 0.60, past_due: 0.10, cancelled: 0.15}
+      invoices.status: {draft: 0.05, open: 0.15, paid: 0.65, void: 0.05, uncollectible: 0.10}
+      plans: {free: 0.40, team: 0.40, pro: 0.20}
+    timezones: [America/New_York, Europe/London, Asia/Kolkata, Australia/Sydney]
+
+  growth-spike:
+    extends: default
+    burst:
+      table: usage_events
+      window: {duration: "2h"}
+      share: 0.4
+    limits:
+      at_seat_limit_share: 0.3
+      at_project_limit_share: 0.3
+
+  plan-change-proration:
+    extends: default
+    billing:
+      plan_change_share: 0.3
+      proration: {rounding: half_away_from_zero, numeric: true}
+      cycles_crossing_dst_share: 0.2
+
+  churn-and-cleanup:
+    extends: default
+    mix:
+      tenants.status: {trialing: 0.05, active: 0.40, suspended: 0.20, closed: 0.35}
+      subscriptions.status: {trialing: 0.05, active: 0.35, past_due: 0.20, cancelled: 0.40}
+    soft_delete:
+      cascade_share: 0.8
+
+  all-edge-cases:
+    extends: default
+    timezones: [Asia/Kolkata, Australia/Lord_Howe, Pacific/Chatham, America/St_Johns, Asia/Kathmandu]
+    edge_cases:
+      - dst_boundary: [usage_events.occurred_at, invoices.period_start]
+      - leap_day: users.created_at
+      - max_length: [tenants.slug, projects.name]
+      - unicode: [users.display_name, tenants.name]
+      - empty_and_quoted_arrays: [plans.features, api_keys.scopes]
+      - ipv6: [users.last_login_ip, usage_events.source_ip]
+      - empty_jsonb: [tenants.settings, projects.settings]
+      - at_exactly_limit: [members, projects]

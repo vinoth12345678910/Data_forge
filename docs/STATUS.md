@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 golden schema: saas-multitenant (branch p0-golden-saas-multitenant)
+- Done: `everyStatusAppearsInSeed` moved into GoldenContainerTest (events-merch and ecommerce 9 tests each); Postgres image pinned in one constant; golden/saas-multitenant (schema.sql, seed, expected.yml with 64 rules = 33 db-enforced + 31 query-checked, 4 state machines, draft forge.yml, 64 broken fixtures); SaasMultitenantContainerTest, 14 tests green on Postgres 16 (7 shared + status coverage via base + rule counts, tz data, seat and project limits, isolation guard, special types, DST day).
+- Not done: generator-produced data (hand-written fixtures only); CLAUDE.md and `.claude/`; docs/SPEC.md; Phase 1 not started.
+- Next: Phase 1 only when the user says so (this was the last golden schema; no more rules are added to the golden schemas).
+- Decisions: seats count active AND suspended members; proration is numeric then round() half away from zero, credit negative, cycle = calendar month in the tenant's zone; rollup day = local date in tenant zone; Postgres image pinned (tz data); a db rule may declare only an SQLSTATE (generated column).
+- Open: forge.yml keys unvalidated; verify.sh steps b and d still have no tests.
+
 ## 2026-11-10 golden schema: ecommerce (branch p0-golden-ecommerce)
 - Done: shared `GoldenContainerTest` base (events-merch still 8 tests, 27 rules); golden/ecommerce (schema.sql, seed, expected.yml with 50 rules = 14 db-enforced + 36 query-checked, 5 state machines, draft forge.yml, 50 broken fixtures); EcommerceContainerTest, 9 tests green on Postgres 16, including every-status-in-seed and coupons-at-limit.
 - Not done: saas-multitenant golden schema; generator-produced data (hand-written fixtures only); CLAUDE.md and `.claude/`; docs/SPEC.md.

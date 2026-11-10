@@ -38,8 +38,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class GoldenContainerTest {
 
+    /** One pinned image for every golden schema. Time-zone rules depend on its tz data. */
+    static final String PG_IMAGE = "postgres:16-alpine";
+
     @Container
-    static final PostgreSQLContainer PG = new PostgreSQLContainer("postgres:16-alpine");
+    static final PostgreSQLContainer PG = new PostgreSQLContainer(PG_IMAGE);
 
     static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
@@ -129,7 +132,9 @@ abstract class GoldenContainerTest {
                 } catch (PSQLException e) {
                     String state = e.getSQLState();
                     String constraint = e.getServerErrorMessage().getConstraint();
-                    if (!r.get("sqlstate").equals(state) || !r.get("constraint").equals(constraint)) {
+                    // A rule may name no constraint (e.g. a generated column has none): then SQLSTATE alone.
+                    boolean constraintOk = !r.containsKey("constraint") || r.get("constraint").equals(constraint);
+                    if (!r.get("sqlstate").equals(state) || !constraintOk) {
                         wrong.add(name + ": got " + state + " / " + constraint);
                     }
                 } finally {
@@ -163,6 +168,27 @@ abstract class GoldenContainerTest {
         Map<?, ?> top = YAML.readValue(read("expected.yml"), Map.class);
         Map<?, ?> machines = (Map<?, ?>) top.get("state_machines");
         assertEquals(stateMachines(), machines.keySet());
+    }
+
+    /** Every status of every state machine appears in the seed, so no state goes untested. */
+    @Test
+    void everyStatusAppearsInSeed() throws Exception {
+        Map<?, ?> top = YAML.readValue(read("expected.yml"), Map.class);
+        Map<?, ?> machines = (Map<?, ?>) top.get("state_machines");
+        List<String> missing = new ArrayList<>();
+        try (Connection c = open()) {
+            for (Map.Entry<?, ?> m : machines.entrySet()) {
+                String table = (String) m.getKey();
+                List<?> states = (List<?>) ((Map<?, ?>) m.getValue()).get("states");
+                for (Object state : states) {
+                    String sql = "select 1 from " + table + " where status = '" + state + "'";
+                    if (count(c, sql) == 0) {
+                        missing.add(table + "." + state);
+                    }
+                }
+            }
+        }
+        assertTrue(missing.isEmpty(), "statuses never seen in the seed: " + missing);
     }
 
     @Test
