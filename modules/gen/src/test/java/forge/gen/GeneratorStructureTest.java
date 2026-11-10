@@ -124,7 +124,8 @@ class GeneratorStructureTest {
         assertTrue(c("users", "created_at", 3).matches("\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\+00"), c("users", "created_at", 3));
         assertTrue(c("payments", "ref", 3).matches("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"));
         assertTrue(c("payments", "paid", 3).matches("true|false"));
-        assertTrue(c("users", "full_name", 3).matches("[a-z]{5,12}"));
+        assertTrue(c("users", "full_name", 3).matches("[A-Z][a-z]+ [A-Z][a-z]+"), c("users", "full_name", 3));
+        assertTrue(c("users", "score", 3).matches("\\d+"));
         assertTrue(c("users", "created_at", 3).compareTo("2025-01-01 00:00:00+00") <= 0, "never after the dataset clock");
     }
 
