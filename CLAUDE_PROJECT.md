@@ -68,6 +68,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Phase 1 runs as six stacked branches (user-approved for this phase only): each PR targets the previous feature's branch. Design docs approved 2026-11-10: `docs/CONFIG.md`, `docs/design/SEEDED_RANDOM.md`.
 - Done P1.1 `p1-schema-reader`: `SchemaGraph` in `core`, `PgReader`, `DdlReader` (scratch database), `CheckParser`, snapshot gate `SchemaReaderContainerTest` green on Postgres 16.
 - Done P1.2 `p1-planner`: `Planner`, `Plan`, `Scc`, `PlanError` in `gen`; gates `PlannerTest`, `PlannerPropertyTest` (jqwik), `PlannerContainerTest` green.
-- Next: P1.3 config and CLI (`p1-config-cli`), then P1.4 generator core, P1.5 inference and locale generators, P1.6 holdout gate. Do not start Phase 2.
+- Done P1.3 `p1-config-cli`: `Config*` in `core`, Picocli `forge` with real `init`, stubs for the rest; `ConfigReaderTest`, `CliTest`, `InitContainerTest` green; `docs/CONFIG.md` frozen.
+- Next: P1.4 generator core (`p1-generator-core`), then P1.4 generator core, P1.5 inference and locale generators, P1.6 holdout gate. Do not start Phase 2.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
 - Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
