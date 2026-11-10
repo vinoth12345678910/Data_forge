@@ -1,0 +1,49 @@
+# DRAFT. forge.yml keys are frozen in Phase 1 (docs/CONFIG.md); no reader exists yet.
+# Re-validate this file when the keys freeze.
+version: 0
+seed: 42
+dataset_clock: "2026-06-01T00:00:00Z"
+schema: schema.sql
+expected_rules: expected.yml
+
+scenarios:
+  default:
+    rows:
+      users: 500
+      warehouses: 2
+      events: 20
+      merchandise: 30
+    mix:
+      orders.status: {pending: 0.10, paid: 0.35, fulfilled: 0.40, cancelled: 0.10, refunded: 0.05}
+      payments.status: {succeeded: 0.80, failed: 0.15, initiated: 0.05}
+      events.status: {draft: 0.10, on_sale: 0.40, sold_out: 0.10, closed: 0.35, cancelled: 0.05}
+    distributions:
+      orders_per_user: {kind: zipf, s: 1.1}
+      registration_quantity: {kind: pareto, alpha: 2.0, max: 8}
+
+  event-day-rush:
+    extends: default
+    burst:
+      table: registrations
+      window: {before_event_start: "6h"}
+      share: 0.6
+    mix:
+      payments.status: {succeeded: 0.65, failed: 0.25, initiated: 0.10}
+
+  refund-heavy:
+    extends: default
+    mix:
+      orders.status: {pending: 0.05, paid: 0.25, fulfilled: 0.30, cancelled: 0.10, refunded: 0.30}
+    refunds:
+      partial_share: 0.40
+
+  all-edge-cases:
+    extends: default
+    edge_cases:
+      - null: users.phone
+      - max_length: [users.full_name, events.name, merchandise.name]
+      - unicode: [users.full_name, events.venue]
+      - case_only_duplicates: users.email
+      - dst_boundary: events.starts_at
+      - leap_day: users.created_at
+      - injection_strings: [users.full_name, refunds.reason]
