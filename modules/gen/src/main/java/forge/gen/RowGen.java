@@ -57,6 +57,7 @@ public final class RowGen {
         int groupIdx;
         Col base;
         long step;
+        boolean cap;
     }
 
     private final long seed;
@@ -351,22 +352,27 @@ public final class RowGen {
             }
             return new Dom("list", 0, 0, list.size(), 0, list, clock);
         }
+        boolean explicit = cc != null && cc.gen() != null;
+        Infer.Guess guess = explicit ? null : Infer.guess(c.name(), c);
+        String gen = explicit ? cc.gen() : guess == null ? null : guess.gen();
+        if (explicit) {
+            compatible(where, c, gen);
+        }
+        if (gen != null) {
+            Dom named = named(where, c, gen, guess, facts, cc, unique, explicit, k.sequence, t);
+            if (named != null) {
+                return named;
+            }
+        }
         switch (name) {
             case "int2":
-                return numeric(where, "int", 0, -32768, 32767, facts, cc, unique, k.sequence);
             case "int4":
-                return numeric(where, "int", 0, Integer.MIN_VALUE, Integer.MAX_VALUE, facts, cc, unique, k.sequence);
             case "int8":
-                return numeric(where, "int", 0, -(1L << 62), 1L << 62, facts, cc, unique, k.sequence);
-            case "numeric": {
-                int scale = c.type().scale() == null ? 2 : c.type().scale();
-                int digits = c.type().precision() == null ? 12 : c.type().precision();
-                long max = BigDecimal.TEN.pow(digits).longValueExact() - 1;
-                return numeric(where, "dec", scale, -max, max, facts, cc, unique, false);
-            }
+                return whole(where, c, facts, cc, unique, k.sequence, null, null);
+            case "numeric":
             case "float4":
             case "float8":
-                return numeric(where, "dec", 2, -1_000_000_000_000L, 1_000_000_000_000L, facts, cc, unique, false);
+                return decimal(where, c, facts, cc, unique, null, null);
             case "bool":
                 return new Dom("list", 0, 0, 2, 0, List.of("true", "false"), clock);
             case "date":
@@ -422,9 +428,134 @@ public final class RowGen {
         return list;
     }
 
+    private Dom whole(String where, Column c, List<Fact> facts, Config.ColConf cc, boolean unique, boolean key, Long hLo, Long hHi) {
+        long min = c.type().name().equals("int2") ? -32768 : c.type().name().equals("int4") ? Integer.MIN_VALUE : -(1L << 62);
+        long max = c.type().name().equals("int2") ? 32767 : c.type().name().equals("int4") ? Integer.MAX_VALUE : 1L << 62;
+        return numeric(where, "int", 0, min, max, facts, cc, unique, key, hLo, hHi);
+    }
+
+    /** hLo and hHi are in whole units (1 means 1.00); numeric and float columns only. */
+    private Dom decimal(String where, Column c, List<Fact> facts, Config.ColConf cc, boolean unique, Long hLo, Long hHi) {
+        boolean isFloat = c.type().name().startsWith("float");
+        int scale = isFloat || c.type().scale() == null ? 2 : c.type().scale();
+        int digits = isFloat || c.type().precision() == null ? 12 : c.type().precision();
+        long max = pow10(digits) - 1;
+        return numeric(where, "dec", scale, -max, max, facts, cc, unique, false,
+            hLo == null ? null : hLo * pow10(scale), hHi == null ? null : hHi * pow10(scale));
+    }
+
+    private static final List<String> TEXT_TYPES = List.of("text", "varchar", "bpchar");
+    private static final List<String> INT_TYPES = List.of("int2", "int4", "int8");
+
+    /** A named or guessed generator must fit the column's type, or the column is a clear error. */
+    private static void compatible(String where, Column c, String gen) {
+        String ty = c.type().name();
+        boolean text = TEXT_TYPES.contains(ty);
+        boolean ok = switch (gen) {
+            case "email", "first_name", "last_name", "full_name", "phone", "city", "gstin", "iban", "url", "text" -> text;
+            case "pincode" -> text || INT_TYPES.contains(ty);
+            case "int", "money_minor" -> INT_TYPES.contains(ty);
+            case "decimal" -> ty.equals("numeric") || ty.startsWith("float");
+            case "bool" -> ty.equals("bool");
+            case "date" -> ty.equals("date");
+            case "timestamp" -> ty.equals("timestamp") || ty.equals("timestamptz");
+            case "uuid" -> ty.equals("uuid");
+            case "json" -> ty.startsWith("json");
+            case "ip" -> ty.equals("inet");
+            case "cidr" -> ty.equals("cidr");
+            case "bytes" -> ty.equals("bytea");
+            default -> gen.equals("pick");
+        };
+        if (!ok || c.type().dims() > 0) {
+            throw new GenError(where + " has type " + ty + ", which gen " + gen + " cannot make.");
+        }
+    }
+
+    /** The longest value the column can hold, from its declared length and its length checks; 0 for no limit. */
+    private static int maxLen(Column c, List<Fact> facts) {
+        int max = c.type().length() == null ? 0 : c.type().length();
+        for (Fact f : facts) {
+            if (f.kind().equals("len") && (f.op().equals("<=") || f.op().equals("<") || f.op().equals("="))) {
+                int v = Integer.parseInt(f.values().get(0)) - (f.op().equals("<") ? 1 : 0);
+                max = max == 0 ? v : Math.min(max, v);
+            }
+        }
+        return max;
+    }
+
+    private static final long B36_6 = 2_176_782_336L;
+
+    private static int worst(String kind) {
+        int first = Names.longest(Names.first());
+        int last = Names.longest(Names.last());
+        return switch (kind) {
+            case "email" -> first + 1 + last + 1 + 6 + "@example.test".length();
+            case "url" -> "https://www.".length() + Names.longest(Names.words()) + ".example.test/".length() + 6;
+            case "full_name" -> first + 1 + last;
+            case "first_name" -> first;
+            case "last_name" -> last;
+            case "city" -> Names.longest(Names.cities());
+            case "pincode" -> 6;
+            case "gstin" -> 15;
+            case "iban" -> 24;
+            case "words" -> Names.longest(Names.words());
+            default -> 10;
+        };
+    }
+
+    /** The generator named in forge.yml (explicit) or guessed from the column name; null means "use the type default". */
+    private Dom named(String where, Column c, String gen, Infer.Guess g, List<Fact> facts, Config.ColConf cc,
+                      boolean unique, boolean explicit, boolean key, Table t) {
+        int maxLen = maxLen(c, facts);
+        Long lo = g == null ? null : g.lo();
+        Long hi = g == null ? null : g.hi();
+        if (List.of("email", "first_name", "last_name", "full_name", "city", "phone", "pincode", "gstin").contains(gen)) {
+            String loc = cc != null && cc.locale() != null ? cc.locale() : conf.locale();
+            if (!loc.equals(Names.LOCALE)) {
+                throw new GenError(where + " needs locale data for " + loc + ", but only " + Names.LOCALE + " is bundled.");
+            }
+        }
+        Dom d = switch (gen) {
+            case "email" -> new Dom("email", 0, 0, B36_6, 0, null, clock);
+            case "url" -> new Dom("url", 0, 0, B36_6, 0, null, clock);
+            case "first_name" -> new Dom("first_name", 0, 0, Names.first().size(), 0, null, clock);
+            case "last_name" -> new Dom("last_name", 0, 0, Names.last().size(), 0, null, clock);
+            case "full_name" -> new Dom("full_name", 0, 0, (long) Names.first().size() * Names.last().size(), 0, null, clock);
+            case "city" -> new Dom("city", 0, 0, Names.cities().size(), 0, null, clock);
+            case "phone" -> new Dom("phone", maxLen == 0 || maxLen >= 13 ? 1 : 0, 0, Phone.SPACE, 0, null, clock);
+            case "pincode" -> new Dom("pincode", 0, 0, Pincode.SPACE, 0, null, clock);
+            case "gstin" -> new Dom("gstin", 0, 0, Gstin.SPACE, 0, null, clock);
+            case "iban" -> new Dom("iban", 0, 0, Iban.SPACE, 0, null, clock);
+            case "text" -> new Dom("words", lo == null ? 1 : lo, hi == null ? 4 : hi, 1, maxLen, null, clock);
+            case "pick" -> g == null || g.values() == null ? null : new Dom("list", 0, 0, g.values().size(), 0, g.values(), clock);
+            case "int" -> INT_TYPES.contains(c.type().name()) ? whole(where, c, facts, cc, unique, key, lo, hi) : null;
+            case "money_minor" -> whole(where, c, facts, cc, unique, key, lo == null ? 100L : lo, hi == null ? 1_000_000L : hi);
+            case "decimal" -> decimal(where, c, facts, cc, unique, lo == null ? 1L : lo, hi == null ? 10_000L : hi);
+            case "date" -> lo == null ? null : new Dom("date", lo, hi, hi - lo + 1, 0, null, clock);
+            default -> null;
+        };
+        if (d == null) {
+            return null;
+        }
+        if (d.kind.equals("pincode") && !TEXT_TYPES.contains(c.type().name())) {
+            // Digits written as text are a valid number for an integer column too.
+            d = new Dom("pincode", 0, 0, Pincode.SPACE, 0, null, clock);
+        }
+        if (maxLen > 0 && TEXT_TYPES.contains(c.type().name()) && worst(d.kind) > maxLen && !d.kind.equals("phone")) {
+            if (explicit) {
+                throw new GenError(where + " holds at most " + maxLen + " characters, but gen " + gen + " can make " + worst(d.kind) + ".");
+            }
+            return null;
+        }
+        if (!explicit && unique && d.space < rows.get(t.name())) {
+            return null;
+        }
+        return d;
+    }
+
     /** Whole numbers, or decimals as scaled whole numbers, inside the check ranges and the type. */
     private Dom numeric(String where, String kind, int scale, long typeMin, long typeMax, List<Fact> facts,
-                        Config.ColConf cc, boolean unique, boolean key) {
+                        Config.ColConf cc, boolean unique, boolean key, Long hintLo, Long hintHi) {
         Long lo = null;
         Long hi = null;
         for (Fact f : facts) {
@@ -447,6 +578,15 @@ public final class RowGen {
         }
         if (cc != null && cc.max() != null) {
             hi = min(hi, scaled(cc.max(), scale, false));
+        }
+        if (!unique && !key) {
+            // A name-based range applies only where the checks leave room for it.
+            if (lo == null && hintLo != null && (hi == null || hintLo <= hi)) {
+                lo = hintLo;
+            }
+            if (hi == null && hintHi != null && (lo == null || hintHi >= lo)) {
+                hi = hintHi;
+            }
         }
         long low = lo != null ? Math.max(lo, typeMin) : Math.max(typeMin, unique || key ? pow10(scale) : 0);
         long high;
@@ -565,6 +705,23 @@ public final class RowGen {
                 };
             }
         }
+        followCreated(map);
+    }
+
+    /** updated_at and modified_at follow created_at, never later than the dataset clock. */
+    private void followCreated(Map<String, Col> map) {
+        Col created = map.get("created_at");
+        for (String name : List.of("updated_at", "modified_at")) {
+            Col u = map.get(name);
+            if (created == null || u == null || u.base != null || u.fk != null || u.perm != null || u.sequence
+                || created.fk != null || created.dom == null || u.dom == null || !created.dom.scalar()
+                || !created.dom.kind.equals(u.dom.kind) || chain(created, u)) {
+                continue;
+            }
+            u.base = created;
+            u.cap = true;
+            u.step = u.dom.kind.equals("date") ? 30 : 7 * 86_400L;
+        }
     }
 
     private static boolean chain(Col from, Col target) {
@@ -599,7 +756,11 @@ public final class RowGen {
     /** The ordered number of a scalar column, with its comparison base applied. */
     private long raw(Col k, long row) {
         if (k.base != null) {
-            return raw(k.base, row) + 1 + new Cell(k.vKey, row).below(k.step);
+            long v = raw(k.base, row) + 1 + new Cell(k.vKey, row).below(k.step);
+            if (k.cap) {
+                v = Math.min(v, k.dom.kind.equals("date") ? Math.floorDiv(clock, 86_400L) : clock);
+            }
+            return v;
         }
         long p = k.sequence ? row : k.perm != null ? k.perm.at(row) : new Cell(k.vKey, row).below(k.dom.space);
         return k.dom.raw(p);

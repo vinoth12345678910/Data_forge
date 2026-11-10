@@ -10,8 +10,10 @@ import java.util.Locale;
 
 /**
  * The set of values a column draws from, as numbers 0 .. space-1 that turn into text.
- * kind: int, dec (scaled integer), date, ts, tstz, list (fixed values), b36 (unique text),
- * text (random letters), uuid, json, inet, cidr, bytea, tsvector, array.
+ * kind: int, dec (scaled integer), date, ts, tstz (lo = offset in days or seconds before the clock),
+ * list (fixed values), b36 (unique text), text (random letters), words, email, first_name, last_name,
+ * full_name, city, phone (lo 1 = with +91), pincode, gstin, iban, url, uuid, json, inet, cidr, bytea,
+ * tsvector, array.
  * Only int, dec, date and ts are "scalar": they have an ordered raw number.
  */
 final class Dom {
@@ -47,8 +49,8 @@ final class Dom {
     long raw(long p) {
         return switch (kind) {
             case "int", "dec" -> lo + p;
-            case "date" -> Math.floorDiv(clock, 86_400L) - p;
-            default -> clock - p;
+            case "date" -> Math.floorDiv(clock, 86_400L) - (lo + p);
+            default -> clock - (lo + p);
         };
     }
 
@@ -73,6 +75,30 @@ final class Dom {
                 return Uniq.uuid(p, cell);
             case "text":
                 return text(cell);
+            case "email":
+                return Names.first().get((int) cell.below(Names.first().size())).toLowerCase(Locale.ROOT) + "."
+                    + Names.last().get((int) cell.below(Names.last().size())).toLowerCase(Locale.ROOT) + "."
+                    + Uniq.base36(p, 6) + "@example.test";
+            case "first_name":
+                return Names.first().get((int) p);
+            case "last_name":
+                return Names.last().get((int) p);
+            case "full_name":
+                return Names.first().get((int) (p % Names.first().size())) + " " + Names.last().get((int) (p / Names.first().size()));
+            case "city":
+                return Names.cities().get((int) p);
+            case "phone":
+                return Phone.make(p, lo == 1);
+            case "pincode":
+                return Pincode.make(p);
+            case "gstin":
+                return Gstin.make(p);
+            case "iban":
+                return Iban.make(p);
+            case "url":
+                return "https://www." + Names.words().get((int) cell.below(Names.words().size())) + ".example.test/" + Uniq.base36(p, 6);
+            case "words":
+                return words(cell);
             case "json":
                 return "{}";
             case "array":
@@ -88,6 +114,23 @@ final class Dom {
             default:
                 return fmt(raw(p));
         }
+    }
+
+    /** lo to hi words from the bundled list, the first one capitalised, at most scale characters (0 = no limit). */
+    private String words(Cell cell) {
+        int n = (int) (lo + cell.below(hi - lo + 1));
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            String w = Names.words().get((int) cell.below(Names.words().size()));
+            if (i == 0) {
+                w = Character.toUpperCase(w.charAt(0)) + w.substring(1);
+            }
+            if (scale > 0 && b.length() + (i > 0 ? 1 : 0) + w.length() > scale) {
+                break;
+            }
+            b.append(i > 0 ? " " : "").append(w);
+        }
+        return b.toString();
     }
 
     /** Lower-case letters, length between lo and hi. */
