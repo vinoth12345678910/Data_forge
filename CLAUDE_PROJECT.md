@@ -17,7 +17,7 @@ Modules (10, under `modules/`): `core`, `schema`, `gen`, `rules`, `load`, `clean
 | `CLAUDE_RULE.md` | the non-negotiable rules, short (read every session) |
 | `docs/STRUCTURE.md` | target monorepo layout (10 modules under `modules/`), 10 agents, 18 skills, hooks. Not created yet |
 | `CLAUDE.md` | stack, commands, hard rules, code style (created on `p0-claude-config`) |
-| `docs/SPEC.md` | product spec, source of truth |
+| `docs/SPEC.md` | product spec, source of truth (wins over older docs) |
 | `docs/PLAN.md` | full roadmap / build order (saved copy) |
 | `docs/PROMPTS.md` | the 4 reusable prompts (plan / build / checks / fixes) |
 | `docs/STATUS.md` | 5-line summary per session |
@@ -64,7 +64,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Done: Phase 0.1 skeleton (10 modules, MIT, ci.yml, zero-test check) merged to main. `scripts/verify.sh` + pre-push hook on `p0-verify`.
 - Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. `.github/workflows/ci.yml` is kept as is.
 - Done: all three golden schemas green on Postgres via `GoldenContainerTest` subclasses: `events-merch` (27 rules), `ecommerce` (50), `saas-multitenant` (64). Cap reached: no more rules are added to the golden schemas. Run container tests with `./gradlew containerTest` (needs Docker); `test` excludes them.
-- Done on `p0-claude-config`: `CLAUDE.md`, `.claude/` agents, skills, hooks (see `docs/HOOKS.md`). Awaiting: SPEC.md, the user's live hook checks, merge.
+- Done on `p0-claude-config`: `CLAUDE.md`, `.claude/` agents, skills, hooks (see `docs/HOOKS.md`). Merged (PR #8). The user's live hook checks are still to be run in a fresh session.
 - Next: Phase 1, only when the user says so.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
-- Open: `docs/SPEC.md` missing (user to export). Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
+- Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
