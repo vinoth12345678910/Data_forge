@@ -38,8 +38,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class GoldenContainerTest {
 
+    /** One pinned image for every golden schema. Time-zone rules depend on its tz data. */
+    static final String PG_IMAGE = "postgres:16-alpine";
+
     @Container
-    static final PostgreSQLContainer PG = new PostgreSQLContainer("postgres:16-alpine");
+    static final PostgreSQLContainer PG = new PostgreSQLContainer(PG_IMAGE);
 
     static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
