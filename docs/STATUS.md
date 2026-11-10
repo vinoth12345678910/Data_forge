@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 Claude config: CLAUDE.md, agents, skills, hooks (branch p0-claude-config)
+- Done: `CLAUDE.md` (imports `CLAUDE_RULE.md`); 10 agents and 19 skills in `.claude/` (ui-design-brief and anti-slop-checklist are TODO markers; rule-language, cleanup-safety, jdbc-dialects, release-jlink are skeletons; golden-schema-test added); `.claude/settings.json` with permissions and 6 hook scripts; `scripts/test-hooks.sh` (23 checks pass with the real payload shape); `docs/HOOKS.md` with live-check commands.
+- Not done: none of the four hook behaviours was triggered live by Claude Code (hooks load at session start; this session predates settings.json). The deny rules for curl, `git push ... main`, `gh pr merge`, `--no-verify` and `docker push` WERE seen refused live. `docs/SPEC.md` is still missing (to be added to this branch before merge). Phase 1 not started.
+- Next: the user runs the four live checks in a fresh session (docs/HOOKS.md), adds SPEC.md, merges. Phase 1 only when told.
+- Decisions: cleanup hook is commit-time (edits allowed; commit blocked unless the safety-reviewer finished after the latest edit; marker cleared after every commit); cleanup test edits blocked; fast tests skipped for md/docs-only commits; deny curl and wget but allow WebFetch and WebSearch; push-to-main deny uses word-boundary patterns so branch names like `p1-domain-model` still push.
+- Open: the SubagentStop payload field (`agent_type`) is assumed, with a transcript fallback; neither has been seen live. A bare `git push` on `main` is not caught. Reviewer "separate session" is policy, not a lock.
+
 ## 2026-11-10 golden schema: saas-multitenant (branch p0-golden-saas-multitenant)
 - Done: `everyStatusAppearsInSeed` moved into GoldenContainerTest (events-merch and ecommerce 9 tests each); Postgres image pinned in one constant; golden/saas-multitenant (schema.sql, seed, expected.yml with 64 rules = 33 db-enforced + 31 query-checked, 4 state machines, draft forge.yml, 64 broken fixtures); SaasMultitenantContainerTest, 14 tests green on Postgres 16 (7 shared + status coverage via base + rule counts, tz data, seat and project limits, isolation guard, special types, DST day).
 - Not done: generator-produced data (hand-written fixtures only); CLAUDE.md and `.claude/`; docs/SPEC.md; Phase 1 not started.
