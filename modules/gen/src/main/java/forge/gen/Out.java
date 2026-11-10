@@ -24,11 +24,12 @@ public final class Out {
             write(out, line);
             for (long row = 0; row < g.rows(table); row++) {
                 line.setLength(0);
+                String[] cells = g.row(table, row);
                 for (int i = 0; i < cols.size(); i++) {
                     if (i > 0) {
                         line.append('\t');
                     }
-                    String v = g.cell(table, cols.get(i), row);
+                    String v = cells[i];
                     line.append(v == null ? "\\N" : v.replace("\\", "\\\\"));
                 }
                 line.append('\n');

@@ -102,7 +102,7 @@ final class Dom {
             case "json":
                 return "{}";
             case "array":
-                return "{}";
+                return array(cell);
             case "inet":
                 return "10." + cell.below(256) + "." + cell.below(256) + "." + cell.below(256);
             case "cidr":
@@ -114,6 +114,19 @@ final class Dom {
             default:
                 return fmt(raw(p));
         }
+    }
+
+    /** An empty array, or (lo above 0) lo to hi words as a one-level array literal such as {amber,river}. */
+    private String array(Cell cell) {
+        if (lo == 0) {
+            return "{}";
+        }
+        int n = (int) (lo + cell.below(hi - lo + 1));
+        StringBuilder b = new StringBuilder("{");
+        for (int i = 0; i < n; i++) {
+            b.append(i > 0 ? "," : "").append(Names.words().get((int) cell.below(Names.words().size())));
+        }
+        return b.append('}').toString();
     }
 
     /** lo to hi words from the bundled list, the first one capitalised, at most scale characters (0 = no limit). */
