@@ -1,0 +1,1061 @@
+schema: "public"
+tables:
+- name: "categories"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "parent_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "categories_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "categories_sibling_name_key"
+    columns:
+    - "name"
+    exprs:
+    - "COALESCE(parent_id, 0::bigint)"
+    primary: false
+  fks:
+  - name: "categories_parent_fk"
+    columns:
+    - "parent_id"
+    refTable: "categories"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "categories_not_own_parent"
+    expr: "(parent_id <> id)"
+    facts:
+    - kind: "cmp"
+      column: "parent_id"
+      op: "<>"
+      other: "id"
+    full: true
+- name: "coupon_redemptions"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "coupon_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "user_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "redeemed_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "coupon_redemptions_order_key"
+    columns:
+    - "order_id"
+    primary: false
+  - name: "coupon_redemptions_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "coupon_redemptions_coupon_fk"
+    columns:
+    - "coupon_id"
+    refTable: "coupons"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "coupon_redemptions_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "coupon_redemptions_user_fk"
+    columns:
+    - "user_id"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+- name: "coupons"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "code"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "discount_type"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "value"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "max_uses"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: true
+  - name: "per_user_limit"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: true
+  - name: "starts_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "ends_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "coupons_code_key"
+    columns:
+    - "code"
+    primary: false
+  - name: "coupons_pkey"
+    columns:
+    - "id"
+    primary: true
+  checks:
+  - name: "coupons_limits_positive"
+    expr: "((COALESCE(max_uses, 1) > 0) AND (COALESCE(per_user_limit, 1) > 0))"
+    full: false
+  - name: "coupons_type_valid"
+    expr: "(discount_type = ANY (ARRAY['percent'::text, 'fixed'::text]))"
+    facts:
+    - kind: "in"
+      column: "discount_type"
+      op: "="
+      values:
+      - "percent"
+      - "fixed"
+    full: true
+  - name: "coupons_value_valid"
+    expr: "(((discount_type = 'percent'::text) AND ((value >= 1) AND (value <= 100)))\
+      \ OR ((discount_type = 'fixed'::text) AND (value > 0)))"
+    full: false
+  - name: "coupons_window_ordered"
+    expr: "(starts_at < ends_at)"
+    facts:
+    - kind: "cmp"
+      column: "starts_at"
+      op: "<"
+      other: "ends_at"
+    full: true
+- name: "inventory"
+  columns:
+  - name: "product_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "opening_qty"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "on_hand"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "reserved"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  pk:
+  - "product_id"
+  uniques:
+  - name: "inventory_pkey"
+    columns:
+    - "product_id"
+    primary: true
+  fks:
+  - name: "inventory_product_fk"
+    columns:
+    - "product_id"
+    refTable: "products"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "inventory_opening_nonneg"
+    expr: "(opening_qty >= 0)"
+    facts:
+    - kind: "range"
+      column: "opening_qty"
+      op: ">="
+      values:
+      - "0"
+    full: true
+  - name: "inventory_reserved_within_on_hand"
+    expr: "((reserved >= 0) AND (reserved <= on_hand))"
+    facts:
+    - kind: "range"
+      column: "reserved"
+      op: ">="
+      values:
+      - "0"
+    - kind: "cmp"
+      column: "reserved"
+      op: "<="
+      other: "on_hand"
+    full: true
+- name: "meta"
+  columns:
+  - name: "id"
+    type:
+      name: "int2"
+      dims: 0
+    nullable: false
+    def: "1"
+  - name: "generated_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "currency"
+    type:
+      name: "bpchar"
+      dims: 0
+      length: 3
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "meta_pkey"
+    columns:
+    - "id"
+    primary: true
+  checks:
+  - name: "meta_one_row"
+    expr: "(id = 1)"
+    facts:
+    - kind: "in"
+      column: "id"
+      op: "="
+      values:
+      - "1"
+    full: true
+- name: "order_items"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "product_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "unit_price_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "order_items_id_order_key"
+    columns:
+    - "id"
+    - "order_id"
+    primary: false
+  - name: "order_items_id_product_key"
+    columns:
+    - "id"
+    - "product_id"
+    primary: false
+  - name: "order_items_order_product_key"
+    columns:
+    - "order_id"
+    - "product_id"
+    primary: false
+  - name: "order_items_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "order_items_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "order_items_product_fk"
+    columns:
+    - "product_id"
+    refTable: "products"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "order_items_price_nonneg"
+    expr: "(unit_price_minor >= 0)"
+    facts:
+    - kind: "range"
+      column: "unit_price_minor"
+      op: ">="
+      values:
+      - "0"
+    full: true
+  - name: "order_items_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "orders"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "user_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "subtotal_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "discount_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "shipping_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "total_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "placed_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "updated_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "orders_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "orders_user_fk"
+    columns:
+    - "user_id"
+    refTable: "users"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "orders_amounts_nonneg"
+    expr: "((subtotal_minor >= 0) AND (discount_minor >= 0) AND (shipping_minor >=\
+      \ 0) AND (total_minor >= 0))"
+    facts:
+    - kind: "range"
+      column: "subtotal_minor"
+      op: ">="
+      values:
+      - "0"
+    - kind: "range"
+      column: "discount_minor"
+      op: ">="
+      values:
+      - "0"
+    - kind: "range"
+      column: "shipping_minor"
+      op: ">="
+      values:
+      - "0"
+    - kind: "range"
+      column: "total_minor"
+      op: ">="
+      values:
+      - "0"
+    full: true
+  - name: "orders_status_valid"
+    expr: "(status = ANY (ARRAY['pending'::text, 'paid'::text, 'partially_shipped'::text,\
+      \ 'shipped'::text, 'cancelled'::text, 'returned'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "pending"
+      - "paid"
+      - "partially_shipped"
+      - "shipped"
+      - "cancelled"
+      - "returned"
+    full: true
+- name: "payments"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "attempt_no"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "amount_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "method"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "completed_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "payments_order_attempt_key"
+    columns:
+    - "order_id"
+    - "attempt_no"
+    primary: false
+  - name: "payments_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "payments_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "payments_amount_positive"
+    expr: "(amount_minor > 0)"
+    facts:
+    - kind: "range"
+      column: "amount_minor"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "payments_attempt_positive"
+    expr: "(attempt_no > 0)"
+    facts:
+    - kind: "range"
+      column: "attempt_no"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "payments_completion_valid"
+    expr: "(((status = 'initiated'::text) = (completed_at IS NULL)) AND ((completed_at\
+      \ IS NULL) OR (completed_at >= created_at)))"
+    full: false
+  - name: "payments_status_valid"
+    expr: "(status = ANY (ARRAY['initiated'::text, 'succeeded'::text, 'failed'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "initiated"
+      - "succeeded"
+      - "failed"
+    full: true
+- name: "products"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "category_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "sku"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "price_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "active"
+    type:
+      name: "bool"
+      dims: 0
+    nullable: false
+    def: "true"
+  pk:
+  - "id"
+  uniques:
+  - name: "products_pkey"
+    columns:
+    - "id"
+    primary: true
+  - name: "products_sku_key"
+    columns:
+    - "sku"
+    primary: false
+  fks:
+  - name: "products_category_fk"
+    columns:
+    - "category_id"
+    refTable: "categories"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "products_price_nonneg"
+    expr: "(price_minor >= 0)"
+    facts:
+    - kind: "range"
+      column: "price_minor"
+      op: ">="
+      values:
+      - "0"
+    full: true
+- name: "refunds"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "payment_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "return_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: true
+  - name: "amount_minor"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "refunds_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "refunds_payment_fk"
+    columns:
+    - "payment_id"
+    refTable: "payments"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  - name: "refunds_return_fk"
+    columns:
+    - "return_id"
+    refTable: "returns"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "refunds_amount_positive"
+    expr: "(amount_minor > 0)"
+    facts:
+    - kind: "range"
+      column: "amount_minor"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "reservations"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_item_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "product_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "expires_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "reservations_order_item_key"
+    columns:
+    - "order_item_id"
+    primary: false
+  - name: "reservations_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "reservations_item_product_fk"
+    columns:
+    - "order_item_id"
+    - "product_id"
+    refTable: "order_items"
+    refColumns:
+    - "id"
+    - "product_id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "reservations_expires_after_creation"
+    expr: "(expires_at > created_at)"
+    facts:
+    - kind: "cmp"
+      column: "expires_at"
+      op: ">"
+      other: "created_at"
+    full: true
+  - name: "reservations_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "reservations_status_valid"
+    expr: "(status = ANY (ARRAY['active'::text, 'converted'::text, 'expired'::text,\
+      \ 'released'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "active"
+      - "converted"
+      - "expired"
+      - "released"
+    full: true
+  - name: "reservations_ttl_bounded"
+    expr: "((expires_at - created_at) <= '24:00:00'::interval)"
+    full: false
+- name: "returns"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_item_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  - name: "reason"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "restocked_qty"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: true
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  - name: "received_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "returns_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "returns_order_item_fk"
+    columns:
+    - "order_item_id"
+    refTable: "order_items"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "returns_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+  - name: "returns_restock_valid"
+    expr: "(((status = 'received'::text) AND (restocked_qty IS NOT NULL) AND ((restocked_qty\
+      \ >= 0) AND (restocked_qty <= quantity)) AND (received_at IS NOT NULL)) OR ((status\
+      \ <> 'received'::text) AND (restocked_qty IS NULL) AND (received_at IS NULL)))"
+    full: false
+  - name: "returns_status_valid"
+    expr: "(status = ANY (ARRAY['requested'::text, 'approved'::text, 'received'::text,\
+      \ 'rejected'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "requested"
+      - "approved"
+      - "received"
+      - "rejected"
+    full: true
+- name: "shipment_items"
+  columns:
+  - name: "shipment_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "order_item_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "quantity"
+    type:
+      name: "int4"
+      dims: 0
+    nullable: false
+  pk:
+  - "shipment_id"
+  - "order_item_id"
+  uniques:
+  - name: "shipment_items_pkey"
+    columns:
+    - "shipment_id"
+    - "order_item_id"
+    primary: true
+  fks:
+  - name: "shipment_items_order_item_fk"
+    columns:
+    - "order_item_id"
+    - "order_id"
+    refTable: "order_items"
+    refColumns:
+    - "id"
+    - "order_id"
+    deferrable: false
+    deferred: false
+  - name: "shipment_items_shipment_fk"
+    columns:
+    - "shipment_id"
+    - "order_id"
+    refTable: "shipments"
+    refColumns:
+    - "id"
+    - "order_id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "shipment_items_quantity_positive"
+    expr: "(quantity > 0)"
+    facts:
+    - kind: "range"
+      column: "quantity"
+      op: ">"
+      values:
+      - "0"
+    full: true
+- name: "shipments"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "order_id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+  - name: "status"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "carrier"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "tracking_no"
+    type:
+      name: "text"
+      dims: 0
+    nullable: true
+  - name: "shipped_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  - name: "delivered_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: true
+  pk:
+  - "id"
+  uniques:
+  - name: "shipments_id_order_key"
+    columns:
+    - "id"
+    - "order_id"
+    primary: false
+  - name: "shipments_pkey"
+    columns:
+    - "id"
+    primary: true
+  fks:
+  - name: "shipments_order_fk"
+    columns:
+    - "order_id"
+    refTable: "orders"
+    refColumns:
+    - "id"
+    deferrable: false
+    deferred: false
+  checks:
+  - name: "shipments_status_times_valid"
+    expr: "(((status = 'preparing'::text) AND (shipped_at IS NULL) AND (delivered_at\
+      \ IS NULL)) OR ((status = 'shipped'::text) AND (shipped_at IS NOT NULL) AND\
+      \ (delivered_at IS NULL)) OR ((status = 'delivered'::text) AND (shipped_at IS\
+      \ NOT NULL) AND (delivered_at IS NOT NULL) AND (delivered_at >= shipped_at)))"
+    full: false
+  - name: "shipments_status_valid"
+    expr: "(status = ANY (ARRAY['preparing'::text, 'shipped'::text, 'delivered'::text]))"
+    facts:
+    - kind: "in"
+      column: "status"
+      op: "="
+      values:
+      - "preparing"
+      - "shipped"
+      - "delivered"
+    full: true
+- name: "users"
+  columns:
+  - name: "id"
+    type:
+      name: "int8"
+      dims: 0
+    nullable: false
+    identity: "BY DEFAULT"
+  - name: "email"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "full_name"
+    type:
+      name: "text"
+      dims: 0
+    nullable: false
+  - name: "created_at"
+    type:
+      name: "timestamptz"
+      dims: 0
+    nullable: false
+  pk:
+  - "id"
+  uniques:
+  - name: "users_email_key"
+    columns:
+    - "email"
+    primary: false
+  - name: "users_pkey"
+    columns:
+    - "id"
+    primary: true
