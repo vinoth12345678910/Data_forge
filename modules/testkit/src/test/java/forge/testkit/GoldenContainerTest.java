@@ -132,7 +132,9 @@ abstract class GoldenContainerTest {
                 } catch (PSQLException e) {
                     String state = e.getSQLState();
                     String constraint = e.getServerErrorMessage().getConstraint();
-                    if (!r.get("sqlstate").equals(state) || !r.get("constraint").equals(constraint)) {
+                    // A rule may name no constraint (e.g. a generated column has none): then SQLSTATE alone.
+                    boolean constraintOk = !r.containsKey("constraint") || r.get("constraint").equals(constraint);
+                    if (!r.get("sqlstate").equals(state) || !constraintOk) {
                         wrong.add(name + ": got " + state + " / " + constraint);
                     }
                 } finally {
