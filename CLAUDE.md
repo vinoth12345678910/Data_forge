@@ -12,7 +12,7 @@ Read this file first, then `CLAUDE_RULE.md` (imported below). `CLAUDE_PROJECT.md
 | `CLAUDE_PROJECT.md` | quick context, roadmap table, current state (update each session) |
 | `docs/PLAN.md` | build order: phases, features, gates |
 | `docs/STRUCTURE.md` | the single source for repo layout, agents and skills |
-| `docs/SPEC.md` | product spec, source of truth (not supplied yet; do not invent it) |
+| `docs/SPEC.md` | product spec, source of truth; where it disagrees with an older doc, SPEC.md wins |
 | `docs/PROMPTS.md` | the four loop prompts (plan, build, checks, fixes) |
 | `docs/STATUS.md` | 5-line entry per session |
 

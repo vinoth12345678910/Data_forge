@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 docs/SPEC.md (branch p0-spec)
+- Done: `docs/SPEC.md` added verbatim from the user; pointers in `CLAUDE.md` and `CLAUDE_PROJECT.md` updated.
+- Not done: Pagila holdout (waits on the user's download); the 4 live hook checks (need a fresh session; hooks were not active in the authoring session); competitor check (user, 1 hour, before Phase 1 code); Phase 1 not started.
+- Next: holdout branch `p0-holdout-pagila` when the user has the files; Phase 1 only when told.
+- Decisions: SPEC.md wins over older docs. Differences left for the user to resolve, not edited: Phase 1 gate in SPEC reads all golden schemas plus the holdout, while `docs/PLAN.md` and `CLAUDE_PROJECT.md` say `events-merch`.
+- Open: SPEC section 12 asks for the Snaplet Seed and Datafaker check on events-merch before any Phase 1 code.
+
 ## 2026-11-10 Claude config: CLAUDE.md, agents, skills, hooks (branch p0-claude-config)
 - Done: `CLAUDE.md` (imports `CLAUDE_RULE.md`); 10 agents and 19 skills in `.claude/` (ui-design-brief and anti-slop-checklist are TODO markers; rule-language, cleanup-safety, jdbc-dialects, release-jlink are skeletons; golden-schema-test added); `.claude/settings.json` with permissions and 6 hook scripts; `scripts/test-hooks.sh` (23 checks pass with the real payload shape); `docs/HOOKS.md` with live-check commands.
 - Not done: none of the four hook behaviours was triggered live by Claude Code (hooks load at session start; this session predates settings.json). The deny rules for curl, `git push ... main`, `gh pr merge`, `--no-verify` and `docker push` WERE seen refused live. `docs/SPEC.md` is still missing (to be added to this branch before merge). Phase 1 not started.
