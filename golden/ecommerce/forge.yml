@@ -1,0 +1,65 @@
+# DRAFT. forge.yml keys are frozen in Phase 1 (docs/CONFIG.md); no reader exists yet.
+# Re-validate this file when the keys freeze.
+version: 0
+seed: 42
+dataset_clock: "2026-06-01T00:00:00Z"
+currency: INR
+schema: schema.sql
+expected_rules: expected.yml
+
+scenarios:
+  default:
+    rows:
+      users: 500
+      categories: 40
+      products: 200
+      coupons: 10
+      orders: 2000
+    mix:
+      orders.status: {pending: 0.08, paid: 0.20, partially_shipped: 0.07, shipped: 0.45, cancelled: 0.15, returned: 0.05}
+      payments.status: {succeeded: 0.75, failed: 0.20, initiated: 0.05}
+      shipments.status: {preparing: 0.10, shipped: 0.30, delivered: 0.60}
+      returns.status: {requested: 0.20, approved: 0.20, received: 0.50, rejected: 0.10}
+    distributions:
+      orders_per_user: {kind: zipf, s: 1.1}
+      payment_attempts_per_order: {kind: geometric, p: 0.8, max: 4}
+      category_depth: {max: 4}
+
+  flash-sale:
+    extends: default
+    burst:
+      table: orders
+      window: {duration: "30m"}
+      share: 0.5
+    stock:
+      low_stock_share: 0.3
+    mix:
+      orders.status: {pending: 0.25, paid: 0.30, partially_shipped: 0.05, shipped: 0.10, cancelled: 0.30}
+      reservations.status: {active: 0.25, converted: 0.40, expired: 0.25, released: 0.10}
+
+  coupon-heavy:
+    extends: default
+    coupons:
+      share_of_orders: 0.6
+      at_limit_share: 0.3
+
+  return-season:
+    extends: default
+    mix:
+      orders.status: {paid: 0.10, partially_shipped: 0.20, shipped: 0.30, returned: 0.25, cancelled: 0.05, pending: 0.10}
+      returns.status: {requested: 0.10, approved: 0.15, received: 0.65, rejected: 0.10}
+    returns:
+      partial_share: 0.4
+      restock_share: 0.7
+
+  all-edge-cases:
+    extends: default
+    edge_cases:
+      - max_length: [users.full_name, products.name, categories.name]
+      - unicode: [users.full_name, categories.name, returns.reason]
+      - case_only_duplicates: users.email
+      - dst_boundary: orders.placed_at
+      - leap_day: users.created_at
+      - injection_strings: [products.name, returns.reason]
+      - category_depth: 4
+      - null: shipments.tracking_no
