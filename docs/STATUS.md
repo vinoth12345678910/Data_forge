@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-10 P1.3 config and CLI (branch p1-config-cli, stacked on p1-planner)
+- Done: `Config`, `ConfigReader`, `ConfigWriter`, `ConfigCheck` in `core` (frozen per `docs/CONFIG.md`: unknown keys named by path, reserved sections must be empty, no password in the URL); Picocli `forge` in `cli` with `init` real and `generate`, `verify`, `drift`, `cleanup`, `readiness` printing "not built yet (Phase N)" and exiting 1. `forge init` reads a live Postgres or a DDL file (via a scratch server), writes forge.yml (100 rows per table, lowered where a check lists the allowed key values), lists broken cycles and checks it did not fully understand, refuses `prod` before connecting, and will not overwrite without `--force`. Gate green: `ConfigReaderTest` (11), `CliTest` (10), `InitContainerTest` (8: all three goldens and Pagila write a forge.yml that parses back and validates, same bytes on a second run, prod refused).
+- Not done: tests were written with the code in one go and first run green, so no failing-first run was shown; instead the prod refusal was broken on purpose and both prod tests failed. verify.sh not yet run on this branch at the time of this entry. The three golden `forge.yml` drafts (`version: 0`) were left untouched, as agreed.
+- Next: P1.4 generator core on `p1-generator-core`.
+- Decisions: a DDL draft has no `connection` block (the scratch server is not the target); `ddl` is stored relative to the forge.yml.
+- Open: the secret handling is `password_env` only; no keychain.
+
 ## 2026-11-10 P1.2 planner (branch p1-planner, stacked on p1-schema-reader)
 - Done: `Planner`, `Plan`, `Scc`, `PlanError` in `gen`. Parents before children in name order; a cycle is broken at a deferrable key first, else at an all-nullable key (insert NULL, update later); a cycle with neither fails naming tables, keys and columns. Self-references and junction tables are reported; row counts are checked (missing, negative, unknown table, NOT NULL child of an empty parent). Gate green: `PlannerTest` (12), `PlannerPropertyTest` (jqwik, 2000 random schemas, checked against an independent cycle test), `PlannerContainerTest` (three goldens and Pagila; events-merch breaks `orders_latest_payment_fk` as deferred).
 - Not done: speed and memory not measured (the fast suite runs in under a second); the break choice is legal and repeatable but not proven to be the smallest set of breaks.
