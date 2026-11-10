@@ -53,8 +53,8 @@ Features, one branch each:
 - Auto-inference from column names and types (email, phone, created_at, price).
 - Locale generators with valid checksums: phone, pincode, GSTIN, IBAN.
 
-Gate: `forge init` reads `events-merch` and drafts a valid `forge.yml`; the determinism test passes (two runs, same seed, byte-identical output).
-Holdout gate: besides `events-merch`, `forge init` and `forge generate` must work with ZERO config on a holdout schema: a public sample database such as Pagila, committed under `golden/holdout/` with its licence file. The result must have zero FK violations and every schema constraint satisfied. Do not tune the engine to any one golden schema.
+Gate: `forge init` reads all three golden schemas (`events-merch`, `ecommerce`, `saas-multitenant`) and the holdout and drafts a valid `forge.yml` for each; the determinism test passes (two runs, same seed, byte-identical output); and the zero-config structure gate on the holdout passes (below).
+Holdout gate (zero-config structure gate): besides the golden schemas, `forge init` and `forge generate` must work with ZERO config on a holdout schema: a public sample database such as Pagila, committed under `golden/holdout/` with its licence file. The result must have zero FK violations and satisfy every NOT NULL, unique and check constraint. Do not tune the engine to any one golden schema or to the holdout.
 User owns: the seeded random and generator design. Tag: `phase-1`
 
 ## Phase 2: Relations, business rules, loading
@@ -113,7 +113,7 @@ Features:
 - UI edits `forge.yml` through the API so CLI and UI never disagree.
 - Bundle all fonts and icons. No CDN links.
 
-Gate: browser smoke test passes (Playwright): connect, generate, verify, dry-run cleanup. Tag: `phase-6`
+Gate: browser smoke test passes (Playwright): connect, generate, verify, dry-run cleanup; and a full cutover rehearsal from the browser. Tag: `phase-6`
 
 ## Phase 7: Packs and release
 Features:
