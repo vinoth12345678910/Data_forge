@@ -1,0 +1,36 @@
+# CLAUDE_RULE.md — non-negotiable rules for Data Forge
+
+Applies to every session, every agent. Short on purpose. Context lives in `CLAUDE_PROJECT.md`; layout, agents and skills in `docs/STRUCTURE.md`; build order in `docs/PLAN.md`.
+
+## Workflow
+1. ONE feature = ONE branch. Strict. Never mix features, never commit feature work to `main`. New feature => new branch first. Merge only when the gate is green.
+2. One week per session. Plan mode first. No code until the user approves the plan.
+3. Gate test first. Show it failing. Then build. One commit per task.
+4. Stay inside the current week's scope and modules (one or two per session).
+5. The user owns design decisions (seed hashing, rule language, verify pass, all Phase 5 safety design). Stop and ask. Never guess.
+6. If a gate fails, do not start the next week. Fix, add a regression test, then move on.
+7. End every session: 5-line `docs/STATUS.md` (done, not done, next, decisions, open questions) and update the "Current state" block in `CLAUDE_PROJECT.md`.
+
+## Product (out-of-scope list, checked by `scope-guard`)
+- No network calls. No AI dependency. Anywhere.
+- Never delete rows outside the manifest.
+- Generation code: no `HashMap` iteration order, no parallel-stream ordering, no unseeded `Random`, no wall-clock or locale dependence. Same seed => byte-identical output.
+- Verify pass never trusts the generator (rules compile to SQL and run in the DB).
+- UI: no CDN links, no external URLs in `ui/src`, fonts and icons bundled. Server binds localhost only.
+
+## Review separation
+- Builders never review their own work. `determinism-auditor`, `safety-reviewer`, `scope-guard`, `ui-reviewer` run in a separate session from the builder.
+- Phase 5 safety tests are written by the user. Claude runs and reports them, never edits or grades them.
+- Any edit under `modules/cleanup` needs a `safety-reviewer` run first (hook-enforced).
+
+## Code style
+Plain Java 21. Short names, small classes, no clever abstractions, no needless interfaces. Strict TypeScript in `ui/`. Match surrounding code.
+
+## Honesty
+Report outcomes as they are. If something was not tested, say so. Never claim it works without proof. If you differ from an instruction, say exactly where and why.
+
+## Hooks (to configure in `.claude/settings.json`, during setup branch)
+- Run fast tests before commit.
+- Block edits under `modules/cleanup` unless `safety-reviewer` has run.
+- Block commits that add a URL to `ui/src`.
+- Each hook must be triggered once on purpose to prove it works (commit a URL into `ui/src`; edit `modules/cleanup` without the reviewer).
