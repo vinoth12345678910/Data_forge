@@ -4,11 +4,11 @@ Applies to every session, every agent. Short on purpose. Context lives in `CLAUD
 
 ## Workflow
 1. ONE feature = ONE branch. Strict. Never mix features, never commit feature work to `main`. New feature => new branch first. Merge only when the gate is green.
-2. One week per session. Plan mode first. No code until the user approves the plan.
+2. One feature per session. Plan mode first. No code until the user approves the plan.
 3. Gate test first. Show it failing. Then build. One commit per task.
-4. Stay inside the current week's scope and modules (one or two per session).
+4. Stay inside the current feature's scope and modules (one or two per session).
 5. The user owns design decisions (seed hashing, rule language, verify pass, all Phase 5 safety design). Stop and ask. Never guess.
-6. If a gate fails, do not start the next week. Fix, add a regression test, then move on.
+6. If a gate fails, do not start the next feature. Fix, add a regression test, then move on.
 7. End every session: 5-line `docs/STATUS.md` (done, not done, next, decisions, open questions) and update the "Current state" block in `CLAUDE_PROJECT.md`.
 
 ## Product (out-of-scope list, checked by `scope-guard`)
