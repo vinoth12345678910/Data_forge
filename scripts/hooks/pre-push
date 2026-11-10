@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Blocks the push if scripts/verify.sh fails.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+echo "pre-push: running scripts/verify.sh"
+if ! "$root/scripts/verify.sh"; then
+  echo "pre-push: verify failed, push blocked" >&2
+  exit 1
+fi
