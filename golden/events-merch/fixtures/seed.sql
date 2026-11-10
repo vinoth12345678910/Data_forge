@@ -79,3 +79,15 @@ insert into registrations (id, user_id, event_id, ticket_type_id, quantity, orde
 insert into refunds (id, payment_id, amount_paise, reason, created_at) values
     (1, 4, 29900,  'mug damaged',    '2026-05-12 09:00+00'),
     (2, 5, 150000, 'event conflict', '2026-05-15 09:00+00');
+
+-- Ids above were explicit; move each identity sequence past them.
+select setval(pg_get_serial_sequence('warehouses', 'id'), (select max(id) from warehouses));
+select setval(pg_get_serial_sequence('users', 'id'), (select max(id) from users));
+select setval(pg_get_serial_sequence('events', 'id'), (select max(id) from events));
+select setval(pg_get_serial_sequence('ticket_types', 'id'), (select max(id) from ticket_types));
+select setval(pg_get_serial_sequence('merchandise', 'id'), (select max(id) from merchandise));
+select setval(pg_get_serial_sequence('orders', 'id'), (select max(id) from orders));
+select setval(pg_get_serial_sequence('order_items', 'id'), (select max(id) from order_items));
+select setval(pg_get_serial_sequence('payments', 'id'), (select max(id) from payments));
+select setval(pg_get_serial_sequence('registrations', 'id'), (select max(id) from registrations));
+select setval(pg_get_serial_sequence('refunds', 'id'), (select max(id) from refunds));
