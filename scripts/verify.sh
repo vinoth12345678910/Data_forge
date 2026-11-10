@@ -56,7 +56,7 @@ if ! has_tests '*ContainerTest.java'; then
 elif ! docker_up; then
   echo "SKIPPED: Docker is not running"
   record "SKIPPED" "c. testcontainers (Docker not running)"
-elif ./gradlew test --tests '*ContainerTest'; then
+elif ./gradlew containerTest; then
   record "PASS   " "c. testcontainers"
 else
   fail "c. testcontainers"
