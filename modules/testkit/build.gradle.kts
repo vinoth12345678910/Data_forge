@@ -3,6 +3,7 @@ val libs = rootProject.extensions.getByType<VersionCatalogsExtension>().named("l
 dependencies {
     "api"(project(":core"))
     "api"(project(":gen"))
+    "api"(project(":load"))
     "implementation"(libs.findLibrary("postgres-driver").get())
     "testImplementation"(project(":schema"))
     "testImplementation"(project(":cli"))

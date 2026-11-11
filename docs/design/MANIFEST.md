@@ -141,3 +141,11 @@ Questions for you, the owner of cleanup: (1) is "refuse non-empty tables" accept
 - **Refused-table messages say what to do**, for example: `table orders already has 120 rows; Data Forge only loads into empty tables. Empty it, load into a fresh database, or mark the table keep in forge.yml.` and `table logs has no primary key or unique not-null key; cleanup could not tell its rows apart. Add a key or mark the table keep in forge.yml.`
 - **Append mode** (loading into a non-empty table) is a later decision, not Phase 2.
 - The cleanup questions above are answered by the user in a separate message; the assumptions table stays as written. No delete code is written.
+
+## As built in P2.3 (differences from the text above)
+
+- `run_keys` has a `seq` column (row order) so the file can be rebuilt byte for byte; an index on `(run_id, table_name, seq)`.
+- Every list table's keys go in `<run_id>.keys` (not only lists over 1,000 keys). Ranges stay inline in the JSON.
+- `loaded_at` and `run_id` are fixed by the caller before the transaction (`loadedAt`, whole seconds UTC; run id = SHA-256 of seed, config text and `loadedAt`), so the files can be staged and hashed before commit. `breaks` and `sequences` are written sorted by table, then name.
+- `RowGen` does not generate `keep` tables yet (Phase 1 limit), so a keep table is skipped by the builder but that path is untested.
+- Code: `forge.load` has `Manifest`, `ManifestBuilder`, `ManifestDb`, `ManifestFile` (`stage`, `publish`, `discard`, `rebuild`), `KeyChoice`, `Sequences`.

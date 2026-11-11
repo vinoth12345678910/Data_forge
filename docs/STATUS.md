@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-11 P2.3 manifest (branch p2-manifest, from p2-verify-pass)
+- Done: `Manifest`, `ManifestBuilder`, `ManifestDb` (`_dataforge` tables), `ManifestFile` (stage, publish, discard, rebuild from the DB), `KeyChoice`, `Sequences` in `load`; `TestInsert.loadInto` (no commit) in `testkit`. Gate written first, shown failing, now green on Postgres 16 (`ManifestContainerTest`, 5 tests): counts and keys per table equal the loaded rows (ranges for integer keys, lists for uuid, composite and unique-not-null keys); DB copy equals file copy (hash); a crash between commit and rename is repaired from the DB and a deleted file is rebuilt byte for byte; a failed load leaves no rows, no `_dataforge` schema and no files; a duplicate run id fails and leaves the first manifest intact; a table with no usable key is refused with "Add a key or mark the table keep in forge.yml". Mutation (range end off by one) failed the gate, restored.
+- Not done: the product loader (P2.4); "refuse non-empty tables" message lives in P2.4; keep tables are skipped but UNTESTED because `RowGen` still refuses kept tables; the failed-load test uses the test helper, not the product loader.
+- Next: P2.4 `p2-loader`.
+- Decisions: see "As built in P2.3" in `docs/design/MANIFEST.md` (seq column, keys file for every list table, `loadedAt` and run id fixed before the transaction).
+- Open: kept tables in `RowGen`.
+
 ## 2026-11-11 P2.2 verify pass (branch p2-verify-pass, from p2-rule-language)
 - Done: `Verifier`, `Report`, `RuleResult` in `rules` (one read-only transaction per rule, count and sample, ERROR on a failing query, `checked 0 rows` warning, exit codes 0/1/2, JSON). Gate written first and shown failing ("not built yet"). Green on Postgres 16: `VerifyOracleContainerTest` (both goldens: seed all PASS with checked > 0; each broken fixture flags its rule; our query and the golden `violations_sql` return the same key set for every in-scope rule on the seed and on every fixture: 6 + 9 rules), `VerifyBehaviourContainerTest` (5), `RulesIndependenceTest` and `GenIndependenceTest` (build file, classpath and compiled classes). Broke the limit comparison (`>` to `>=`) on purpose: both golden tests failed, restored. verify.sh: a, b, c, e PASS, d SKIPPED.
 - Not done: `forge verify` command and "not checked in this phase" lines for deferred rules (P2.6); Postgres other than 16 untested.

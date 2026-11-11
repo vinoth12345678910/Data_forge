@@ -35,14 +35,19 @@ public final class TestInsert {
         }
         boolean auto = c.getAutoCommit();
         c.setAutoCommit(false);
+        loadInto(c, g, gen);
+        c.commit();
+        c.setAutoCommit(auto);
+    }
+
+    /** Loads inside the caller's transaction (autocommit must be off); the caller commits or rolls back. */
+    public static void loadInto(Connection c, SchemaGraph g, RowGen gen) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("set constraints all deferred");
         }
-        for (String name : plan.order()) {
+        for (String name : gen.plan().order()) {
             insert(c, g.schema(), g.table(name), gen);
         }
-        c.commit();
-        c.setAutoCommit(auto);
     }
 
     private static void insert(Connection c, String schema, Table t, RowGen gen) throws SQLException {
