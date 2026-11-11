@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-11 P2.2 verify pass (branch p2-verify-pass, from p2-rule-language)
+- Done: `Verifier`, `Report`, `RuleResult` in `rules` (one read-only transaction per rule, count and sample, ERROR on a failing query, `checked 0 rows` warning, exit codes 0/1/2, JSON). Gate written first and shown failing ("not built yet"). Green on Postgres 16: `VerifyOracleContainerTest` (both goldens: seed all PASS with checked > 0; each broken fixture flags its rule; our query and the golden `violations_sql` return the same key set for every in-scope rule on the seed and on every fixture: 6 + 9 rules), `VerifyBehaviourContainerTest` (5), `RulesIndependenceTest` and `GenIndependenceTest` (build file, classpath and compiled classes). Broke the limit comparison (`>` to `>=`) on purpose: both golden tests failed, restored. verify.sh: a, b, c, e PASS, d SKIPPED.
+- Not done: `forge verify` command and "not checked in this phase" lines for deferred rules (P2.6); Postgres other than 16 untested.
+- Next: P2.3 `p2-manifest`.
+- Decisions: four ecommerce fixtures break a second rule, written into the test with reasons: subtotal and discount fixtures also break `order_total_formula` (it is computed from them); the two refund fixtures break each other's rule (same refund row made too large).
+- Open: none new.
+
 ## 2026-11-11 P2.1 rule language (branch p2-rule-language, from p2-design)
 - Done: `RuleExpr`, `Rule`, `Config.RuleConf` and `rules` parsing in `core`; `Rules.g4`, `RuleReader`, `RuleCheck`, `RuleSet`, `RuleSql`, `RuleError` in `rules`; `golden/*/phase2.forge.yml` (6 + 9 rules). Gate written first and shown failing. Now green: `RuleLanguageTest` (17), `ConfigReaderTest.rulesSection`, and `RuleGoldenContainerTest` on Postgres 16: all 15 golden rules parse, type-check, compile and every compiled query runs on each seed with `checked` > 0. Broke the compiler on purpose (`is distinct from` misspelt): both golden tests failed, restored, green. `scripts/verify.sh`: a PASS, b PASS, c PASS, d SKIPPED (no no-network test yet), e PASS.
 - Not done: the compiled queries are only proven to RUN, not that they agree with the golden `violations_sql` (that is P2.2); determinism, speed and memory checks do not apply (no generation code touched).
