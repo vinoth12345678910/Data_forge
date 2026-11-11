@@ -121,3 +121,41 @@ Columns that are never generated and cannot be overridden: generated columns (`g
 1. The three golden `forge.yml` drafts use `version: 0` with `dataset_clock`, `schema`, `expected_rules` and filled-in `scenarios`. Under this proposal they do not validate. Proposal: leave them untouched in Phase 1 (they are test fixtures for later phases) and re-key them when scenarios are built. The P1.3 gate uses the files `forge init` writes, not the drafts.
 2. Default `rows: 100`. A different default is a one-line change.
 3. Default `null_rate: 0.10` for nullable columns.
+
+## Amendment for Phase 2: `rules` and `manifest_dir` (PROPOSAL, not approved)
+
+Written in Phase 2 Step 0. It changes nothing above until the user approves it; on approval P2.1 folds it into the sections above and updates `ConfigReader`, `ConfigCheck` and `ConfigReaderTest`. The rule language itself is in `docs/design/RULE_LANGUAGE.md`.
+
+### `rules` (becomes real in Phase 2)
+
+A list. Each item is a map:
+
+| Key | Type | Required | Meaning |
+|---|---|---|---|
+| `name` | string `[a-z][a-z0-9_]*` | yes | Unique in the file. The verify report and every error message use it. When a golden schema has a hand-written rule of the same name, the two are paired by this name. |
+| `derive` | rule text | one of the three | `table.col = expr [when cond]`: the column is always computed. |
+| `check` | rule text | one of the three | `cond [when cond]`: every row must satisfy it. |
+| `limit` | rule text | one of the three | `sum(child.col) per child.fk <= parent.col [when cond]` or `count(*) per child.fk <= parent.col`: children of one parent stay within the parent's capacity. |
+| `description` | string | no | Free text, shown in reports. |
+
+```yaml
+rules:
+  - name: order_total_matches_items
+    derive: orders.total_paise = sum(order_items.quantity * order_items.unit_price_paise)
+  - name: registration_within_ticket_quantity
+    limit: sum(registrations.quantity) per registrations.ticket_type_id <= ticket_types.quantity
+```
+
+Validation (added): exactly one of `derive`, `check`, `limit` per item; an unknown key in an item is an error with its path (`rules[2].chek`); a duplicate `name` is an error. `ConfigReader` keeps the rule text; parsing and type-checking need the schema, so they happen in the `rules` module when `forge generate` or `forge verify` starts, before any row is generated or read. Errors carry the rule position, name, `line:col` and a caret (see `RULE_LANGUAGE.md`).
+
+### `manifest_dir` (new, optional)
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `manifest_dir` | path, relative to `forge.yml` | `.forge/manifests` | Where the local manifest copy is written (`<run_id>.json` and `<run_id>.keys`). See `docs/design/MANIFEST.md`. |
+
+### Validation and differences (changes to the sections above)
+
+- Reserved sections: `rules` is no longer reserved. `use`, `states`, `scenarios`, `cleanup` and `connection.backup_cmd` stay reserved.
+- SPEC section 7 writes a rule as `expr:`; this proposal writes the kind as the key (`derive:`, `check:`, `limit:`) for the reasons in `RULE_LANGUAGE.md` decision D1a.
+- Golden `forge.yml` files stay Phase 3 drafts; Phase 2 adds `golden/<name>/phase2.forge.yml` (resolves open point 1 above for Phase 2 only).

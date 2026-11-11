@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-11 Phase 2 Step 0: plan and design docs (branch p2-design, from main)
+- Done: confirmed Phase 1 merged (PRs #1 to #19, main at 82ade85). Wrote `docs/design/PHASE2_PLAN.md`, `RULE_LANGUAGE.md`, `VERIFY_PASS.md`, `MANIFEST.md`, `PHASE2_RULE_SCOPE.md` and a CONFIG.md amendment (all PROPOSALS). Classified all 77 golden rules: 15 in Phase 2, 43 deferred, 19 enforced by the database.
+- Not done: no product code, no gate test, no PR. `scripts/verify.sh` on main: a PASS, b PASS, c SKIPPED, d SKIPPED, e SKIPPED (Docker was not running), so the container gates were NOT re-run this session.
+- Next: the user answers D1a, D1b, D1c, D2, D3, D4 in one reply and starts Docker; then P2.1 on branch `p2-rule-language` from main.
+- Decisions: none made; all are recommendations awaiting the user. Golden Phase 2 rules go in new `golden/<name>/phase2.forge.yml` files, the Phase 3 draft `forge.yml` files stay untouched.
+- Open: how rule application changes "a row is a function of its own index" for ruled columns (D1b); cleanup questions in `MANIFEST.md`; a random-DDL generator for the loader property test is new test code.
+
 ## 2026-11-10 P1.6 zero-config holdout gate (branch p1-holdout-gate, stacked on p1-inference-locale)
 - Done: TEST-ONLY `TestInsert` and `StructureCheck` in `testkit`; `StructureGateContainerTest`: `forge init` writes forge.yml, the file is NOT edited, rows are generated in memory, loaded into Postgres 16, and NOT NULL, unique, foreign keys and checks are re-checked with plain SQL. PASS on Pagila (holdout), events-merch, ecommerce and saas-multitenant: zero violations, row counts equal forge.yml. Also `StructureScaleContainerTest` (the same at 1000 rows per table, set in code) and `StructureCheckContainerTest` (negative control: the checker reports a NULL, a duplicate, an orphan and a failed check). Shown failing first (all 4 failed); broke the even dealing on purpose: ecommerce and saas failed, restored. Generation only, at 100 / 1000 / 5000 / 20000 rows per table: all four schemas work; saas about 139k rows/s, ecommerce 141k, heap about 150-200 MB. `gen` tests green (82). BUSINESS RULES ARE NOT CLAIMED: these schemas still break their business rules.
 - Not done: verify.sh for this branch only after the push hook; the structure was not loaded into Postgres above 1000 rows per table; unique pairs across tied keys with a unique-carrier anchor can still fail when parents do not cover every shared value; speed and memory not profiled with JFR.
