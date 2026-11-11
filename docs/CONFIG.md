@@ -152,7 +152,7 @@ Validation (added): exactly one of `derive`, `check`, `limit` per item; an unkno
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `manifest_dir` | path, relative to `forge.yml` | `.forge/manifests` | Where the local manifest copy is written (`<run_id>.json` and `<run_id>.keys`). See `docs/design/MANIFEST.md`. |
+| `manifest_dir` | path, relative to `forge.yml` | `.forge/manifests` | Where the local manifest copy is written (`<run_id>.json` and `<run_id>.keys`). See `docs/design/MANIFEST.md`. **Not implemented in P2.6:** `forge generate --manifest-dir` and the default `.forge/manifests` next to `forge.yml` are used instead; the key is still proposed. |
 
 ### Validation and differences (changes to the sections above)
 

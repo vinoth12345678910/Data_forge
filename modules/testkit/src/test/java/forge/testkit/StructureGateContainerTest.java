@@ -30,7 +30,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * P1.6 gate: zero config. forge init writes forge.yml, the file is NOT edited, rows are generated
- * in memory, loaded into a real Postgres with the test-only insert helper, and the structure is
+ * in memory, loaded into a real Postgres with the PRODUCT loader (P2.6; Phase 1 used a test-only insert helper), and the structure is
  * checked again with plain SQL: zero FK violations, every NOT NULL, unique and check satisfied.
  * Business rules are NOT claimed: the three golden schemas are expected to break their rules.
  */
@@ -93,7 +93,7 @@ class StructureGateContainerTest {
                 s.setEscapeProcessing(false);
                 s.execute(Files.readString(ddl));
             }
-            TestInsert.load(c, g, gen);
+            forge.load.PgLoader.load(c, g, conf, gen, written, "test", dir.resolve("manifests"));
             List<String> bad = StructureCheck.violations(c, g);
             assertTrue(bad.isEmpty(), "structure broken in " + rel + ": " + bad);
             for (String t : gen.plan().order()) {
