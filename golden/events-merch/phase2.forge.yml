@@ -1,11 +1,35 @@
 # Phase 2 configuration for events-merch (version 1). The Phase 1 forge.yml next to it stays a Phase 3 draft.
 # Rule names equal the names in expected.yml, so each rule is paired with its hand-written violations_sql.
-# Row counts are added in P2.5.
+# Row counts are the zero-config counts from forge init.
 version: 1
 seed: 42
 clock: "2026-06-01T00:00:00Z"
 ddl: schema.sql
-tables: {}
+tables:
+  events:
+    rows: 100
+  merchandise:
+    rows: 100
+  meta:
+    rows: 1
+  order_items:
+    rows: 100
+  orders:
+    rows: 100
+  payments:
+    rows: 100
+  refunds:
+    rows: 100
+  registrations:
+    rows: 100
+  stock:
+    rows: 100
+  ticket_types:
+    rows: 100
+  users:
+    rows: 100
+  warehouses:
+    rows: 100
 rules:
   - name: order_total_matches_items
     derive: orders.total_paise = sum(order_items.quantity * order_items.unit_price_paise)
