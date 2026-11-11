@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -59,12 +60,13 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        for (String reserved : List.of("use", "rules", "states", "scenarios", "cleanup")) {
+        for (String reserved : List.of("use", "states", "scenarios", "cleanup")) {
             JsonNode n = root.get(reserved);
             if (n != null && !n.isNull() && !n.isEmpty()) {
                 throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
             }
         }
+        List<Config.RuleConf> rules = rules(root.get("rules"));
         Conn conn = connection(root.get("connection"));
         String ddl = text(root, "ddl", "");
         if (conn == null && ddl == null) {
@@ -79,7 +81,55 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out);
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules);
+    }
+
+    private static final Pattern RULE_NAME = Pattern.compile("[a-z][a-z0-9_]*");
+
+    private static List<Config.RuleConf> rules(JsonNode n) {
+        List<Config.RuleConf> out = new ArrayList<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isArray()) {
+            throw new ConfigError("rules: a list of rules is required.");
+        }
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < n.size(); i++) {
+            JsonNode r = n.get(i);
+            String path = "rules[" + i + "]";
+            if (!r.isObject()) {
+                throw new ConfigError(path + ": a map with name and one of derive, check, limit is required.");
+            }
+            keys(r, path, "name", "derive", "check", "limit", "description");
+            String name = text(r, "name", path);
+            if (name == null) {
+                throw new ConfigError(path + ".name: required.");
+            }
+            if (!RULE_NAME.matcher(name).matches()) {
+                throw new ConfigError(path + ".name: must match [a-z][a-z0-9_]*, got " + name);
+            }
+            if (!seen.add(name)) {
+                throw new ConfigError(path + ".name: duplicate rule name " + name);
+            }
+            String kind = null;
+            String text = null;
+            for (String k : List.of("derive", "check", "limit")) {
+                String v = text(r, k, path);
+                if (v != null) {
+                    if (kind != null) {
+                        throw new ConfigError(path + ": exactly one of derive, check, limit is allowed per rule.");
+                    }
+                    kind = k;
+                    text = v;
+                }
+            }
+            if (kind == null) {
+                throw new ConfigError(path + ": exactly one of derive, check, limit is required.");
+            }
+            out.add(new Config.RuleConf(name, kind, text, text(r, "description", path)));
+        }
+        return out;
     }
 
     private static Conn connection(JsonNode n) {

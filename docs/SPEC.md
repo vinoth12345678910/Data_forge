@@ -161,8 +161,12 @@ tables:
     keep: true           # reference table, never generated or cleaned
 
 rules:
-  - name: order total matches items
-    expr: orders.total_paise = sum(order_items.unit_price_paise * order_items.quantity)
+  - name: order_total_matches_items
+    derive: orders.total_paise = sum(order_items.unit_price_paise * order_items.quantity)
+  - name: payment_completed_after_created
+    check: payments.completed_at >= payments.created_at
+  - name: registration_within_ticket_quantity
+    limit: sum(registrations.quantity) per registrations.ticket_type_id <= ticket_types.quantity
 
 states:
   orders.status:

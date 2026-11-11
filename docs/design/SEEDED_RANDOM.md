@@ -166,3 +166,12 @@ Zero-config on real schemas needed five things the approved design did not cover
 5. **A bounded cache** (and the parent-table index above, one per tied key, read once per `RowGen`; memory grows with the parent row count) of resolved rows and picks (400,000 entries, then cleared). It only saves time.
 
 6. **Parent references are dealt out evenly (decided by the user for P1.6).** A foreign key no longer picks its parent independently. Child row `r` of a parent count `P` uses block `r / P` and position `r % P`; the parent is `Perm(key mixed with the block number, P).at(r % P)`. So every block of `P` child rows uses each parent exactly once, in an order shuffled afresh per block. It depends on `r` and `P` only. This replaces `below(P)` for foreign keys (self-references still pick a random earlier row). It removes random skew until Phase 3 adds distributions, and it is what makes unique pairs across tied composite keys feasible: when every tenant has a team and a member, the fixed carrier row always finds a match. In a cluster the first key is the anchor: it keeps its dealt pick, and the other keys are redrawn (attempt 1, 2, ...) until they agree with it; if none agrees within 2000 attempts the anchor is redrawn as well (that row is then random, not dealt). An anchor that is a unique carrier cannot be redrawn, so such a table can still fail when the parents do not cover every shared value.
+
+## Amendment for Phase 2: ruled columns (approved by the user 2026-11-11)
+
+The promise "row N does not depend on other rows" is changed to:
+
+- **A column without a rule:** row N is stable. Its value is a pure function of (seed, table, column, row, purpose) as before. Changing another table's row count never changes it (foreign-key picks remain the one stated exception).
+- **A ruled column** (derived, clamped, redrawn, or a cap raised by counts): a pure function of (seed, row, aggregate), where the aggregate is the rule's per-parent sum, count or lowest-allowed value, computed by a streaming pre-pass that keeps ONE value per parent key and never the child rows.
+
+Both halves are tested: unruled columns are byte-identical when other tables' row counts change; ruled columns are byte-identical for the same seed and spec.
