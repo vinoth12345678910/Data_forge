@@ -1,4 +1,4 @@
-# Rule language (PROPOSAL: user-owned, not approved)
+# Rule language (approved by the user 2026-11-11 with changes D1b, D1c)
 
 Status: written in Phase 2 Step 0 for the user to approve, change or reject. Nothing is built from it until approved. Alternatives are in "Decisions" at the end.
 
@@ -135,7 +135,7 @@ where (select coalesce(sum(c.quantity), 0) from registrations c where c.ticket_t
 Rows stay pure functions of (seed, table, column, row) as in `SEEDED_RANDOM.md`. Rules add no randomness and no dependence on other rows' random state. They add two things: a **count/accumulate pre-pass** and a **column plan**.
 
 1. **Plan.** From the rule AST, each ruled column gets a role: `derived` (computed, never drawn), `clamped` (drawn inside a bound the rule gives), `redrawn` (drawn, then tested, drawn again), or `lifted` (a capacity made large enough).
-2. **Pre-pass.** For every aggregate, one pass over the child table computes, for each parent row index, the count or sum. It generates only the cells the aggregate reads and the foreign key's parent pick (cheap, pure), and keeps one array per aggregate, sized by the parent row count (8 bytes per parent row). The passes run in dependency order: a child's sum can read a column that another rule derived.
+2. **Pre-pass.** For every aggregate, one pass over the child table computes, for each parent row index, the count or sum. It generates only the cells the aggregate reads and the foreign key's parent pick (cheap, pure), and streams: it keeps ONE aggregate value per parent key (one array entry per parent row, 8 bytes), never the child rows. The passes run in dependency order: a child's sum can read a column that another rule derived.
 3. **Row.** When `RowGen` builds a row it asks the plan. A `derived` cell is evaluated from the row's other cells, parent cells (recomputed by the same pure function) and the accumulator arrays. A `clamped` cell is drawn by the normal generator with its range narrowed by the rule. A `redrawn` cell uses the Phase 1 attempt-salted redraw (same limit, same error).
 4. **After computing**, the final row is tested against the table's own check constraints (Phase 1 `Eval`). A derived value that breaks a check is a `GenError` naming the rule, the table, the row and the check. A derived value is never redrawn.
 
@@ -148,14 +148,14 @@ How each kind is applied:
 | any other `check` | `redrawn`: whole-row redraw, up to the Phase 1 limit, then `GenError` naming the rule and row. |
 | `limit` on `sum` or `count` | see "Capacity limits" below. |
 
-### Capacity limits (decision D1c)
+### Capacity limits (D1c, approved as option 2)
 
-The pre-pass gives, for parent row `p`, `used(p)` = the sum or count of its children, and `n(p)` = how many children it has.
+The pre-pass gives, for parent row `p`, `n(p)` = how many children point at it and `lo(p)` = the largest smallest-allowed value among... of the limited child column (for example 1 for `quantity > 0`; for a child that is itself a capacity, its own lower bound, see below). One `long` per parent key for each; never the child rows.
 
-- **Proposed:** if the cap column is a free column (no rule derives it), it is **lifted**: `cap = greatest(drawn value, used(p))`. Children are never changed. This works for `sum` and for `count`, and chains (registrations -> ticket type quantity -> event capacity) by running the pre-passes in order.
-- If the cap column is itself derived or clamped by another rule (for example `payments.amount_paise`, derived from the order total), it cannot be lifted. Then the children are **clamped**: each child value is at most `floor(cap / n(p))` (the even share). A `count` limit on a pinned cap cannot be met this way and is an error saying so.
-- If the even share is below the child's smallest allowed value (for example `quantity > 0` and the cap is smaller than `n(p)`), `GenError` naming the rule, the parent row, the cap and the child count.
-- A cap that is NULL means "no limit": nothing is applied for that parent.
+- **Children shrink.** Each child value is drawn at most `floor(cap(p) / n(p))` (the even share). Capacities stay ordinary draws and stay believable.
+- **A cap is raised only when counts force it:** `cap(p) = max(drawn cap, n(p) * lo(p))`. So a cap is never raised just to cover usage, only when even the smallest children (each at least `lo`) cannot fit. For `count(*)` limits each child counts 1, so `cap(p) = max(drawn cap, n(p))`.
+- **Chains** (registrations -> ticket type quantity -> event capacity): a column that is both a cap and a limited child has its own lower bound `lo` = `max(own smallest value, n(children) * their lo)`; the event capacity is raised to `n * max(lo)` over its ticket types, and each ticket type quantity is then drawn between its `lo` and its even share. The pre-passes run in dependency order.
+- **A cap that another rule computes** (for example `payments.amount_paise`) cannot be raised: if its value is below `n(p) * lo(p)`, `GenError` naming the rule, parent row, cap and child count. A NULL cap means "no limit": nothing is applied for that parent.
 
 ## Error messages with position
 
@@ -180,12 +180,12 @@ Written for `events-merch` and `ecommerce`, the Phase 2 language covers the 6 + 
 2. One `expr:` key, kind inferred from shape (as SPEC section 7 shows). Shortest to write, but the same text can mean different kinds depending on small changes, and error messages get vaguer.
 3. Raw SQL rules. Strongest, but a SQL string tells the generator nothing, so no "correct by construction".
 
-**D1b. How rules are applied during generation.**
+**D1b. How rules are applied during generation.** APPROVED: option 1; the pre-pass streams and keeps one aggregate per parent key. The Phase 1 promise changes: see `SEEDED_RANDOM.md`, "Amendment for Phase 2".
 1. **Count/accumulate pre-pass, then pure cells (above), recommended.** Keeps rows pure and memory at one array per aggregate. Cost: one extra pass over each child table that feeds an aggregate.
 2. Generate rows into memory and fix them afterwards. Simple, but memory grows with row count (breaks the 1M-row bound) and rows stop being pure.
 3. Load, then `UPDATE` derived columns with SQL. Trivially correct in Postgres, but the generator's own output (and later SQL/CSV output) is not correct by construction, which is the Phase 2 promise.
 
-**D1c. Capacity limits.**
-1. **Lift a free cap; share a pinned cap evenly, recommended.** Never fails on a free cap, so the gate on generated data is robust. Cost: capacities in generated data are not independent draws (they are at least what is used).
-2. Shrink the children for `sum`, lift only for `count`. Capacity stays an independent draw, but a small cap with many children is a generation error that depends on row counts.
+**D1c. Capacity limits.** APPROVED: option 2 (shrink the children; raise a cap only when counts force it). Options as proposed:
+1. Lift a free cap; share a pinned cap evenly. Never fails on a free cap, so the gate on generated data is robust. Cost: capacities in generated data are not independent draws (they are at least what is used).
+2. **(chosen, with the refinement above)** Shrink the children for `sum`, lift only for `count`. Capacity stays an independent draw, but a small cap with many children is a generation error that depends on row counts.
 3. Shrink only; `count` limits deferred. Smallest engine, drops `coupon_total_uses_within_limit` from scope.

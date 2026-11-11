@@ -1,4 +1,4 @@
-# Phase 2 rule scope (PROPOSAL: user-owned, not approved)
+# Phase 2 rule scope (approved by the user 2026-11-11: D4)
 
 Status: written in Phase 2 Step 0 for the user to approve or change. Every rule in `golden/events-merch/expected.yml` (27) and `golden/ecommerce/expected.yml` (50) is placed in one class:
 
@@ -150,3 +150,8 @@ The per-rule tables above are the authority for why each of the 43 is deferred.
 ## saas-multitenant (report only)
 
 No Phase 2 rules are written for it. P2.5 generates it, loads it through the product loader, runs the golden `violations_sql` of all 64 rules as information, and reports PASS or FAIL for each rule, grouped by class. It is not a gate, and failures there do not stop Phase 2. A rule-by-rule classification of its 64 rules is not done in Step 0.
+
+## Approved additions (2026-11-11)
+
+- `forge verify` prints each deferred (b) rule as **not checked in this phase**, never PASS. The (c) rules print as **enforced by the database**.
+- **Phase 2 data is partial.** Plainly: of the 77 golden rules in events-merch and ecommerce, 15 are generated and verified by Phase 2, 19 are enforced by the database, and 43 are not handled yet. Generated statuses are random picks, there is no state flow, no time order against a parent, and no realism. README and the `forge generate` summary line say this.

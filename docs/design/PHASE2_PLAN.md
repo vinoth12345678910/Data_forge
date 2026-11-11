@@ -1,4 +1,4 @@
-# Phase 2 plan (Step 0, for approval)
+# Phase 2 plan (approved 2026-11-11 with changes)
 
 Status: PROPOSAL. No product code is written until the user approves this and the four design docs (`RULE_LANGUAGE.md`, `VERIFY_PASS.md`, `MANIFEST.md`, `PHASE2_RULE_SCOPE.md`) in one reply.
 
@@ -80,3 +80,11 @@ Determinism (same seed twice, byte-identical); speed and peak heap on the larges
 | D2 | verify independence | module walls both ways + database as judge + golden oracle |
 | D3 | manifest shape | DB tables (ranges and lists) + JSON file, same transaction; policies in D3b |
 | D4 | rule scope | as classified (15 in, 43 deferred, 19 by the database) |
+
+## Approved changes (2026-11-11)
+
+- D1c: option 2 (shrink children; raise a cap only when counts force it). D1b: pre-pass keeps one aggregate per parent key. D1a, D2, D3, D3b, D4 approved as written.
+- **P2.4 extra gate:** a test with 1,000,000 parents and 3,000,000 children under `-Xmx256m`. If it cannot pass, the report says "not proven bounded".
+- **P2.5:** the rules-off byte-identical-to-Phase-1 test is the first test written. Also: unruled columns byte-identical when other tables' row counts change; ruled columns byte-identical for the same seed and spec.
+- **P2.3:** a crash between commit and rename is tested; the DB copy rebuilds the file.
+- Both oracles and both module-wall tests stay in the P2.2 gate.

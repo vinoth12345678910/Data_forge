@@ -1,4 +1,4 @@
-# Manifest format (PROPOSAL: user-owned, not approved)
+# Manifest format (approved by the user 2026-11-11: D3, D3b)
 
 Status: written in Phase 2 Step 0 for the user to approve, change or reject. Phase 5 cleanup is the user's and depends on this file. **No delete code is written in Phase 2.**
 
@@ -134,3 +134,10 @@ Questions for you, the owner of cleanup: (1) is "refuse non-empty tables" accept
 3. Always list every key, never ranges. One format to explain, but a million-row sequential table becomes a million manifest rows.
 
 **D3b. Policies inside option 1 (change any):** target tables must be empty (else refuse); a table with no usable key is refused unless marked `keep`; `prod` is refused before anything is written; the sequence is set to `max(id)` after load (next real insert gets `max + 1`).
+
+## Approved changes (2026-11-11)
+
+- **The database copy is the source of truth.** The JSON file can always be rebuilt from `_dataforge`. A crash between commit and rename is tested; the rebuild (`ManifestFile.rebuild(run_id)`) is part of P2.3 and the test crashes after commit, then rebuilds the file and checks the hash.
+- **Refused-table messages say what to do**, for example: `table orders already has 120 rows; Data Forge only loads into empty tables. Empty it, load into a fresh database, or mark the table keep in forge.yml.` and `table logs has no primary key or unique not-null key; cleanup could not tell its rows apart. Add a key or mark the table keep in forge.yml.`
+- **Append mode** (loading into a non-empty table) is a later decision, not Phase 2.
+- The cleanup questions above are answered by the user in a separate message; the assumptions table stays as written. No delete code is written.
