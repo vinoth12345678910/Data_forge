@@ -73,6 +73,6 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Done P1.5 `p1-inference-locale`: `Infer`, `Gstin`, `Iban`, `Phone`, `Pincode`, `Names` (en_IN lists) in `gen`; `LocaleGenTest`, `InferTest`, `GeneratorInferenceTest` green.
 - Done P1.6 `p1-holdout-gate`: test-only `TestInsert` and `StructureCheck` in `testkit`; zero-config structure gate green on Pagila and the three goldens (and at 1000 rows per table); `gen` extended (see `docs/design/SEEDED_RANDOM.md`, P1.6 additions, for the user to review). Phase 1 complete pending merge of the six stacked PRs. Do not start Phase 2.
 - Phase 1 is merged to main (PRs #1 to #19). Phase 2 Step 0 (branch `p2-design`): plan and design proposals in `docs/design/` (PHASE2_PLAN, RULE_LANGUAGE, VERIFY_PASS, MANIFEST, PHASE2_RULE_SCOPE) plus a CONFIG.md amendment, awaiting the user's answers D1a to D4. No Phase 2 code yet. Docker was down, so verify.sh steps c and e were SKIPPED.
-- Phase 2 design APPROVED 2026-11-11 (with changes). P2.1 `p2-rule-language` built and its fast gate is green; the container half of the gate is NOT run (Docker unreachable from the session). See STATUS.md.
+- Phase 2 design APPROVED 2026-11-11 (with changes). P2.1 `p2-rule-language` done, gate green incl. container half. Next P2.2. See STATUS.md.
 - Layout: STRUCTURE.md wins (10 modules, root `golden/`).
 - Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
