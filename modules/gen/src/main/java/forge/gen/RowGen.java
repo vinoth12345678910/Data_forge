@@ -65,16 +65,19 @@ public final class RowGen {
     }
 
     /** What a table must satisfy beyond what its columns promise: check expressions, and columns derived by equality. */
-    private static final class Info {
+    static final class Info {
         final List<Expr.Node> evals = new ArrayList<>();
         final List<String> names = new ArrayList<>();
         final Map<String, Expr.Node> derived = new java.util.LinkedHashMap<>();
         final Map<String, Integer> idx = new TreeMap<>();
 
         boolean clustered;
+        /** True when a rule (derive, check, limit) is about this table; ruledCols are the columns a rule computes. */
+        boolean ruled;
+        final java.util.Set<String> ruledCols = new java.util.TreeSet<>();
 
         boolean plain() {
-            return evals.isEmpty() && derived.isEmpty();
+            return evals.isEmpty() && derived.isEmpty() && !ruled;
         }
 
         /** Rows that are costly to draw (redraws, shared-column picks) are remembered. */
@@ -83,7 +86,7 @@ public final class RowGen {
         }
     }
 
-    private static final class Col {
+    static final class Col {
         Table table;
         Column col;
         long vKey;
@@ -120,6 +123,8 @@ public final class RowGen {
     private final Map<String, Integer> fkGroupIdx = new TreeMap<>();
     private final Map<String, List<String>> names = new TreeMap<>();
     private final Config conf;
+    /** The rule engine; null when there are no rules (then nothing below changes). */
+    private Ruled ruled;
 
     private RowGen(SchemaGraph g, Config c, Plan plan, Map<String, Integer> rowCounts) {
         this.seed = c.seed();
@@ -133,6 +138,15 @@ public final class RowGen {
         for (Table t : g.tables()) {
             build(t);
         }
+    }
+
+    /** With rules (checked by the rules module, passed in as data). */
+    public static RowGen of(SchemaGraph g, Config c, java.util.List<forge.core.Rule> rules) {
+        RowGen gen = of(g, c);
+        if (!rules.isEmpty()) {
+            gen.ruled = new Ruled(gen, g, rules);
+        }
+        return gen;
     }
 
     public static RowGen of(SchemaGraph g, Config c) {
@@ -191,13 +205,20 @@ public final class RowGen {
         String failed = null;
         for (int att = 0; att < attempts; att++) {
             for (int i = 0; i < v.length; i++) {
-                v[i] = ti.derived.containsKey(names.get(i)) ? null : value(map.get(names.get(i)), row, att);
+                String name = names.get(i);
+                v[i] = ti.derived.containsKey(name) || ti.ruledCols.contains(name) ? null : value(map.get(name), row, att);
             }
             if (ti.plain()) {
                 return v;
             }
+            if (ti.ruled) {
+                ruled.apply(table, row, att, v);
+            }
             derive(table, ti, v);
             failed = firstFailing(table, ti, v);
+            if (failed == null && ti.ruled) {
+                failed = ruled.firstFailingCheck(table, row, att, v);
+            }
             if (failed == null) {
                 return v;
             }
@@ -1168,6 +1189,27 @@ public final class RowGen {
     }
 
     private String fkValue(Col k, long row, int att) {
+        long parentRow = fkParent(k, row, att);
+        if (parentRow < 0) {
+            return null;
+        }
+        Fk f = k.fk;
+        String parentCol = f.refColumns().get(f.columns().indexOf(k.col.name()));
+        return keyCell(f.refTable(), parentCol, parentRow);
+    }
+
+    /**
+     * The value of a referenced key column. A key does not change when a row is drawn again, so for a table that
+     * has rules it is read directly: building the whole parent row here would loop (the parent's rule may be
+     * waiting for the children that are asking). Without rules this is exactly cell(), as in Phase 1.
+     */
+    private String keyCell(String table, String column, long row) {
+        Info ti = info.get(table);
+        return ti.ruled ? value(cols.get(table).get(column), row, 0) : cell(table, column, row);
+    }
+
+    /** The parent row index a foreign key points at for this row, or -1 for NULL. */
+    private long fkParent(Col k, long row, int att) {
         Fk f = k.fk;
         long parents = rows.get(f.refTable());
         long parentRow;
@@ -1184,7 +1226,7 @@ public final class RowGen {
             if (nullable) {
                 int rate = cols.get(k.table.name()).get(f.columns().get(0)).nullPer10k;
                 if (parents == 0 || (self && row == 0) || new Cell(salt(k.fkNullKey, att), row).chance(rate)) {
-                    return null;
+                    return -1;
                 }
             }
             if (self) {
@@ -1193,11 +1235,46 @@ public final class RowGen {
                 parentRow = deal(k.fkKey, row, parents);
             }
         }
-        if (parentRow < 0) {
-            return null;
+        return parentRow;
+    }
+
+    // ---- what the rule engine (Ruled) may ask
+
+    Col col(String table, String column) {
+        Map<String, Col> m = cols.get(table);
+        return m == null ? null : m.get(column);
+    }
+
+    Info info(String table) {
+        return info.get(table);
+    }
+
+    /** The value a column would have with no rule (the normal draw of attempt att). */
+    String baseValue(Col k, long row, int att) {
+        return value(k, row, att);
+    }
+
+    static long saltOf(long key, int att) {
+        return salt(key, att);
+    }
+
+    /** The parent row index that foreign key f of table points at for this row (-1 = NULL). */
+    long parentRow(String table, Fk f, long row, int att) {
+        Map<String, Col> m = cols.get(table);
+        Col k0 = m.get(f.columns().get(0));
+        if (k0.fk != null && k0.fk.equals(f)) {
+            return fkParent(k0, row, att);
         }
-        String parentCol = f.refColumns().get(f.columns().indexOf(k.col.name()));
-        return cell(f.refTable(), parentCol, parentRow);
+        for (String c : f.columns()) {
+            Col k = m.get(c);
+            if (k != null && k.cluster != null) {
+                int i = k.cluster.fks.indexOf(f);
+                if (i >= 0) {
+                    return picks(k.cluster, table, row)[i];
+                }
+            }
+        }
+        throw new GenError("A rule cannot follow foreign key " + f.name() + " of table " + table + " (it shares columns with another key in a way the rules do not handle yet).");
     }
 
     /**
