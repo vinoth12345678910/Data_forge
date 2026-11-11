@@ -150,7 +150,7 @@ How each kind is applied:
 
 ### Capacity limits (D1c, approved as option 2)
 
-The pre-pass gives, for parent row `p`, `n(p)` = how many children point at it and `lo(p)` = the largest smallest-allowed value among... of the limited child column (for example 1 for `quantity > 0`; for a child that is itself a capacity, its own lower bound, see below). One `long` per parent key for each; never the child rows.
+The pre-pass gives, for parent row `p`, `n(p)` = how many children point at it and `lo(p)` = the lowest value a child of `p` may take in the limited column (1 for `quantity > 0`; for a child that is itself a capacity, its own lower bound, see below). One `long` per parent key for each; never the child rows.
 
 - **Children shrink.** Each child value is drawn at most `floor(cap(p) / n(p))` (the even share). Capacities stay ordinary draws and stay believable.
 - **A cap is raised only when counts force it:** `cap(p) = max(drawn cap, n(p) * lo(p))`. So a cap is never raised just to cover usage, only when even the smallest children (each at least `lo`) cannot fit. For `count(*)` limits each child counts 1, so `cap(p) = max(drawn cap, n(p))`.
