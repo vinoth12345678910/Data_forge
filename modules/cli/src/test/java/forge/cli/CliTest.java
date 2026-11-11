@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class CliTest {
 
     @ParameterizedTest
-    @CsvSource({"generate,2", "verify,2", "drift,4", "cleanup,5", "readiness,5"})
+    @CsvSource({"drift,4", "cleanup,5", "readiness,5"})
     void commandsNotBuiltYetSaySoAndFail(String name, int phase) {
         Run r = Run.of(name);
         assertNotEquals(0, r.code());
@@ -26,7 +26,7 @@ class CliTest {
     @Test
     void stubsAcceptTheirFutureOptions() {
         assertTrue(Run.of("cleanup", "--dry-run").err().contains("not built yet (Phase 5)"));
-        assertTrue(Run.of("generate", "-s", "event-day-rush").err().contains("not built yet (Phase 2)"));
+        assertTrue(Run.of("generate", "-s", "event-day-rush").err().contains("not built yet (Phase 3)"));
     }
 
     @Test
