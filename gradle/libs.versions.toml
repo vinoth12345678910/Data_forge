@@ -5,6 +5,7 @@ postgres = "42.7.4"
 jackson = "2.18.2"
 jqwik = "1.9.2"
 picocli = "4.7.6"
+antlr = "4.13.2"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -15,4 +16,6 @@ testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupit
 postgres-driver = { module = "org.postgresql:postgresql", version.ref = "postgres" }
 jackson-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
 jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
+antlr-tool = { module = "org.antlr:antlr4", version.ref = "antlr" }
+antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
 picocli = { module = "info.picocli:picocli", version.ref = "picocli" }

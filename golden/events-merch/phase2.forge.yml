@@ -1,0 +1,21 @@
+# Phase 2 configuration for events-merch (version 1). The Phase 1 forge.yml next to it stays a Phase 3 draft.
+# Rule names equal the names in expected.yml, so each rule is paired with its hand-written violations_sql.
+# Row counts are added in P2.5.
+version: 1
+seed: 42
+clock: "2026-06-01T00:00:00Z"
+ddl: schema.sql
+tables: {}
+rules:
+  - name: order_total_matches_items
+    derive: orders.total_paise = sum(order_items.quantity * order_items.unit_price_paise)
+  - name: succeeded_amount_equals_total
+    derive: payments.amount_paise = payments.order_id.total_paise when payments.status = 'succeeded'
+  - name: payment_completed_after_created
+    check: payments.completed_at >= payments.created_at
+  - name: ticket_quantity_within_capacity
+    limit: sum(ticket_types.quantity) per ticket_types.event_id <= events.capacity
+  - name: registration_within_ticket_quantity
+    limit: sum(registrations.quantity) per registrations.ticket_type_id <= ticket_types.quantity
+  - name: refund_within_payment
+    limit: sum(refunds.amount_paise) per refunds.payment_id <= payments.amount_paise

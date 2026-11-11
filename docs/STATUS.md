@@ -1,5 +1,12 @@
 # STATUS
 
+## 2026-11-11 P2.1 rule language (branch p2-rule-language, from p2-design) - PAUSED at the Docker gate
+- Done: design approved with changes (D1b, D1c, D3, D4; SPEC section 7 example now `derive:`/`check:`/`limit:`). Built `RuleExpr`, `Rule`, `Config.RuleConf` and `rules` parsing in `core`; ANTLR grammar `Rules.g4`, `RuleReader`, `RuleCheck`, `RuleSet`, `RuleSql`, `RuleError` in `rules`; `golden/*/phase2.forge.yml` (15 rules). Gate part 1 written first, shown failing ("not built yet"), now green: `RuleLanguageTest` (17 tests: pinned SQL for each kind, 14 bad-rule messages with line:col and caret, cycle, duplicate derive) and `ConfigReaderTest.rulesSection`. All fast tests green in core, rules, gen, schema, cli.
+- Not done / NOT PROVEN: gate part 2 (`RuleGoldenContainerTest`: the 15 golden rules compile against a real Postgres schema and every compiled query RUNS on the seed) could not run: Docker is not reachable from this session (`~/.docker/run/docker.sock` is missing; `docker ps` fails). So the compiled SQL has only been compared to pinned strings, never executed. The "break one thing on purpose" check, the determinism/speed checks, verify.sh and the PR were not done.
+- Next: user makes Docker reachable for the session (or runs `./gradlew :rules:containerTest` themselves); then finish P2.1 and continue to P2.2.
+- Decisions: composite foreign keys join on every column (pinned in the test); a `limit` child column may not be a key column; rule errors report the first mistake in rule order.
+- Open: Docker access for container gates in this environment.
+
 ## 2026-11-11 Phase 2 Step 0: plan and design docs (branch p2-design, from main)
 - Done: confirmed Phase 1 merged (PRs #1 to #19, main at 82ade85). Wrote `docs/design/PHASE2_PLAN.md`, `RULE_LANGUAGE.md`, `VERIFY_PASS.md`, `MANIFEST.md`, `PHASE2_RULE_SCOPE.md` and a CONFIG.md amendment (all PROPOSALS). Classified all 77 golden rules: 15 in Phase 2, 43 deferred, 19 enforced by the database.
 - Not done: no product code, no gate test, no PR. `scripts/verify.sh` on main: a PASS, b PASS, c SKIPPED, d SKIPPED, e SKIPPED (Docker was not running), so the container gates were NOT re-run this session.

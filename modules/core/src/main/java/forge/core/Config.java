@@ -9,7 +9,17 @@ import java.util.Set;
  * file. tables is sorted by name: the order in the file never matters.
  */
 public record Config(
-    int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables) {
+    int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+    List<RuleConf> rules) {
+
+    /** A config without rules. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables) {
+        this(version, seed, clock, locale, connection, ddl, tables, List.of());
+    }
+
+    /** One rule as written: kind is derive, check or limit; text is the rule text; description may be null. */
+    public record RuleConf(String name, String kind, String text, String description) {}
 
     public static final Set<String> ENVS = Set.of("dev", "test", "staging", "prod");
 

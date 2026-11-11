@@ -119,10 +119,31 @@ class ConfigReaderTest {
     @Test
     void reservedSectionsMustBeEmpty() {
         ConfigReader.read(GOOD + "use: []\nrules: []\nstates: {}\nscenarios: {}\ncleanup: {}\n");
-        bad(GOOD + "rules:\n  - name: x\n", "rules", "reserved");
         bad(GOOD + "scenarios:\n  default: {}\n", "scenarios", "reserved");
         bad(GOOD + "use: [generic]\n", "use", "reserved");
         bad(GOOD + "cleanup:\n  keep: [a]\n", "cleanup", "reserved");
+    }
+
+    @Test
+    void rulesSection() {
+        Config c = ConfigReader.read(GOOD + "rules:\n"
+            + "  - name: total_ok\n    derive: orders.total = 1\n    description: why\n"
+            + "  - name: pay_after\n    check: payments.a >= payments.b\n"
+            + "  - name: within\n    limit: sum(r.q) per r.t <= t.q\n");
+        assertEquals(3, c.rules().size());
+        assertEquals("total_ok", c.rules().get(0).name());
+        assertEquals("derive", c.rules().get(0).kind());
+        assertEquals("orders.total = 1", c.rules().get(0).text());
+        assertEquals("why", c.rules().get(0).description());
+        assertEquals("limit", c.rules().get(2).kind());
+        assertEquals(0, ConfigReader.read(GOOD).rules().size());
+        bad(GOOD + "rules:\n  - name: x\n", "rules[0]", "exactly one of derive, check, limit");
+        bad(GOOD + "rules:\n  - name: x\n    derive: a.b = 1\n    check: a.b = 1\n", "rules[0]", "exactly one");
+        bad(GOOD + "rules:\n  - derive: a.b = 1\n", "rules[0].name", "required");
+        bad(GOOD + "rules:\n  - name: Bad Name\n    derive: a.b = 1\n", "rules[0].name", "[a-z]");
+        bad(GOOD + "rules:\n  - name: x\n    derive: a.b = 1\n  - name: x\n    check: a.b = 1\n", "rules[1].name", "duplicate", "x");
+        bad(GOOD + "rules:\n  - name: x\n    chek: a.b = 1\n", "rules[0].chek");
+        bad(GOOD + "rules: {}\n", "rules", "list");
     }
 
     @Test

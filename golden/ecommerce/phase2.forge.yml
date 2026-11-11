@@ -1,0 +1,32 @@
+# Phase 2 configuration for ecommerce (version 1). The Phase 1 forge.yml next to it stays a Phase 3 draft.
+# Rule names equal the names in expected.yml, so each rule is paired with its hand-written violations_sql.
+# Row counts are added in P2.5.
+version: 1
+seed: 42
+clock: "2026-06-01T00:00:00Z"
+ddl: schema.sql
+tables: {}
+rules:
+  - name: order_subtotal_matches_items
+    derive: orders.subtotal_minor = sum(order_items.quantity * order_items.unit_price_minor)
+  - name: order_discount_matches_coupon
+    derive: >-
+      orders.discount_minor = sum(case when coupon_redemptions.coupon_id.discount_type = 'percent'
+      then orders.subtotal_minor * coupon_redemptions.coupon_id.value / 100
+      else least(coupon_redemptions.coupon_id.value, orders.subtotal_minor) end)
+  - name: order_total_formula
+    derive: orders.total_minor = orders.subtotal_minor - orders.discount_minor + orders.shipping_minor
+  - name: succeeded_amount_equals_total
+    derive: payments.amount_minor = payments.order_id.total_minor when payments.status = 'succeeded'
+  - name: reservation_quantity_matches_item
+    derive: reservations.quantity = reservations.order_item_id.quantity
+  - name: coupon_total_uses_within_limit
+    limit: count(*) per coupon_redemptions.coupon_id <= coupons.max_uses
+  - name: shipped_quantity_within_ordered
+    limit: sum(shipment_items.quantity) per shipment_items.order_item_id <= order_items.quantity
+  - name: refund_within_payment
+    limit: sum(refunds.amount_minor) per refunds.payment_id <= payments.amount_minor
+  - name: refund_for_return_within_value
+    check: >-
+      refunds.amount_minor <= refunds.return_id.quantity * refunds.return_id.order_item_id.unit_price_minor
+      when refunds.return_id is not null
