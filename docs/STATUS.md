@@ -146,3 +146,10 @@
 - Next: golden schemas when the user says so.
 - Decisions: Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. Always use bash, not zsh, for generated files and loops.
 - Open: delete duplicate repo `data-forge` (token lacks delete_repo scope); SPEC.md; design brief references.
+
+## 2026-11-12 P3.1 state machines (branch p3-state-machines, stacked on p3-design)
+- Done: `states:` in forge.yml (mix, transitions, children layouts with `by_state`, `number`, `at`, `latest`); `States` + `RowGen` hooks; `verify:` rule kind and `StateRules`; golden `phase3.forge.yml` for events-merch and ecommerce; `StatesGoldenContainerTest` green (both oracles on 5 golden rules per schema, every status appears, mix within 1 point at 10,000 rows, same seed twice byte-identical); gate proven not hollow (removing the succeeded payment fails both oracles on 30 orders).
+- Not done: parent status timestamps along the path (P3.2); `by:` grandparent layouts (reservation rules); speed and memory not re-measured against Phase 2 (only that the 10,000-row mix tests run in seconds).
+- Next: P3.2 `p3-temporal` (time rules, `clock()`, `tree`, two-key limit).
+- Decisions: design docs taken under the user's "ask nothing" delegation (STATE_MACHINES.md has an "As built" section); `rows` of a layout child is ignored; a state check with only aggregates needs an own column.
+- Open: ecommerce 40 and 41 move from (a) to (b) in PHASE3_RESULTS (needs `fill` and sibling time order); PR #26 (Phase 2 roll-up) is unmerged, so Phase 3 PRs stack on `p2-cli`.

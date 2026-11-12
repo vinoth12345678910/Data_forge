@@ -60,7 +60,7 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        for (String reserved : List.of("use", "states", "scenarios", "cleanup")) {
+        for (String reserved : List.of("use", "scenarios", "cleanup")) {
             JsonNode n = root.get(reserved);
             if (n != null && !n.isNull() && !n.isEmpty()) {
                 throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
@@ -81,7 +81,111 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules);
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")));
+    }
+
+    private static Map<String, Config.StateConf> states(JsonNode n) {
+        Map<String, Config.StateConf> out = new TreeMap<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isObject()) {
+            throw new ConfigError("states: a map of table name to machine is required.");
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = n.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            String path = "states." + e.getKey();
+            JsonNode m = e.getValue();
+            keys(m, path, "column", "start", "mix", "transitions", "children");
+            String column = text(m, "column", path);
+            if (column == null) {
+                throw new ConfigError(path + ".column: required.");
+            }
+            Map<String, Integer> mix = new TreeMap<>();
+            JsonNode mx = m.get("mix");
+            if (mx != null && !mx.isNull()) {
+                if (!mx.isObject()) {
+                    throw new ConfigError(path + ".mix: a map of status to whole-number weight is required.");
+                }
+                for (Iterator<Map.Entry<String, JsonNode>> w = mx.fields(); w.hasNext(); ) {
+                    Map.Entry<String, JsonNode> we = w.next();
+                    if (!we.getValue().isInt() || we.getValue().intValue() < 0) {
+                        throw new ConfigError(path + ".mix." + we.getKey() + ": a whole number >= 0 is required.");
+                    }
+                    mix.put(we.getKey(), we.getValue().intValue());
+                }
+            }
+            List<String[]> trans = new ArrayList<>();
+            JsonNode tr = m.get("transitions");
+            if (tr != null && !tr.isNull()) {
+                if (!tr.isArray()) {
+                    throw new ConfigError(path + ".transitions: a list such as [pending -> paid] is required.");
+                }
+                for (int i = 0; i < tr.size(); i++) {
+                    String[] ft = tr.get(i).asText().split("\\s*->\\s*");
+                    if (ft.length != 2 || ft[0].isBlank() || ft[1].isBlank()) {
+                        throw new ConfigError(path + ".transitions[" + i + "]: write it as from -> to.");
+                    }
+                    trans.add(new String[] {ft[0].trim(), ft[1].trim()});
+                }
+            }
+            Map<String, Config.ChildConf> kids = new TreeMap<>();
+            JsonNode ch = m.get("children");
+            if (ch != null && !ch.isNull()) {
+                if (!ch.isObject()) {
+                    throw new ConfigError(path + ".children: a map of child table to layout is required.");
+                }
+                for (Iterator<Map.Entry<String, JsonNode>> c = ch.fields(); c.hasNext(); ) {
+                    Map.Entry<String, JsonNode> ce = c.next();
+                    kids.put(ce.getKey(), child(ce.getValue(), path + ".children." + ce.getKey()));
+                }
+            }
+            out.put(e.getKey(), new Config.StateConf(column, text(m, "start", path), mix, trans, kids));
+        }
+        return out;
+    }
+
+    private static Config.ChildConf child(JsonNode c, String path) {
+        keys(c, path, "fk", "status", "number", "at", "latest", "by_state");
+        String fk = text(c, "fk", path);
+        if (fk == null) {
+            throw new ConfigError(path + ".fk: required.");
+        }
+        String atCol = null;
+        String atFrom = null;
+        int gap = 3600;
+        JsonNode at = c.get("at");
+        if (at != null && !at.isNull()) {
+            keys(at, path + ".at", "column", "from", "gap");
+            atCol = text(at, "column", path + ".at");
+            atFrom = text(at, "from", path + ".at");
+            if (atCol == null || atFrom == null) {
+                throw new ConfigError(path + ".at: column and from are required.");
+            }
+            if (at.has("gap")) {
+                if (!at.get("gap").isInt() || at.get("gap").intValue() < 1) {
+                    throw new ConfigError(path + ".at.gap: whole seconds >= 1 are required.");
+                }
+                gap = at.get("gap").intValue();
+            }
+        }
+        JsonNode bs = c.get("by_state");
+        if (bs == null || !bs.isObject() || bs.isEmpty()) {
+            throw new ConfigError(path + ".by_state: required, a map of state to a list of child statuses.");
+        }
+        Map<String, List<String>> by = new TreeMap<>();
+        for (Iterator<Map.Entry<String, JsonNode>> it = bs.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            if (!e.getValue().isArray()) {
+                throw new ConfigError(path + ".by_state." + e.getKey() + ": a list is required (use [] for none).");
+            }
+            List<String> l = new ArrayList<>();
+            for (JsonNode x : e.getValue()) {
+                l.add(x.asText());
+            }
+            by.put(e.getKey(), l);
+        }
+        return new Config.ChildConf(fk, text(c, "status", path), text(c, "number", path), atCol, atFrom, gap, text(c, "latest", path), by);
     }
 
     private static final Pattern RULE_NAME = Pattern.compile("[a-z][a-z0-9_]*");
@@ -101,7 +205,7 @@ public final class ConfigReader {
             if (!r.isObject()) {
                 throw new ConfigError(path + ": a map with name and one of derive, check, limit is required.");
             }
-            keys(r, path, "name", "derive", "check", "limit", "description");
+            keys(r, path, "name", "derive", "check", "limit", "verify", "description");
             String name = text(r, "name", path);
             if (name == null) {
                 throw new ConfigError(path + ".name: required.");
@@ -114,7 +218,7 @@ public final class ConfigReader {
             }
             String kind = null;
             String text = null;
-            for (String k : List.of("derive", "check", "limit")) {
+            for (String k : List.of("derive", "check", "limit", "verify")) {
                 String v = text(r, k, path);
                 if (v != null) {
                     if (kind != null) {

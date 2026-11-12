@@ -23,6 +23,8 @@ final class Live {
     final Db db;
     SchemaGraph graph;
     List<Rule> rules;
+    /** The rules plus the ones the state machines imply: what the verify pass runs. */
+    List<Rule> verifyRules;
 
     Live(Path file) throws IOException {
         this.file = file;
@@ -43,6 +45,8 @@ final class Live {
     void open() throws SQLException {
         graph = PgReader.read(db, conf.connection().schema());
         rules = RuleSet.check(conf.rules(), graph);
+        verifyRules = new java.util.ArrayList<>(rules);
+        verifyRules.addAll(forge.rules.StateRules.expand(conf, graph));
     }
 
     Path manifestDir(Path override) {

@@ -106,6 +106,10 @@ public final class RowGen {
         Col base;
         long step;
         boolean cap;
+        /** Set by a state machine: the value of this column for a row, replacing the normal draw. */
+        java.util.function.LongFunction<String> ov;
+        /** Set when a state machine lays this foreign key out: the parent row comes from the layout. */
+        States.Layout lay;
     }
 
     private final long seed;
@@ -159,7 +163,59 @@ public final class RowGen {
             }
             counts.put(t.name(), tc.rows());
         }
-        return new RowGen(g, c, Planner.plan(g, counts), counts);
+        States st = States.build(c.seed(), g, c, counts);
+        RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts);
+        gen.install(st);
+        return gen;
+    }
+
+    /** Hands the state machines to the columns they decide. */
+    private void install(States st) {
+        for (States.Machine m : st.machines.values()) {
+            if (m.conf.column() != null) {
+                Col k = need(m.table, m.conf.column());
+                States.Machine mm = m;
+                k.ov = r -> mm.names[mm.status[(int) r]];
+            }
+        }
+        for (States.Layout lay : st.layouts.values()) {
+            Config.ChildConf cc = lay.conf;
+            need(lay.child, cc.fk()).lay = lay;
+            if (cc.number() != null) {
+                need(lay.child, cc.number()).ov = r -> Long.toString(lay.slot(r) + 1);
+            }
+            if (cc.status() != null) {
+                Col k = need(lay.child, cc.status());
+                k.ov = r -> lay.names[lay.status[(int) r]];
+            }
+            if (cc.latest() != null) {
+                Table ct = tables.get(lay.child);
+                String pk = ct.pk().get(0);
+                need(lay.parent, cc.latest()).ov = p -> lay.cum[(int) p + 1] == lay.cum[(int) p] ? null : keyCell(lay.child, pk, lay.cum[(int) p + 1] - 1);
+            }
+            if (cc.atColumn() != null) {
+                Col k = need(lay.child, cc.atColumn());
+                Col from = need(lay.parent, cc.atFrom());
+                if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || from.dom == null || from.base != null) {
+                    throw new GenError("states." + lay.parent + ".children." + lay.child + ".at: " + cc.atColumn() + " and " + cc.atFrom() + " must be plain timestamp columns.");
+                }
+                long key = Keys.column(seed, lay.child, cc.atColumn(), "layout-at");
+                long gap = cc.atGap();
+                k.ov = r -> {
+                    long p = lay.parent(r);
+                    long t = raw(from, p, 0) + lay.slot(r) * gap + 1 + new Cell(key, r).below(gap);
+                    return k.dom.fmt(Math.min(t, clock));
+                };
+            }
+        }
+    }
+
+    private Col need(String table, String column) {
+        Col k = cols.get(table) == null ? null : cols.get(table).get(column);
+        if (k == null) {
+            throw new GenError("states: " + table + "." + column + " is not a generated column.");
+        }
+        return k;
     }
 
     public Plan plan() {
@@ -1158,6 +1214,9 @@ public final class RowGen {
     // ---- values
 
     private String value(Col k, long row, int att) {
+        if (k.ov != null) {
+            return k.ov.apply(row);
+        }
         if (k.fk != null) {
             return fkValue(k, row, att);
         }
@@ -1213,6 +1272,9 @@ public final class RowGen {
         Fk f = k.fk;
         long parents = rows.get(f.refTable());
         long parentRow;
+        if (k.lay != null) {
+            return k.lay.parent(row);
+        }
         if (k.group != null) {
             parentRow = groupRow(k.group, k.groupIdx, row);
         } else if (k.cluster != null) {
