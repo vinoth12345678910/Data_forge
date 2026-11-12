@@ -82,7 +82,7 @@ elif ! docker_up; then
   record "SKIPPED" "d. no-network (Docker not running)"
 elif docker run --rm --network none \
     -v "$PWD":/work -v "$HOME/.gradle":/root/.gradle -w /work \
-    "$IMAGE" ./gradlew test --offline --tests '*NoNetworkTest'; then
+    "$IMAGE" ./gradlew :testkit:test --offline --tests '*NoNetworkTest'; then
   record "PASS   " "d. no-network"
 else
   fail "d. no-network"
