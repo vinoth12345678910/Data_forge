@@ -30,6 +30,8 @@ public final class ForgeDatabases {
     private static final Pattern OWN = Pattern.compile("forge_[0-9a-f]{32}");
     private static final Set<String> NAMES = ConcurrentHashMap.newKeySet();
     private static PostgreSQLContainer own;
+    /** The container this extension last started, kept so the gate can ask the container itself whether it is still running. */
+    private static PostgreSQLContainer started;
     private static int users;
     private static volatile Consumer<String> adminSql;
 
@@ -51,6 +53,7 @@ public final class ForgeDatabases {
         if (own == null) {
             own = new PostgreSQLContainer(IMAGE).withUsername("postgres").withPassword("pw");
             own.start();
+            started = own;
         }
         users++;
         return new Server("jdbc:postgresql://" + own.getHost() + ":" + own.getMappedPort(5432) + "/postgres", "postgres", "pw", false);
@@ -97,7 +100,7 @@ public final class ForgeDatabases {
 
     /** For the gate: true while the container this extension started is up. */
     public static synchronized boolean containerRunning() {
-        return own != null && own.isRunning();
+        return started != null && started.isRunning();
     }
 
     /** For the gate: every statement the extension sends to the server's admin database is passed to c (null turns it off). */
