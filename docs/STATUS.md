@@ -174,3 +174,10 @@
 - Next: P3.5 `p3-dialects` (MySQL and SQLite).
 - Decisions: whole-mix replacement for sliders; gate threshold for the burst is 25% because parent time rules narrow it.
 - Open: I wrote the code before the test on this feature (said above); determinism-auditor on P3.1 to P3.4 in a fresh session.
+
+## 2026-11-12 P3.5 MySQL and SQLite (branch p3-dialects, from p3-scenarios)
+- Done: `Dialect`, dialect-aware `RuleSql` and `Verifier`, `JdbcReader`, `JdbcLoader`, `ManifestJdbc`; translated golden DDL for events-merch and ecommerce on both; `DialectSqliteTest` (4 tests) and `DialectMysqlContainerTest` (2 tests, MySQL 8.4.3) green: read, generate, failed load leaves nothing, load, structure, every rule and state rule PASS under our verify pass, manifest equals rows; compile test for 3 dialects; SQLite gate proved not hollow by mutation (loader off by one fails the meta check).
+- Not done: golden `violations_sql` on MySQL/SQLite, saas-multitenant, Pagila, CLI use of the new loaders (P3.6), MySQL/SQLite manifest rebuild from the database.
+- Next: P3.6 `p3-gate` (cross-database verify step, CLI for three databases, carry-over, PHASE3_RESULTS.md).
+- Decisions: FK checks stay on for the whole run on MySQL; per-dialect hand-translated DDL.
+- Open: dialect-specialist review in a fresh session.
