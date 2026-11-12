@@ -60,8 +60,11 @@ final class DialectGate {
 
     /** Problems found; empty means the gate holds for this golden on this database (the database is empty and has the DDL). */
     static List<String> run(Connection c, String name, Path dir) throws Exception {
+        return run(c, name, dir, ConfigReader.read(Files.readString(golden(name + "/phase3.forge.yml"))));
+    }
+
+    static List<String> run(Connection c, String name, Path dir, Config conf) throws Exception {
         List<String> bad = new ArrayList<>();
-        Config conf = ConfigReader.read(Files.readString(golden(name + "/phase3.forge.yml")));
         SchemaGraph g = JdbcReader.read(c);
         List<Rule> rules = RuleSet.check(conf.rules(), g);
         List<Rule> generating = rules.stream().filter(r -> r.kind() != RuleKind.VERIFY).toList();

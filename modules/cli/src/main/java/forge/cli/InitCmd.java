@@ -133,8 +133,14 @@ final class InitCmd implements Callable<Integer> {
     }
 
     static String jdbc(String url) {
+        if (url.startsWith("mysql://")) {
+            return "jdbc:mysql://" + url.substring("mysql://".length()) + "?rewriteBatchedStatements=true";
+        }
+        if (url.startsWith("sqlite:")) {
+            return "jdbc:" + url;
+        }
         if (!url.startsWith("postgres://")) {
-            throw new ConfigError("url must look like postgres://host:port/database, got " + url);
+            throw new ConfigError("url must look like postgres://host:port/database, mysql://host:port/database or sqlite:path, got " + url);
         }
         return "jdbc:postgresql://" + url.substring("postgres://".length());
     }

@@ -60,7 +60,7 @@ public final class StructureCheck {
             }
             for (Check ck : t.checks()) {
                 if (!ck.expr().contains("VALUE")) {
-                    count(c, out, "CHECK " + t.name() + "." + ck.name(), "select count(*)" + from + " where not (" + portable(ck.expr()) + ")");
+                    count(c, out, "CHECK " + t.name() + "." + ck.name(), "select count(*)" + from + " where not (" + portable(c, ck.expr()) + ")");
                 }
             }
         }
@@ -77,7 +77,10 @@ public final class StructureCheck {
     }
 
     /** num_nonnulls(a, b) is Postgres only; MySQL and SQLite count the not-null tests instead. */
-    private static String portable(String expr) {
+    private static String portable(Connection c, String expr) {
+        if (forge.core.Dialect.of(c) == forge.core.Dialect.POSTGRES) {
+            return expr;
+        }
         return expr.replaceAll("num_nonnulls\\((\\w+), (\\w+)\\)", "((($1 is not null) + ($2 is not null)))");
     }
 

@@ -110,7 +110,10 @@ class ConfigReaderTest {
     @Test
     void connectionUrl() {
         bad(GOOD.replace("postgres://localhost:5432/app_test", "postgres://me:secret@localhost/app"), "connection.url", "password");
-        bad(GOOD.replace("postgres://localhost:5432/app_test", "mysql://localhost/app"), "connection.url");
+        ConfigReader.read(GOOD.replace("postgres://localhost:5432/app_test", "mysql://localhost:3306/app"));
+        ConfigReader.read(GOOD.replace("postgres://localhost:5432/app_test", "sqlite:target/app.db"));
+        bad(GOOD.replace("postgres://localhost:5432/app_test", "oracle://localhost/app"), "connection.url");
+        assertEquals("../m", ConfigReader.read(GOOD + "manifest_dir: ../m\n").manifestDir());
         bad(GOOD.replace("postgres://localhost:5432/app_test", "postgres://localhost"), "connection.url");
         bad("version: 1\nseed: 1\nclock: \"2025-01-01T00:00:00Z\"\ntables: {}\n", "connection.url", "ddl");
         assertEquals("s.sql", ConfigReader.read("version: 1\nseed: 1\nclock: \"2025-01-01T00:00:00Z\"\nddl: s.sql\ntables: {}\n").ddl());

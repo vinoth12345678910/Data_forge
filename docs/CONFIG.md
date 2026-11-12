@@ -152,10 +152,20 @@ Validation (added): exactly one of `derive`, `check`, `limit` per item; an unkno
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `manifest_dir` | path, relative to `forge.yml` | `.forge/manifests` | Where the local manifest copy is written (`<run_id>.json` and `<run_id>.keys`). See `docs/design/MANIFEST.md`. **Not implemented in P2.6:** `forge generate --manifest-dir` and the default `.forge/manifests` next to `forge.yml` are used instead; the key is still proposed. |
+| `manifest_dir` | path, relative to `forge.yml` | `.forge/manifests` | Where the local manifest copy is written (`<run_id>.json` and `<run_id>.keys`). See `docs/design/MANIFEST.md`. Implemented in P3.6. |
 
 ### Validation and differences (changes to the sections above)
 
 - Reserved sections: `rules` is no longer reserved. `use`, `states`, `scenarios`, `cleanup` and `connection.backup_cmd` stay reserved.
 - SPEC section 7 writes a rule as `expr:`; this proposal writes the kind as the key (`derive:`, `check:`, `limit:`) for the reasons in `RULE_LANGUAGE.md` decision D1a.
 - Golden `forge.yml` files stay Phase 3 drafts; Phase 2 adds `golden/<name>/phase2.forge.yml` (resolves open point 1 above for Phase 2 only).
+
+## Phase 3 additions (built; all keys below are implemented and tested)
+
+- **`rules`**: kinds `derive`, `check`, `limit` (Phase 2), plus `verify` (a check only the verify pass runs), and `after` / `before` with an optional `by: LO..HI` (durations `30s 15m 2h 7d`). See `design/RULE_LANGUAGE.md` and `design/TEMPORAL_RULES.md` (As built).
+- **`states`**: per table `column`, `start`, `mix`, `transitions`, `children` (`fk`, `status`, `number`, `at`, `latest`, `by_state`). See `design/STATE_MACHINES.md` (As built). The `rows` of a laid-out child table is ignored.
+- **`scenarios`**: `extends`, `rows` (`5x` or a number), `mix` (`table.column`), `burst` (`column`, `from`, `to`, `share`), `edge`. Chosen with `forge generate -s <name>`; `--edge` turns edge-case mode on. See `design/SHAPE_AND_SCENARIOS.md`.
+- **Column keys** `dist` (`zipf`, `pareto`), `param`, `season` (`by`, `weights`); **table key** `correlate` (`leader`, `currency`, `phone_code`).
+- **`connection.url`** also accepts `mysql://host:port/database` and `sqlite:path/to/file.db`.
+- **`manifest_dir`**: implemented (relative to forge.yml; `--manifest-dir` overrides it).
+- Still reserved and empty-only: `use` (Phase 7) and `cleanup` (Phase 5). `connection.backup_cmd` is kept, not run (Phase 5).

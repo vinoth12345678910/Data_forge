@@ -62,6 +62,8 @@ rules:
     verify: count(payments.id where payments.status = 'succeeded') = 1 when orders.status in ('paid', 'partially_shipped', 'shipped', 'returned')
   - name: unpaid_order_has_no_succeeded_payment
     verify: count(payments.id where payments.status = 'succeeded') = 0 when orders.status in ('pending', 'cancelled')
+  - name: no_attempt_after_success
+    verify: orders.id is not null and (max(payments.attempt_no where payments.status = 'succeeded') is null or max(payments.attempt_no where payments.status = 'succeeded') = max(payments.attempt_no))
   - name: payment_attempts_contiguous
     verify: orders.id is not null and (count(payments.id) = 0 or max(payments.attempt_no) = count(payments.id))
   - name: redemption_not_on_cancelled_order

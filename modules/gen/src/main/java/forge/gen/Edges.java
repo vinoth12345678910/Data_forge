@@ -119,7 +119,9 @@ final class Edges {
         return b.toString();
     }
 
-    static void install(RowGen gen, SchemaGraph g, List<Rule> rules) {
+    static void install(RowGen gen, SchemaGraph g, List<Rule> rules, forge.core.Config conf) {
+        // MySQL's default collation compares text without case, so a case-only duplicate would break a unique key there.
+        boolean ci = conf.connection() != null && conf.connection().url().startsWith("mysql://");
         Set<String> touched = new TreeSet<>();
         for (Rule r : rules) {
             collect(r.expr(), touched);
@@ -166,7 +168,7 @@ final class Edges {
                     kinds.add(UNICODE);
                     kinds.add(INJECT);
                 }
-                if ((ty.equals("text") || ty.equals("varchar")) && unique && !t.pk().contains(name) && plainUnique(t, name)
+                if (!ci && (ty.equals("text") || ty.equals("varchar")) && unique && !t.pk().contains(name) && plainUnique(t, name)
                     && (k.dom.kind.equals("words") || k.dom.kind.equals("email"))) {
                     kinds.add(CASEDUP);
                 }

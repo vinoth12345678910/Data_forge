@@ -181,3 +181,10 @@
 - Next: P3.6 `p3-gate` (cross-database verify step, CLI for three databases, carry-over, PHASE3_RESULTS.md).
 - Decisions: FK checks stay on for the whole run on MySQL; per-dialect hand-translated DDL.
 - Open: dialect-specialist review in a fresh session.
+
+## 2026-11-12 P3.6 cross-database gate and carry-over (branch p3-gate, from p3-dialects)
+- Done: CLI on all three databases (`mysql://`, `sqlite:` URLs, loader and reader chosen by URL), `forge generate -s/--edge` and `forge verify -s` tested on SQLite and MySQL; `manifest_dir`; `NoNetworkTest` (step d); `NullThenUpdatePropertyTest`; verify.sh step f (f1 SQLite, f2 MySQL, f3 Postgres); `PHASE3_RESULTS.md` generated from a test; CONFIG.md updated; case-only duplicates skipped on MySQL (found by the CLI test).
+- Not done: 23 golden rules still deferred (10 b, 13 c); keep tables refused; tied-FK memory not measured; Postgres 17 not run; saas-multitenant report-only.
+- Next: Phase 4 only when told (not started). Review in fresh sessions: scope-guard on every PR, determinism-auditor on P3.1 to P3.4, dialect-specialist on P3.5.
+- Decisions: results counts 20 closed / 10 b / 13 c, not the planned 29 / 2 / 12.
+- Open: PR #26 (Phase 2 roll-up) and the stacked Phase 3 PRs are unmerged; the P3 stack targets p2-cli.

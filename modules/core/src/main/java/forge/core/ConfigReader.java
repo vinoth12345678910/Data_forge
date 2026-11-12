@@ -25,7 +25,7 @@ public final class ConfigReader {
 
     private static final ObjectMapper YAML =
         new ObjectMapper(new YAMLFactory()).enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-    private static final Pattern URL = Pattern.compile("postgres://[^/@:?\\s]+(:\\d+)?/[^/@?\\s]+");
+    private static final Pattern URL = Pattern.compile("(postgres|mysql)://[^/@:?\\s]+(:\\d+)?/[^/@?\\s]+|sqlite:[^\\s@?]+");
 
     private ConfigReader() {}
 
@@ -40,7 +40,7 @@ public final class ConfigReader {
             throw new ConfigError("forge.yml must be a map of keys.");
         }
         keys(root, "", "version", "seed", "clock", "locale", "connection", "ddl", "use", "tables",
-            "rules", "states", "scenarios", "cleanup");
+            "rules", "states", "scenarios", "cleanup", "manifest_dir");
 
         JsonNode version = root.get("version");
         if (version == null || !version.isInt() || version.intValue() != 1) {
@@ -81,7 +81,8 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE);
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE,
+            text(root, "manifest_dir", ""));
     }
 
     private static Map<String, Config.StateConf> states(JsonNode n) {
@@ -257,7 +258,7 @@ public final class ConfigReader {
             throw new ConfigError("connection.url: must not carry a user or password; use connection.user and connection.password_env.");
         }
         if (!URL.matcher(url).matches()) {
-            throw new ConfigError("connection.url: expected postgres://host:port/database, got " + url);
+            throw new ConfigError("connection.url: expected postgres://host:port/database, mysql://host:port/database or sqlite:path/to/file.db, got " + url);
         }
         String env = text(n, "env", "connection");
         if (env == null || !Config.ENVS.contains(env)) {
