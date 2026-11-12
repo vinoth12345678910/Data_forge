@@ -46,17 +46,16 @@ final class InitCmd implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        PrintWriter outW = spec.commandLine().getOut();
-        PrintWriter err = spec.commandLine().getErr();
+        Emit e = new Emit(spec);
         try {
-            return run(outW);
-        } catch (ConfigError | PlanError | java.sql.SQLException | java.io.IOException e) {
-            err.println("forge init: " + e.getMessage());
-            return 1;
+            return e.done("init", run(e));
+        } catch (ConfigError | PlanError | java.sql.SQLException | java.io.IOException ex) {
+            e.fail("init", ex);
+            return e.done("init", 1);
         }
     }
 
-    private int run(PrintWriter outW) throws java.sql.SQLException, java.io.IOException {
+    private int run(Emit e) throws java.sql.SQLException, java.io.IOException {
         if (env == null) {
             throw new ConfigError("--env is required: dev, test, staging or prod.");
         }
@@ -100,17 +99,26 @@ final class InitCmd implements Callable<Integer> {
         ConfigCheck.check(c, g);
         Files.writeString(out, ConfigWriter.write(c));
 
-        outW.println("Wrote " + out + ": " + g.tables().size() + " tables, seed " + seed + ".");
+        e.out.println("Wrote " + out + ": " + g.tables().size() + " tables, seed " + seed + ".");
+        java.util.List<String> notes = new java.util.ArrayList<>();
         for (Plan.Break b : plan.breaks()) {
-            outW.println("Cycle broken: " + b.table() + "." + b.fk() + " (" + b.how() + ")");
+            String note = "Cycle broken: " + b.table() + "." + b.fk() + " (" + b.how() + ")";
+            e.out.println(note);
+            notes.add(note);
         }
         for (Table t : g.tables()) {
             for (Check ck : t.checks()) {
                 if (!ck.full()) {
-                    outW.println("Check not fully understood: " + t.name() + "." + ck.name() + " " + ck.expr());
+                    String note = "Check not fully understood: " + t.name() + "." + ck.name() + " " + ck.expr();
+                    e.out.println(note);
+                    notes.add(note);
                 }
             }
         }
+        e.data.put("tables", g.tables().size());
+        e.data.put("seed", seed);
+        e.data.put("out", out.toString());
+        e.data.put("notes", notes);
         return 0;
     }
 

@@ -32,17 +32,16 @@ final class GenerateCmd implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        PrintWriter out = spec.commandLine().getOut();
-        PrintWriter err = spec.commandLine().getErr();
+        Emit e = new Emit(spec);
         try {
-            return run(out);
-        } catch (ConfigError | RuleError | GenError | PlanError | LoadError | ManifestError | SQLException | java.io.IOException e) {
-            err.println("forge generate: " + e.getMessage());
-            return 1;
+            return e.done("generate", run(e));
+        } catch (ConfigError | RuleError | GenError | PlanError | LoadError | ManifestError | SQLException | java.io.IOException ex) {
+            e.fail("generate", ex);
+            return e.done("generate", 1);
         }
     }
 
-    private Integer run(PrintWriter out) throws SQLException, java.io.IOException {
+    private Integer run(Emit e) throws SQLException, java.io.IOException {
         Live live = new Live(config, scenario, edge);
         if ("prod".equals(live.conf.connection().env())) {
             throw new ConfigError("refusing to run against env prod. Data Forge never generates into prod.");
@@ -58,19 +57,28 @@ final class GenerateCmd implements Callable<Integer> {
             for (long n : r.rows().values()) {
                 rows += n;
             }
-            out.println("Loaded " + rows + " rows into " + r.rows().size() + " tables (run " + r.runId() + "). Manifest: "
+            e.out.println("Loaded " + rows + " rows into " + r.rows().size() + " tables (run " + r.runId() + "). Manifest: "
                 + live.manifestDir(manifestDir).resolve(r.runId() + ".json"));
+            e.data.put("run_id", r.runId());
+            e.data.put("seed", live.conf.seed());
+            e.data.put("scenario", scenario == null ? "default" : scenario);
+            e.data.put("edge", edge);
+            e.data.put("loaded", new java.util.TreeMap<>(r.rows()));
+            e.data.put("manifest", live.manifestDir(manifestDir).resolve(r.runId() + ".json").toString());
             int code = 0;
             if (live.verifyRules.isEmpty()) {
-                out.println("No rules in forge.yml: nothing to verify.");
+                e.out.println("No rules in forge.yml: nothing to verify.");
             } else {
                 Report rep = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
-                out.print(rep.text(live.conf.connection().url()));
+                e.out.print(rep.text(live.conf.connection().url()));
+                e.report(rep, live.conf.connection().env());
                 code = rep.exitCode();
             }
-            out.println("Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, foreign keys) holds, and only the "
+            e.out.println("Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, foreign keys) holds, and only the "
                 + live.verifyRules.size() + " rule(s) in forge.yml, plus the rules its state machines imply, are generated and verified. "
                 + "Rules this phase does not handle are not checked (see docs/design/PHASE3_RESULTS.md); there is no full realism yet.");
+            e.data.put("partial", true);
+            e.data.put("not_checked", "Rules this phase does not handle are not checked; see docs/design/PHASE3_RESULTS.md.");
             return code;
         }
     }
