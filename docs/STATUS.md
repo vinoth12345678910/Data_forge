@@ -160,3 +160,10 @@
 - Next: P3.3 `p3-shape` (zipf, pareto, correlations, seasonality).
 - Decisions: only ordering is verified, `by` shapes generation; tree acyclic verified by `parent_id < id`.
 - Open: determinism-auditor and scope-guard reviews to run in fresh sessions.
+
+## 2026-11-12 P3.3 shape (branch p3-shape, from p3-temporal)
+- Done: `dist` zipf/pareto (columns and plain foreign keys), `season` (month, weekday, hour), `correlate` (country, currency, phone code), `Shapes`, `Countries`; `ShapeTest` 6 tests green with fixed seeds (zipf rank-1 share within 2 points, pareto median within 5% plus heavy tail, correlated columns never contradict over 5,000 rows, December share within 3 points, unruled columns stable when another table changes 10 to 500 rows, byte-identical twice); proven not hollow (zipf exponent doubled fails with 72.8% vs 27.8%); full `./gradlew build` green.
+- Not done: no golden schema uses shape yet (P3.4 scenarios do); no time-zone correlation; shape on a ruled column is not rejected yet.
+- Next: P3.4 `p3-scenarios` (scenarios, mix sliders, burst, edge-case mode).
+- Decisions: see SHAPE_AND_SCENARIOS.md "As built".
+- Open: determinism-auditor on the diff in a fresh session.

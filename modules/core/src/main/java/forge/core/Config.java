@@ -64,9 +64,26 @@ public record Config(
     public record Conn(String url, String schema, String env, String user, String passwordEnv, String backupCmd) {}
 
     /** rows is null for a kept table. */
-    public record TableConf(Integer rows, boolean keep, Map<String, ColConf> columns) {}
+    public record TableConf(Integer rows, boolean keep, Map<String, ColConf> columns, Map<String, String> correlate) {
+        public TableConf(Integer rows, boolean keep, Map<String, ColConf> columns) {
+            this(rows, keep, columns, Map.of());
+        }
+    }
+
+    /**
+     * How a column's values are spread (docs/design/SHAPE_AND_SCENARIOS.md). dist is zipf or pareto with param in
+     * whole percent (zipf 120 = exponent 1.2; pareto 150 = alpha 1.5). season is by month, weekday or hour with one
+     * whole-number weight per bucket (12, 7 or 24).
+     */
+    public record Shape(String dist, Integer param, String seasonBy, List<Integer> weights) {}
 
     /** nullPer10k is the NULL rate in parts per 10,000 (null when not set). min and max are kept as written. */
     public record ColConf(
-        String gen, String locale, Boolean unique, Integer nullPer10k, List<String> values, String min, String max) {}
+        String gen, String locale, Boolean unique, Integer nullPer10k, List<String> values, String min, String max,
+        Shape shape) {
+        public ColConf(
+            String gen, String locale, Boolean unique, Integer nullPer10k, List<String> values, String min, String max) {
+            this(gen, locale, unique, nullPer10k, values, min, max, null);
+        }
+    }
 }

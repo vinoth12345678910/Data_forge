@@ -110,6 +110,8 @@ public final class RowGen {
         java.util.function.LongFunction<String> ov;
         /** Set when a state machine lays this foreign key out: the parent row comes from the layout. */
         States.Layout lay;
+        /** Set by a zipf foreign key: cumulative weights over parent ranks. */
+        long[] zipf;
     }
 
     private final long seed;
@@ -166,7 +168,65 @@ public final class RowGen {
         States st = States.build(c.seed(), g, c, counts);
         RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts);
         gen.install(st);
+        gen.shape(c);
         return gen;
+    }
+
+    /** Skew, seasonality and correlation from forge.yml (docs/design/SHAPE_AND_SCENARIOS.md). */
+    private void shape(Config c) {
+        for (Map.Entry<String, Config.TableConf> te : c.tables().entrySet()) {
+            String t = te.getKey();
+            for (Map.Entry<String, Config.ColConf> ce : te.getValue().columns().entrySet()) {
+                Config.Shape sh = ce.getValue().shape();
+                if (sh == null) {
+                    continue;
+                }
+                Col k = need(t, ce.getKey());
+                String where = "tables." + t + ".columns." + ce.getKey();
+                if (k.ov != null) {
+                    throw new GenError(where + ": a state machine already decides this column.");
+                }
+                if (sh.dist() != null && k.fk != null) {
+                    if (!sh.dist().equals("zipf") || k.group != null || k.cluster != null || k.fk.refTable().equals(t)) {
+                        throw new GenError(where + ": a foreign key can be skewed with zipf only when it is a plain key to another table.");
+                    }
+                    k.zipf = Shapes.zipf(rows.get(k.fk.refTable()), sh.param());
+                } else if (sh.dist() != null) {
+                    if (k.dom == null || !k.dom.kind.equals("int") || k.perm != null || k.sequence || k.base != null) {
+                        throw new GenError(where + ": dist needs a plain whole-number column that is not a key or unique.");
+                    }
+                    k.ov = sh.dist().equals("zipf") ? Shapes.zipfInt(k, seed, sh.param()) : Shapes.paretoInt(k, seed, sh.param());
+                }
+                if (sh.seasonBy() != null) {
+                    if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || k.perm != null || k.base != null) {
+                        throw new GenError(where + ": season needs a plain timestamp column.");
+                    }
+                    k.ov = Shapes.season(k, seed, sh.seasonBy(), sh.weights());
+                }
+            }
+            Map<String, String> corr = te.getValue().correlate();
+            if (!corr.isEmpty()) {
+                Col lead = need(t, corr.get("leader"));
+                if (lead.ov != null || lead.fk != null) {
+                    throw new GenError("tables." + t + ".correlate.leader: must be a plain text column.");
+                }
+                lead.ov = Shapes.country(lead, seed);
+                for (Map.Entry<String, String> e : corr.entrySet()) {
+                    if (e.getKey().equals("leader")) {
+                        continue;
+                    }
+                    Col f = need(t, e.getValue());
+                    if (f.ov != null || f.fk != null) {
+                        throw new GenError("tables." + t + ".correlate." + e.getKey() + ": must be a plain text column.");
+                    }
+                    boolean cur = e.getKey().equals("currency");
+                    f.ov = row -> {
+                        String code = lead.ov.apply(row);
+                        return code == null ? null : cur ? Countries.currency(code) : Countries.dial(code);
+                    };
+                }
+            }
+        }
     }
 
     /** Hands the state machines to the columns they decide. */
@@ -1293,6 +1353,9 @@ public final class RowGen {
             }
             if (self) {
                 parentRow = row == 0 ? 0 : new Cell(k.fkKey, row).below(row);
+            } else if (k.zipf != null) {
+                Cell cell = new Cell(Keys.column(seed, k.table.name(), k.col.name(), "shape"), row);
+                parentRow = Shapes.rank(k.zipf, cell.below(k.zipf[k.zipf.length - 1]));
             } else {
                 parentRow = deal(k.fkKey, row, parents);
             }

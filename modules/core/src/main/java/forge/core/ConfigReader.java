@@ -272,7 +272,7 @@ public final class ConfigReader {
         if (n == null || n.isNull()) {
             return new TableConf(null, false, new TreeMap<>());
         }
-        keys(n, path, "rows", "keep", "columns");
+        keys(n, path, "rows", "keep", "columns", "correlate");
         Integer rows = null;
         JsonNode r = n.get("rows");
         if (r != null) {
@@ -296,11 +296,26 @@ public final class ConfigReader {
                 cols.put(e.getKey(), column(e.getValue(), path + ".columns." + e.getKey()));
             }
         }
-        return new TableConf(rows, keep, cols);
+        Map<String, String> corr = new TreeMap<>();
+        JsonNode co = n.get("correlate");
+        if (co != null && !co.isNull()) {
+            keys(co, path + ".correlate", "leader", "currency", "phone_code");
+            for (Iterator<Map.Entry<String, JsonNode>> it = co.fields(); it.hasNext(); ) {
+                Map.Entry<String, JsonNode> e = it.next();
+                if (!e.getValue().isTextual()) {
+                    throw new ConfigError(path + ".correlate." + e.getKey() + ": a column name is required.");
+                }
+                corr.put(e.getKey(), e.getValue().textValue());
+            }
+            if (!corr.containsKey("leader")) {
+                throw new ConfigError(path + ".correlate.leader: required, the column that holds the country.");
+            }
+        }
+        return new TableConf(rows, keep, cols, corr);
     }
 
     private static ColConf column(JsonNode n, String path) {
-        keys(n, path, "gen", "locale", "unique", "null_rate", "values", "min", "max");
+        keys(n, path, "gen", "locale", "unique", "null_rate", "values", "min", "max", "dist", "param", "season");
         String gen = text(n, "gen", path);
         if (gen != null && !Config.GENS.contains(gen)) {
             throw new ConfigError(path + ".gen: unknown generator " + gen + ". Known: " + Config.GENS);
@@ -329,7 +344,52 @@ public final class ConfigReader {
             throw new ConfigError(path + ": gen: pick needs values.");
         }
         return new ColConf(gen, text(n, "locale", path), bool(n, "unique", path), nullPer10k, values,
-            scalar(n, "min", path), scalar(n, "max", path));
+            scalar(n, "min", path), scalar(n, "max", path), shape(n, path));
+    }
+
+    private static Config.Shape shape(JsonNode n, String path) {
+        String dist = text(n, "dist", path);
+        JsonNode param = n.get("param");
+        JsonNode season = n.get("season");
+        if (dist == null && season == null && param == null) {
+            return null;
+        }
+        if (dist != null && !(dist.equals("zipf") || dist.equals("pareto") || dist.equals("uniform"))) {
+            throw new ConfigError(path + ".dist: zipf, pareto or uniform, got " + dist);
+        }
+        if (param != null && (!param.isInt() || param.intValue() < 50 || param.intValue() > 500)) {
+            throw new ConfigError(path + ".param: whole percent from 50 to 500 (120 means 1.2).");
+        }
+        if (dist != null && !dist.equals("uniform") && param == null) {
+            throw new ConfigError(path + ".param: required with dist " + dist + " (120 means 1.2).");
+        }
+        String by = null;
+        List<Integer> w = null;
+        if (season != null) {
+            keys(season, path + ".season", "by", "weights");
+            by = text(season, "by", path + ".season");
+            int want = "month".equals(by) ? 12 : "weekday".equals(by) ? 7 : "hour".equals(by) ? 24 : -1;
+            if (want < 0) {
+                throw new ConfigError(path + ".season.by: month, weekday or hour.");
+            }
+            JsonNode wn = season.get("weights");
+            if (wn == null || !wn.isArray() || wn.size() != want) {
+                throw new ConfigError(path + ".season.weights: a list of " + want + " whole numbers is required.");
+            }
+            w = new ArrayList<>();
+            long sum = 0;
+            for (JsonNode x : wn) {
+                if (!x.isInt() || x.intValue() < 0) {
+                    throw new ConfigError(path + ".season.weights: whole numbers >= 0.");
+                }
+                w.add(x.intValue());
+                sum += x.intValue();
+            }
+            if (sum == 0) {
+                throw new ConfigError(path + ".season.weights: they add up to 0.");
+            }
+        }
+        return new Config.Shape(dist == null || dist.equals("uniform") ? null : dist, param == null ? null : param.intValue(), by, w);
     }
 
     private static void keys(JsonNode n, String path, String... allowed) {
