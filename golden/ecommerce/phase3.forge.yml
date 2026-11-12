@@ -68,6 +68,18 @@ rules:
     verify: coupon_redemptions.order_id.status <> 'cancelled'
   - name: received_return_has_one_refund
     verify: count(refunds.id) = case when returns.status = 'received' then 1 else 0 end
+  - name: order_after_user_joined
+    after: orders.placed_at >= orders.user_id.created_at
+    by: 0s..180d
+  - name: payment_after_order
+    verify: payments.created_at >= payments.order_id.placed_at
+  - name: redemption_within_coupon_window
+    check: coupon_redemptions.redeemed_at >= coupon_redemptions.coupon_id.starts_at and coupon_redemptions.redeemed_at <= coupon_redemptions.coupon_id.ends_at
+  - name: refund_after_return_received
+    after: refunds.created_at >= refunds.return_id.received_at when refunds.return_id is not null
+    by: 0s..14d
+  - name: category_tree_acyclic
+    verify: categories.parent_id is null or categories.parent_id < categories.id
 states:
   orders:
     column: status

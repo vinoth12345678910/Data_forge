@@ -46,8 +46,12 @@ public record Config(
         String fk, String status, String number, String atColumn, String atFrom, int atGap, String latest,
         Map<String, List<String>> byState) {}
 
-    /** One rule as written: kind is derive, check or limit; text is the rule text; description may be null. */
-    public record RuleConf(String name, String kind, String text, String description) {}
+    /** One rule as written: kind is derive, check, limit or verify (after and before are written as a check with by); text is the rule text; description may be null. */
+    public record RuleConf(String name, String kind, String text, String description, String by) {
+        public RuleConf(String name, String kind, String text, String description) {
+            this(name, kind, text, description, null);
+        }
+    }
 
     public static final Set<String> ENVS = Set.of("dev", "test", "staging", "prod");
 

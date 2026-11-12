@@ -196,14 +196,14 @@ public final class RowGen {
             if (cc.atColumn() != null) {
                 Col k = need(lay.child, cc.atColumn());
                 Col from = need(lay.parent, cc.atFrom());
-                if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || from.dom == null || from.base != null) {
+                if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || from.dom == null) {
                     throw new GenError("states." + lay.parent + ".children." + lay.child + ".at: " + cc.atColumn() + " and " + cc.atFrom() + " must be plain timestamp columns.");
                 }
                 long key = Keys.column(seed, lay.child, cc.atColumn(), "layout-at");
                 long gap = cc.atGap();
                 k.ov = r -> {
                     long p = lay.parent(r);
-                    long t = raw(from, p, 0) + lay.slot(r) * gap + 1 + new Cell(key, r).below(gap);
+                    long t = epoch(cell(lay.parent, cc.atFrom(), p)) + lay.slot(r) * gap + 1 + new Cell(key, r).below(gap);
                     return k.dom.fmt(Math.min(t, clock));
                 };
             }

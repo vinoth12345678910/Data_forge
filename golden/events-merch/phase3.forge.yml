@@ -51,6 +51,18 @@ rules:
     verify: count(payments.id) = 0 or (orders.latest_payment_id is not null and orders.latest_payment_id.created_at >= max(payments.created_at))
   - name: refund_only_on_succeeded_payment
     verify: refunds.payment_id.status = 'succeeded'
+  - name: registration_before_event
+    before: registrations.created_at < registrations.ticket_type_id.event_id.starts_at
+    by: 1h..30d
+  - name: referrer_joined_first
+    after: users.created_at >= users.referred_by.created_at when users.referred_by is not null
+    by: 0s..90d
+  - name: refund_after_payment
+    after: refunds.created_at >= refunds.payment_id.completed_at
+    by: 0s..14d
+  - name: order_time_after_user_joined
+    after: orders.placed_at >= orders.user_id.created_at
+    by: 0s..180d
 states:
   events:
     column: status
