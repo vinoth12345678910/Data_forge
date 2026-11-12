@@ -75,7 +75,9 @@ final class Emit {
             if (r.error() != null) {
                 m.put("error", r.error());
             }
-            if (r.note() != null) {
+            if (r.status().equals("NOT_APPLICABLE")) {
+                m.put("reason", r.note());
+            } else if (r.note() != null) {
                 m.put("note", r.note());
                 warnings.add(new Entry("rule_note", r.note(), r.name(), r.subject(), null, null, null));
             }
