@@ -54,6 +54,7 @@ final class Ruled {
         Map<String, Map<String, List<Limit>>> asChild = new TreeMap<>();
         for (Rule r : rules) {
             switch (r.kind()) {
+                case VERIFY -> { }
                 case DERIVE -> {
                     RowGen.Col k = gen.col(r.subject(), r.target());
                     if (k == null || k.dom == null || !k.dom.kind.equals("int")) {

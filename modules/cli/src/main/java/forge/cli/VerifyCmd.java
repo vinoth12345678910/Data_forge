@@ -38,7 +38,7 @@ final class VerifyCmd implements Callable<Integer> {
             Live live = new Live(config);
             live.open();
             try (Connection c = live.db.open()) {
-                Report rep = Verifier.run(c, live.graph, live.rules, sample, 120);
+                Report rep = Verifier.run(c, live.graph, live.verifyRules, sample, 120);
                 out.print(json ? rep.json() : rep.text(live.conf.connection().url()));
                 if (!json && expected != null) {
                     listOthers(out, live);

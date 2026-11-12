@@ -49,7 +49,7 @@ final class RuleReader {
                 RulesParser.DeriveRuleContext c = p.deriveRule();
                 return new Parsed(b.ref(c.colRef()), b.visit(c.expr()), null, null, null, when(b, c.whenClause()));
             }
-            case CHECK -> {
+            case CHECK, VERIFY -> {
                 RulesParser.CheckRuleContext c = p.checkRule();
                 return new Parsed(null, b.visit(c.expr()), null, null, null, when(b, c.whenClause()));
             }

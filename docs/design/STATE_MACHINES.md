@@ -79,3 +79,12 @@ On generated events-merch and ecommerce: every state machine rule passes under o
 | Random pick from the check list (Phase 2) | no flow, no children |
 | Generate in memory, then repair | memory grows, rows stop being pure |
 | Simulate event by event | strongest realism, but order dependent: row N depends on rows before it |
+
+## As built in P3.1 (differences from the text above)
+
+- Code: `States` (layouts and dealt statuses) and the hooks in `RowGen` (`Col.ov`, `Col.lay`) in `gen`; `StateRules` in `rules`; `Config.StateConf` and `ChildConf` in `core`. A new rule kind `verify:` (same grammar as `check`) is run only by the verify pass; the generator ignores it. `forge verify` also runs the rules `StateRules` derives from `states` (status valid; child counts per parent state).
+- The `rows` entry of a layout child table is **ignored** (the layout decides); it is not an error, so the file `forge init` writes still loads.
+- Status along the path: only the final status is assigned. The parent's `at.start`/`at.last` timestamps are **not** built in P3.1; they come with the P3.2 time rules. A child's `at` (`column`, `from`, `gap`) is built: child time = parent time + slot * gap + 1..gap seconds, capped at the clock, so siblings rise with the slot.
+- `?` (0 or 1) was added next to `*` (0 to 2). The `by:` path (a child laid out by a grandparent's status) is **not built**: `reservation_status_matches_order` stays out of P3.1.
+- A language limit found: a `verify`/`check` that has only aggregates and no own column fails with "a check must read at least one column"; the golden file adds `orders.id is not null and (...)`.
+- Only single-column foreign keys can be laid out.

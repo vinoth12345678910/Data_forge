@@ -41,7 +41,7 @@ public final class RuleSql {
                 v = "select " + key + ", " + col + " as actual, " + want + " as expected from " + from + " where "
                     + (when.isEmpty() ? "" : when + " and ") + col + " is distinct from " + want;
             }
-            case CHECK -> {
+            case CHECK, VERIFY -> {
                 Set<String> cols = new LinkedHashSet<>();
                 own(r.expr(), cols);
                 own(r.when(), cols);

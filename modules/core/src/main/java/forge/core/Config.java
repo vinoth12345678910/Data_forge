@@ -10,13 +10,41 @@ import java.util.Set;
  */
 public record Config(
     int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
-    List<RuleConf> rules) {
+    List<RuleConf> rules, Map<String, StateConf> states) {
+
+    /** A config without states. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+        List<RuleConf> rules) {
+        this(version, seed, clock, locale, connection, ddl, tables, rules, Map.of());
+    }
+
+    /** The same config with other table settings. */
+    public Config withTables(Map<String, TableConf> t) {
+        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states);
+    }
 
     /** A config without rules. */
     public Config(
         int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables) {
         this(version, seed, clock, locale, connection, ddl, tables, List.of());
     }
+
+    /**
+     * A state machine (docs/design/STATE_MACHINES.md). mix holds weights by status (empty for a table whose statuses
+     * come from a parent's layout). transitions are {from, to}. children is by child table.
+     */
+    public record StateConf(
+        String column, String start, Map<String, Integer> mix, List<String[]> transitions, Map<String, ChildConf> children) {}
+
+    /**
+     * The child rows a state needs. fk is the child's foreign key to this table. status, number (slot + 1) and the
+     * at column are child columns; latest is a column of the parent that points at the last child. byState lists, per
+     * parent status, the child statuses in time order; an entry may end in * (0 to 2 times) or ? (0 or 1 time).
+     */
+    public record ChildConf(
+        String fk, String status, String number, String atColumn, String atFrom, int atGap, String latest,
+        Map<String, List<String>> byState) {}
 
     /** One rule as written: kind is derive, check or limit; text is the rule text; description may be null. */
     public record RuleConf(String name, String kind, String text, String description) {}
