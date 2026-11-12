@@ -1,11 +1,41 @@
 # Phase 2 configuration for ecommerce (version 1). The Phase 1 forge.yml next to it stays a Phase 3 draft.
 # Rule names equal the names in expected.yml, so each rule is paired with its hand-written violations_sql.
-# Row counts are added in P2.5.
+# Row counts are the zero-config counts from forge init.
 version: 1
 seed: 42
 clock: "2026-06-01T00:00:00Z"
 ddl: schema.sql
-tables: {}
+tables:
+  categories:
+    rows: 100
+  coupon_redemptions:
+    rows: 100
+  coupons:
+    rows: 100
+  inventory:
+    rows: 100
+  meta:
+    rows: 1
+  order_items:
+    rows: 100
+  orders:
+    rows: 100
+  payments:
+    rows: 100
+  products:
+    rows: 100
+  refunds:
+    rows: 100
+  reservations:
+    rows: 100
+  returns:
+    rows: 100
+  shipment_items:
+    rows: 100
+  shipments:
+    rows: 100
+  users:
+    rows: 100
 rules:
   - name: order_subtotal_matches_items
     derive: orders.subtotal_minor = sum(order_items.quantity * order_items.unit_price_minor)

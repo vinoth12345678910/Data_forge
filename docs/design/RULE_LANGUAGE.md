@@ -189,3 +189,11 @@ Written for `events-merch` and `ecommerce`, the Phase 2 language covers the 6 + 
 1. Lift a free cap; share a pinned cap evenly. Never fails on a free cap, so the gate on generated data is robust. Cost: capacities in generated data are not independent draws (they are at least what is used).
 2. **(chosen, with the refinement above)** Shrink the children for `sum`, lift only for `count`. Capacity stays an independent draw, but a small cap with many children is a generation error that depends on row counts.
 3. Shrink only; `count` limits deferred. Smallest engine, drops `coupon_total_uses_within_limit` from scope.
+
+## As built in P2.5 (generation)
+
+- Code: `Ruled` (the engine, with its own evaluator of the rule tree) in `gen`; `RowGen.of(graph, config, rules)` takes the checked rules as data. With no rules `RowGen` behaves exactly as in Phase 1 (pinned by `RulesOffIdenticalTest` and `RulesOffGoldenContainerTest`).
+- Supported: `derive` of whole-number columns (with `when`; aggregates over a child table with outer references; parent paths); `check` as a clamp when it has the shape `own_column <op> expr` on a whole-number, date or timestamp column, otherwise by redraw (the Phase 1 attempts, up to 5,000); `limit` as designed in D1c (children shrink to an even share, a cap is raised only when counts force it, a derived cap is never raised).
+- Not supported yet, each a clear `GenError` at the start or at the row: derive of text, decimal or time columns; a rule reading decimal (`numeric`) columns; a `when` on a `limit`; a rule that sets a key, sequence, shuffled or comparison-tied column; an aggregate or limit whose child foreign key is nullable while the child table is redrawn by checks; a column derived by one rule and also limited.
+- A parent's key column is read directly (not through the whole parent row) when the parent has rules, so a parent waiting for its children never asks for itself.
+- Measured on ecommerce (rules on vs off): 20,000 rows per table, 2.3 s vs 2.1 s, heap about 120 MB vs 85 MB (a rough in-process check, not a JFR profile).
