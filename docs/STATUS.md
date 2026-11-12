@@ -209,3 +209,10 @@
 - Next: P4.4 `p4-outputs`.
 - Decisions: not-applicable never fails the default exit (D3b); `--allow-prod` plus timeouts (D3c as changed).
 - Open: the P4.2 push-hook verify failed once on a Gradle user-home lock caused by my own concurrent Gradle runs (not code); retried unchanged and said so; the dialect-specialist review of P4.2 to P4.4 is for a fresh session.
+
+## 2026-11-12 P4.4 output files (branch p4-outputs, from p4-verify-any)
+- Done: gate first (committed red: `OutputsContainerTest` 6 tests), then `OutFiles` and `forge generate --out sql|csv|json --out-dir`. The SQL loads into an empty Postgres, MySQL and SQLite database and verify passes; CSV and JSON parse back (test-side parsers) to exactly the rows the generator makes, with the awkward text override (empty string, backslash, newline, quotes, comma, Unicode); same seed gives byte-identical files and manifest, another seed differs; every edge kind (unicode, injection, 255-character, leap day, DST instants) is one exact value in all three formats on three dialects (case-only duplicate on non-MySQL); the manifest matches the files (bytes, sha256, rows, columns) and has no time field; a failed run leaves no output or temp directory, a used directory is refused. 12 mutations (CSV quoting, JSON bigint, SQL quote and MySQL backslash, empty-vs-NULL, manifest timestamp, temp directory, used directory, four edge values) each failed the gate and were restored with git checkout; two first attempts were invalid (a patch that did not apply, and one that hit unrelated lines) and were redone.
+- Not done: edge assertions for the NULL kind (nulls occur naturally; NULL fidelity is tested instead); leap day not mutated separately; speed and memory of writing not measured (P4.6); `--dialect` against a real database of another type untested.
+- Next: P4.5 `p4-junit`.
+- Decisions: file manifest has `output_id`, no run id or time; one `removeTemp` for the writer's own temp directory (scope-guard to review).
+- Open: determinism-auditor and dialect-specialist reviews in a fresh session.
