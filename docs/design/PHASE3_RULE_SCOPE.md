@@ -81,3 +81,9 @@ Stays **report-only** (not in the gate): its 64 rules are not classified rule by
 | Postgres 16 only | The pinned image constant stays 16; P3.6 also runs the Postgres gate against 17 if an image can be pulled offline-free (the local Docker has one); otherwise said plainly. |
 | verify.sh step d (no-network test) skipped | P3.6 adds a test that scans product code for network classes and a run with the network classes denied; step d then PASS or says why not. |
 | jqwik gap: null-then-update fills | P3.6 adds the property test for cycle fills. |
+
+## Final (P3.6): what was actually closed
+
+Planned 29 (a) / 2 (b) / 12 (c). Result: **20 (a) / 10 (b) / 13 (c)**. Moved from (a) to (b): `event_status_valid_for_time`, `active_reservation_not_expired`, `expired_reservation_has_passed` (timestamps after the clock), `category_depth_bounded`, `coupon_per_user_within_limit`, `reservation_status_matches_order`, `shipment_requires_paid_order`, `return_after_shipment`; and `order_status_matches_shipments` moved to (c) (`fill`). `PHASE3_RESULTS.md` has the per-rule table. saas-multitenant stayed report-only (decided in Step 0, unchanged).
+
+Carry-over items: `manifest_dir` built (config key and `Live.manifestDir`, tested through the CLI); no-network test written (`NoNetworkTest`, run by verify.sh step d in a container with `--network none`); the jqwik null-then-update gap closed (`NullThenUpdatePropertyTest`, 12 tries on SQLite); `keep` tables stay refused by RowGen (decision above); tied composite foreign key memory NOT measured in Phase 3; Postgres 16 only (no 17 run).

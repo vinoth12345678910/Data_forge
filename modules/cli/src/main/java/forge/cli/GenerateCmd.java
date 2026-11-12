@@ -50,8 +50,10 @@ final class GenerateCmd implements Callable<Integer> {
         live.open();
         RowGen gen = RowGen.of(live.graph, live.conf, live.rules);
         try (Connection c = live.db.open()) {
-            PgLoader.Result r = PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
-                live.manifestDir(manifestDir));
+            PgLoader.Result r = live.postgres()
+                ? PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(), live.manifestDir(manifestDir))
+                : forge.load.JdbcLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
+                    live.manifestDir(manifestDir));
             long rows = 0;
             for (long n : r.rows().values()) {
                 rows += n;
@@ -59,16 +61,16 @@ final class GenerateCmd implements Callable<Integer> {
             out.println("Loaded " + rows + " rows into " + r.rows().size() + " tables (run " + r.runId() + "). Manifest: "
                 + live.manifestDir(manifestDir).resolve(r.runId() + ".json"));
             int code = 0;
-            if (live.rules.isEmpty()) {
+            if (live.verifyRules.isEmpty()) {
                 out.println("No rules in forge.yml: nothing to verify.");
             } else {
-                Report rep = Verifier.run(c, live.graph, live.rules, 5, 120);
+                Report rep = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
                 out.print(rep.text(live.conf.connection().url()));
                 code = rep.exitCode();
             }
             out.println("Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, foreign keys) holds, and only the "
-                + live.rules.size() + " rule(s) in forge.yml are generated and verified. Statuses are random picks; there is no "
-                + "state flow, no time order against a parent and no realism yet.");
+                + live.verifyRules.size() + " rule(s) in forge.yml, plus the rules its state machines imply, are generated and verified. "
+                + "Rules this phase does not handle are not checked (see docs/design/PHASE3_RESULTS.md); there is no full realism yet.");
             return code;
         }
     }

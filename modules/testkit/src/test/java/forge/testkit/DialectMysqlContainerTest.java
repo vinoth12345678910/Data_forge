@@ -2,6 +2,8 @@ package forge.testkit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import forge.cli.Forge;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -40,6 +42,35 @@ class DialectMysqlContainerTest {
         try (Connection c = DriverManager.getConnection(url, "test", "pw")) {
             DialectGate.script(c, DialectGate.golden(name + "/schema.mysql.sql"));
             assertEquals(java.util.List.of(), DialectGate.run(c, name, dir));
+        }
+    }
+
+    /** forge generate -s and --edge, and forge verify, on MySQL through the CLI. */
+    @org.junit.jupiter.api.Test
+    void cliScenarioAndEdgeOnMysql(@TempDir Path dir) throws Exception {
+        Forge.env = k -> k.equals("MY_PW") ? "pw" : null;
+        try {
+            for (String mode : new String[] {"scenario", "edge"}) {
+                String db = "c" + (n++);
+                try (Connection root = DriverManager.getConnection(MY.getJdbcUrl().replace("/start", "/"), "root", MY.getPassword());
+                    Statement s = root.createStatement()) {
+                    s.execute("create database " + db);
+                    s.execute("grant all on " + db + ".* to 'test'@'%'");
+                }
+                String url = MY.getJdbcUrl().replace("/start", "/" + db).replace("jdbc:", "").replaceFirst("\\?.*", "");
+                try (Connection c = DriverManager.getConnection(MY.getJdbcUrl().replace("/start", "/" + db), "test", "pw")) {
+                    DialectGate.script(c, DialectGate.golden("events-merch/schema.mysql.sql"));
+                }
+                Path d = Files.createDirectories(dir.resolve(mode));
+                Path yml = CrossDbCli.config(d, "events-merch", url, "test", "MY_PW");
+                if (mode.equals("scenario")) {
+                    CrossDbCli.scenario(yml, d);
+                } else {
+                    CrossDbCli.edge(yml);
+                }
+            }
+        } finally {
+            Forge.env = System::getenv;
         }
     }
 }

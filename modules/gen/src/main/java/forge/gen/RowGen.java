@@ -170,7 +170,7 @@ public final class RowGen {
             gen.ruled = new Ruled(gen, g, rules);
         }
         if (c.run().edge()) {
-            Edges.install(gen, g, rules);
+            Edges.install(gen, g, rules, c);
         }
         return gen;
     }

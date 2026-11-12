@@ -10,7 +10,15 @@ import java.util.Set;
  */
 public record Config(
     int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
-    List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run) {
+    List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run,
+    String manifestDir) {
+
+    /** A config with no manifest_dir. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+        List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run) {
+        this(version, seed, clock, locale, connection, ddl, tables, rules, states, scenarios, run, null);
+    }
 
     /** A config without scenarios. */
     public Config(
@@ -28,7 +36,7 @@ public record Config(
 
     /** The same config with other table settings. */
     public Config withTables(Map<String, TableConf> t) {
-        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run);
+        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir);
     }
 
     /** A config without rules. */

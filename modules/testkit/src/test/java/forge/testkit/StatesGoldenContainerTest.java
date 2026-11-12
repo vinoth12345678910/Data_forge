@@ -89,7 +89,7 @@ class StatesGoldenContainerTest {
         "events-merch", List.of("paid_order_has_one_succeeded_payment", "unpaid_order_has_no_succeeded_payment",
             "latest_payment_belongs_to_order", "latest_payment_is_latest", "refund_only_on_succeeded_payment"),
         "ecommerce", List.of("paid_order_has_one_succeeded_payment", "unpaid_order_has_no_succeeded_payment",
-            "payment_attempts_contiguous", "redemption_not_on_cancelled_order", "received_return_has_one_refund"));
+            "payment_attempts_contiguous", "no_attempt_after_success", "redemption_not_on_cancelled_order", "received_return_has_one_refund"));
 
     @ParameterizedTest
     @ValueSource(strings = {"events-merch", "ecommerce"})

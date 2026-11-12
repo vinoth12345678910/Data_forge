@@ -15,7 +15,7 @@ public final class Scenarios {
     public static Config apply(Config c, String name, boolean edge) {
         if (name == null || (name.equals("default") && !c.scenarios().containsKey("default"))) {
             return edge ? new Config(c.version(), c.seed(), c.clock(), c.locale(), c.connection(), c.ddl(), c.tables(), c.rules(),
-                c.states(), c.scenarios(), new Config.Run(List.of(), true)) : c;
+                c.states(), c.scenarios(), new Config.Run(List.of(), true), c.manifestDir()) : c;
         }
         if (!c.scenarios().containsKey(name)) {
             throw new ConfigError("scenario " + name + " is not in forge.yml. Known: " + c.scenarios().keySet());
@@ -78,6 +78,6 @@ public final class Scenarios {
             states.put(tc[0], new Config.StateConf(sc.column(), sc.start(), w, sc.transitions(), sc.children()));
         }
         return new Config(c.version(), c.seed(), c.clock(), c.locale(), c.connection(), c.ddl(), tables, c.rules(), states,
-            c.scenarios(), new Config.Run(new ArrayList<>(bursts.values()), e));
+            c.scenarios(), new Config.Run(new ArrayList<>(bursts.values()), e), c.manifestDir());
     }
 }

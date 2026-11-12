@@ -82,10 +82,35 @@ elif ! docker_up; then
   record "SKIPPED" "d. no-network (Docker not running)"
 elif docker run --rm --network none \
     -v "$PWD":/work -v "$HOME/.gradle":/root/.gradle -w /work \
-    "$IMAGE" ./gradlew test --offline --tests '*NoNetworkTest'; then
+    "$IMAGE" ./gradlew :testkit:test --offline --tests '*NoNetworkTest'; then
   record "PASS   " "d. no-network"
 else
   fail "d. no-network"
+fi
+
+# f. cross-database suite (Phase 3): the golden schemas, scenarios and edge mode on SQLite, MySQL and Postgres.
+# One labelled line per database. SKIPPED is never PASS.
+echo ">> f. cross-database suite"
+if ! docker_up; then
+  echo "SKIPPED: Docker is not running"
+  record "SKIPPED" "f. cross-database: SQLite, MySQL, Postgres (Docker not running)"
+else
+  if ./gradlew :testkit:test --rerun --tests '*DialectSqliteTest' --tests '*CrossDbSqliteCliTest'; then
+    record "PASS   " "f1. cross-database: SQLite"
+  else
+    fail "f1. cross-database: SQLite"
+  fi
+  if ./gradlew :testkit:containerTest --tests '*DialectMysqlContainerTest'; then
+    record "PASS   " "f2. cross-database: MySQL"
+  else
+    fail "f2. cross-database: MySQL"
+  fi
+  if ./gradlew :testkit:containerTest --tests '*StatesGoldenContainerTest' --tests '*TemporalGoldenContainerTest' \
+      --tests '*ScenariosGoldenContainerTest' --tests '*RuleGenContainerTest'; then
+    record "PASS   " "f3. cross-database: Postgres"
+  else
+    fail "f3. cross-database: Postgres"
+  fi
 fi
 
 # e. clean-machine build: fresh container, Java 21 only, no host Gradle cache.
