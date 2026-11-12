@@ -49,3 +49,12 @@ Shape: fixed seeds and sample sizes, stated tolerance. Scenarios: each declared 
 - A shaped column takes its values from its own `shape` stream and ignores the Phase 2 clamps on it: do not put a derive or a time rule on a shaped column (not checked yet: reported as open).
 - The leader of a `correlate` is filled with a country code from the bundled list (uniform); followers are a lookup of it. No time zone follower yet.
 - Tolerances in `ShapeTest`: zipf rank-1 share within 2 points at 20,000 rows; pareto median within 5% and max above 20 times the median; December share within 3 points at 10,000 rows.
+
+## As built in P3.4 (scenarios and edge cases)
+
+- forge.yml `scenarios:` (`extends`, `rows` as `5x` or a number, `mix` per `table.status_column` replacing the whole mix with unlisted statuses at 0, `burst` with `column`, `from`, `to`, `share`, `edge`). `Scenarios.apply` (in `core`) resolves the chain and returns a Config; `Config.Run` carries bursts and edge. `forge generate -s <name> [--edge]` and `forge verify -s <name>` are real. An unknown name, a cycle, a mix status that is not in the machine, or a `rows` key for a table with no count is a `ConfigError`.
+- Burst: a share of the rows (dealt by a keyed shuffle, so exact) take a time inside the window; on a rule-clamped column the window narrows the clamp and is ignored for a row where the rule leaves no room (so the in-window share can be below `share`). The golden scenario lifts the user-join gap to 3650d so the window is reachable.
+- Scaling `rows` can break structure that was only just feasible: the golden `sale_rush` scales every table that a tied key needs (`order_items`, `shipments`, `shipment_items`) with `orders`.
+- Edge mode (`Edges`): kinds NULL, max length (255 for unbounded text), unicode, injection string, case-only duplicate (unique text on a plain unique key only), leap day, DST instants (2024-03-10 07:00Z, 2024-11-03 06:30Z, only when inside the column's range). Row r < number of kinds takes kind r, so every kind is present in any table big enough; then 2% of rows. Columns a check, a rule, a key, a foreign key, a state or shape column touches are left alone.
+- Not built: DST in a named time zone (instants are UTC), a burst on a date column, a `burst` on a state-owned column.
+- Test order slip: P3.4 code was written before its gate test; the gate was proved not hollow afterwards by mutation (unicode string replaced, burst narrowing disabled: both made the gate fail).

@@ -62,7 +62,7 @@ rules:
     by: 0s..14d
   - name: order_time_after_user_joined
     after: orders.placed_at >= orders.user_id.created_at
-    by: 0s..180d
+    by: 0s..3650d
 states:
   events:
     column: status
@@ -96,4 +96,11 @@ states:
         by_state:
           initiated: []
           failed: []
-          succeeded: [refund*]
+          succeeded: ["refund?"]
+scenarios:
+  default: {}
+  sale_rush:
+    extends: default
+    rows: { orders: 2x, order_items: 2x }
+    mix: { orders.status: { pending: 10, paid: 60, fulfilled: 20, cancelled: 5, refunded: 5 } }
+    burst: { column: orders.placed_at, from: "2026-03-01T00:00:00Z", to: "2026-03-08T00:00:00Z", share: 40 }

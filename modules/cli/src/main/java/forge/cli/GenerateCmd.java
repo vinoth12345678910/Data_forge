@@ -27,15 +27,13 @@ final class GenerateCmd implements Callable<Integer> {
     @Spec CommandSpec spec;
     @Option(names = {"-c", "--config"}, defaultValue = "forge.yml", description = "forge.yml to use") Path config;
     @Option(names = "--manifest-dir", description = "Where the local manifest copy goes (default .forge/manifests next to forge.yml)") Path manifestDir;
-    @Option(names = {"-s", "--scenario"}, description = "Scenario (Phase 3)") String scenario;
+    @Option(names = {"-s", "--scenario"}, description = "Scenario from forge.yml (default if none)") String scenario;
+    @Option(names = "--edge", description = "Edge-case mode: NULLs, maximum lengths, unicode, case-only duplicates, leap days, DST, injection strings") boolean edge;
 
     @Override
     public Integer call() {
         PrintWriter out = spec.commandLine().getOut();
         PrintWriter err = spec.commandLine().getErr();
-        if (scenario != null) {
-            return Forge.notBuilt(spec, 3);
-        }
         try {
             return run(out);
         } catch (ConfigError | RuleError | GenError | PlanError | LoadError | ManifestError | SQLException | java.io.IOException e) {
@@ -45,7 +43,7 @@ final class GenerateCmd implements Callable<Integer> {
     }
 
     private Integer run(PrintWriter out) throws SQLException, java.io.IOException {
-        Live live = new Live(config);
+        Live live = new Live(config, scenario, edge);
         if ("prod".equals(live.conf.connection().env())) {
             throw new ConfigError("refusing to run against env prod. Data Forge never generates into prod.");
         }

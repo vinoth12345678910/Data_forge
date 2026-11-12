@@ -438,6 +438,14 @@ final class Ruled {
             }
             why += " " + r.name();
         }
+        if (k.burst != null && k.burst.in(c.row())) {
+            long nlo = Math.max(lo, k.burst.from);
+            long nhi = Math.min(hi, k.burst.to - 1);
+            if (nlo <= nhi) {
+                lo = nlo;
+                hi = nhi;
+            }
+        }
         for (Limit l : s.asChild()) {
             long p = gen.parentRow(c.table(), l.fk(), c.row(), c.att());
             if (p < 0) {
