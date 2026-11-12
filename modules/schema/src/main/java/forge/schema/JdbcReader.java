@@ -96,11 +96,15 @@ public final class JdbcReader {
             }
         }
         List<Unique> uniques = new ArrayList<>();
+        Map<List<String>, String> named = d == Dialect.SQLITE ? sqliteConstraintNames(c, name) : Map.of();
         for (Map.Entry<String, TreeMap<Integer, String>> e : idx.entrySet()) {
             List<String> uc = new ArrayList<>(e.getValue().values());
             if (!uc.equals(pk)) {
-                uniques.add(new Unique(e.getKey().startsWith("sqlite_autoindex") ? name + "_" + String.join("_", uc) + "_key" : e.getKey(),
-                    uc, List.of(), null, false));
+                String uname = e.getKey();
+                if (uname.startsWith("sqlite_autoindex")) {
+                    uname = named.getOrDefault(uc, name + "_" + String.join("_", uc) + "_key");
+                }
+                uniques.add(new Unique(uname, uc, List.of(), null, false));
             }
         }
         uniques.sort(Comparator.comparing(Unique::name));
@@ -108,6 +112,30 @@ public final class JdbcReader {
             uniques.add(0, new Unique(name + "_pkey", pk, List.of(), null, true));
         }
         return new Table(name, cols, pk, uniques, fks(md, cat, name), checks(c, d, schema, name), null, List.of());
+    }
+
+    private static final java.util.regex.Pattern NAMED_UNIQUE = java.util.regex.Pattern.compile(
+        "constraint\\s+[\"`]?(\\w+)[\"`]?\\s+unique\\s*\\(([^)]*)\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** SQLite does not give a unique constraint's name through JDBC; it is read from the table's own DDL (column list to name). */
+    private static Map<List<String>, String> sqliteConstraintNames(Connection c, String table) throws SQLException {
+        Map<List<String>, String> out = new LinkedHashMap<>();
+        try (PreparedStatement ps = c.prepareStatement("select sql from sqlite_master where type = 'table' and name = ?")) {
+            ps.setString(1, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getString(1) != null) {
+                    var m = NAMED_UNIQUE.matcher(rs.getString(1));
+                    while (m.find()) {
+                        List<String> cols = new ArrayList<>();
+                        for (String col : m.group(2).split(",")) {
+                            cols.add(col.trim().replace("\"", "").replace("`", ""));
+                        }
+                        out.put(cols, m.group(1));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private static List<Fk> fks(DatabaseMetaData md, String cat, String table) throws SQLException {

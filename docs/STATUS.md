@@ -195,3 +195,10 @@
 - Next: P4.2 `p4-drift`.
 - Decisions: not-built exit stays 1 (exit 3 was never approved); `forge verify --json` raw output replaced.
 - Open: the hook cannot commit a red FAST test, so gates are container-tagged classes or bash tests.
+
+## 2026-11-12 P4.2 drift (branch p4-drift, from p4-json)
+- Done: gate first (committed red: `DriftContainerTest` 7 tests), then `Drift`, `SnapshotFile`, `DriftCmd`, `SpecCheck`, init writes `forge.schema.json`, SQLite constraint names read from the DDL. On Postgres, MySQL and SQLite: unchanged = 0 changes and exit 0; type change, added table, added foreign key = warning (printed, exit 0; exit 1 with `--fail-on warning`); dropped column the spec uses = error, exit 1; dropped unused column = warning; no baseline and bad flags = exit 2; forge.yml bytes unchanged in every run (hashed); `--accept` writes only the snapshot. Mutations (severity softened, `--accept` rewriting forge.yml, default threshold lowered) each failed the gate and were restored with git checkout.
+- Not done: DDL file for `--against`; rename detection; `--against` and `--suggest-file` writing untested; the old not-built assertions for drift were removed from `CliTest` and `JsonEnvelopeContainerTest` because drift is built.
+- Next: P4.3 `p4-verify-any`.
+- Decisions: new table, new column, type change are warnings (the user's D1b change); `spec_invalid` errors come from building the generation plan in memory.
+- Open: determinism-auditor and dialect-specialist reviews (fresh sessions).

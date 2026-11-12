@@ -49,6 +49,22 @@ final class Live {
         this.db = new Db(InitCmd.jdbc(c.url()), c.user(), password);
     }
 
+    /** Reads only the schema (drift must work even when the spec no longer fits it). */
+    void openGraph() throws SQLException {
+        graph = read(conf.connection().url());
+    }
+
+    /** The schema of a database at a url, with this spec's user and password. */
+    SchemaGraph read(String url) throws SQLException {
+        Db d = new Db(InitCmd.jdbc(url), conf.connection().user(), db.password());
+        if (url.startsWith("postgres://")) {
+            return PgReader.read(d, conf.connection().schema());
+        }
+        try (java.sql.Connection c = d.open()) {
+            return forge.schema.JdbcReader.read(c);
+        }
+    }
+
     /** Reads the schema and checks the rules against it. */
     void open() throws SQLException {
         if (conf.connection().url().startsWith("postgres://")) {

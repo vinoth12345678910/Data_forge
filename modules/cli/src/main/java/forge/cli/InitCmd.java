@@ -115,6 +115,13 @@ final class InitCmd implements Callable<Integer> {
                 }
             }
         }
+        Path snap = out.toAbsolutePath().normalize().getParent().resolve(DriftCmd.SNAPSHOT);
+        boolean wrote = !Files.exists(snap);
+        if (wrote) {
+            Files.writeString(snap, forge.schema.SnapshotFile.write(g));
+            e.out.println("Wrote " + snap + " (the baseline forge drift compares with).");
+        }
+        e.data.put("snapshot_written", wrote);
         e.data.put("tables", g.tables().size());
         e.data.put("seed", seed);
         e.data.put("out", out.toString());

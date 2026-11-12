@@ -11,7 +11,7 @@ import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
 @Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
-    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, Forge.Drift.class, Forge.Cleanup.class,
+    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, Forge.Cleanup.class,
         Forge.Readiness.class})
 public final class Forge implements Runnable {
 
@@ -47,15 +47,6 @@ public final class Forge implements Runnable {
     static int notBuilt(CommandSpec spec, int phase) {
         spec.commandLine().getErr().println("forge " + spec.name() + ": not built yet (Phase " + phase + ")");
         return 1;
-    }
-
-    @Command(name = "drift", description = "Check the schema against forge.yml (Phase 4).")
-    static final class Drift implements java.util.concurrent.Callable<Integer> {
-        @Spec CommandSpec spec;
-
-        public Integer call() {
-            return new Emit(spec).notBuilt("drift", 4);
-        }
     }
 
     @Command(name = "cleanup", description = "Remove generated rows (Phase 5).")
