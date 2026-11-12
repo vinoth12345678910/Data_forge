@@ -173,7 +173,7 @@ class DriftContainerTest {
                     case TABLE -> ddl + "\ncreate table audit_log (id bigint primary key, note text not null);\n";
                     case DROP_USED -> ddl.replaceFirst("\\n\\s*placed_at\\s+timestamp not null,", "");
                     case DROP_UNUSED -> ddl.replaceFirst("\\n\\s*active\\s+boolean not null default true,", "");
-                    case FK -> ddl.replaceFirst("(create table merchandise \\(.*?)(price_paise\\s+bigint not null,)", "$1$2\n    warehouse_id bigint references warehouses (id),");
+                    case FK -> ddl.replaceFirst("(?s)(create table merchandise \\(.*?)(price_paise\\s+bigint not null,)", "$1$2\n    warehouse_id bigint references warehouses (id),");
                 };
                 assertFalse(edited.equals(ddl), "the DDL edit for " + m + " changed nothing");
                 Path two = dir.resolve("two.db");

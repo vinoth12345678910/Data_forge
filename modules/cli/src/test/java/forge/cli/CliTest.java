@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class CliTest {
 
     @ParameterizedTest
-    @CsvSource({"drift,4", "cleanup,5", "readiness,5"})
+    @CsvSource({"cleanup,5", "readiness,5"})
     void commandsNotBuiltYetSaySoAndFail(String name, int phase) {
         Run r = Run.of(name);
         assertNotEquals(0, r.code());

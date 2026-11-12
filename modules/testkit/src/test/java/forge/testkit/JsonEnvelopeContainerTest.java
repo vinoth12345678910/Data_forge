@@ -188,7 +188,7 @@ class JsonEnvelopeContainerTest {
 
     @Test
     void notBuiltCommandsReturnAJsonErrorNamingThePhase() throws Exception {
-        for (String[] c : new String[][] {{"cleanup", "5"}, {"readiness", "5"}, {"drift", "4"}}) {
+        for (String[] c : new String[][] {{"cleanup", "5"}, {"readiness", "5"}}) {
             JsonNode doc = envelope(forge(c[0], "--json"), c[0]);
             assertFalse(doc.get("ok").asBoolean());
             JsonNode e = doc.get("errors").get(0);
