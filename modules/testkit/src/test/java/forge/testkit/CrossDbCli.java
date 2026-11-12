@@ -32,6 +32,27 @@ final class CrossDbCli {
         return out.toString();
     }
 
+    /** The four ways to call generate: plain, with a scenario, with edge mode, and both. */
+    static final String[][] MODES = {{}, {"-s", "sale_rush"}, {"--edge"}, {"-s", "sale_rush", "--edge"}};
+
+    /** Every generate path must say plainly that the data is partial and that deferred rules are not checked. */
+    static void summary(String where, String[] mode, String out) {
+        String label = where + " " + String.join(" ", mode);
+        assertTrue(out.contains("Loaded "), label + ": " + out);
+        assertTrue(out.contains("partial"), label + ": the summary must say plainly that the data is partial: " + out);
+        assertTrue(out.contains("not checked"), label + ": the summary must say that deferred rules are not checked: " + out);
+    }
+
+    /** Runs generate in one mode and checks its summary. */
+    static void generate(String where, Path yml, String[] mode) {
+        String[] args = new String[3 + mode.length];
+        args[0] = "generate";
+        args[1] = "-c";
+        args[2] = yml.toString();
+        System.arraycopy(mode, 0, args, 3, mode.length);
+        summary(where, mode, run(0, args));
+    }
+
     /** Generates with the sale_rush scenario, then verifies, on a database that already has the schema and is empty. */
     static void scenario(Path yml, Path dir) throws Exception {
         String out = run(0, "generate", "-c", yml.toString(), "-s", "sale_rush");
