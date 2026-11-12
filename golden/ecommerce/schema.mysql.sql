@@ -1,0 +1,207 @@
+-- ecommerce translated for MySQL 8.4: portable subset of schema.sql (hand-checked). Differences: ids are plain bigint primary keys (the generator supplies them), no deferrable constraints (cycles load NULL-then-update), the Postgres-only ttl check and expression unique index are simplified. Run by the P3.5 gate.
+-- ecommerce: catalogue, stock reservations, coupons, orders, shipments, returns. Postgres.
+-- Money is integer minor units (columns end in _minor); the one currency lives in meta.
+
+create table meta (
+    id           smallint primary key default 1,
+    generated_at datetime not null,
+    currency     char(3) not null,
+    constraint meta_one_row check (id = 1)
+);
+
+create table users (
+    id         bigint primary key,
+    email      varchar(255) not null unique,
+    full_name  varchar(255) not null,
+    created_at datetime not null
+);
+
+-- Self-referencing tree. Roots have a null parent.
+create table categories (
+    id        bigint primary key,
+    parent_id bigint,
+    name      varchar(255) not null,
+    constraint categories_parent_fk foreign key (parent_id) references categories (id),
+    constraint categories_not_own_parent check (parent_id <> id)
+);
+create unique index categories_sibling_name_key on categories (parent_id, name);
+
+create table products (
+    id          bigint primary key,
+    category_id bigint not null,
+    sku         varchar(255) not null unique,
+    name        varchar(255) not null,
+    price_minor bigint not null,
+    active      boolean not null default true,
+    constraint products_category_fk foreign key (category_id) references categories (id),
+    constraint products_price_nonneg check (price_minor >= 0)
+);
+
+-- on_hand = physical units; reserved = units held by active reservations.
+create table inventory (
+    product_id  bigint primary key,
+    opening_qty int not null,
+    on_hand     int not null,
+    reserved    int not null,
+    constraint inventory_product_fk foreign key (product_id) references products (id),
+    constraint inventory_opening_nonneg check (opening_qty >= 0),
+    constraint inventory_reserved_within_on_hand check (reserved >= 0 and reserved <= on_hand)
+);
+
+create table coupons (
+    id             bigint primary key,
+    code           varchar(255) not null unique,
+    discount_type  varchar(255) not null,
+    value          int not null,
+    max_uses       int,
+    per_user_limit int,
+    starts_at      datetime not null,
+    ends_at        datetime not null,
+    constraint coupons_type_valid check (discount_type in ('percent', 'fixed')),
+    constraint coupons_value_valid check (
+        (discount_type = 'percent' and value between 1 and 100)
+        or (discount_type = 'fixed' and value > 0)),
+    constraint coupons_window_ordered check (starts_at < ends_at),
+    constraint coupons_limits_positive check (coalesce(max_uses, 1) > 0 and coalesce(per_user_limit, 1) > 0)
+);
+
+create table orders (
+    id             bigint primary key,
+    user_id        bigint not null,
+    status         varchar(255) not null,
+    subtotal_minor bigint not null,
+    discount_minor bigint not null,
+    shipping_minor bigint not null,
+    total_minor    bigint not null,
+    placed_at      datetime not null,
+    updated_at     datetime not null,
+    constraint orders_user_fk foreign key (user_id) references users (id),
+    constraint orders_status_valid check (status in
+        ('pending', 'paid', 'partially_shipped', 'shipped', 'cancelled', 'returned')),
+    constraint orders_amounts_nonneg check (
+        subtotal_minor >= 0 and discount_minor >= 0 and shipping_minor >= 0 and total_minor >= 0)
+);
+
+create table order_items (
+    id               bigint primary key,
+    order_id         bigint not null,
+    product_id       bigint not null,
+    quantity         int not null,
+    unit_price_minor bigint not null,
+    constraint order_items_order_fk foreign key (order_id) references orders (id),
+    constraint order_items_product_fk foreign key (product_id) references products (id),
+    constraint order_items_order_product_key unique (order_id, product_id),
+    constraint order_items_id_order_key unique (id, order_id),
+    constraint order_items_id_product_key unique (id, product_id),
+    constraint order_items_quantity_positive check (quantity > 0),
+    constraint order_items_price_nonneg check (unit_price_minor >= 0)
+);
+
+create table coupon_redemptions (
+    id          bigint primary key,
+    coupon_id   bigint not null,
+    user_id     bigint not null,
+    order_id    bigint not null,
+    redeemed_at datetime not null,
+    constraint coupon_redemptions_coupon_fk foreign key (coupon_id) references coupons (id),
+    constraint coupon_redemptions_user_fk foreign key (user_id) references users (id),
+    constraint coupon_redemptions_order_fk foreign key (order_id) references orders (id),
+    constraint coupon_redemptions_order_key unique (order_id)
+);
+
+create table reservations (
+    id            bigint primary key,
+    order_item_id bigint not null,
+    product_id    bigint not null,
+    quantity      int not null,
+    status        varchar(255) not null,
+    created_at    datetime not null,
+    expires_at    datetime not null,
+    constraint reservations_item_product_fk foreign key (order_item_id, product_id)
+        references order_items (id, product_id),
+    constraint reservations_order_item_key unique (order_item_id),
+    constraint reservations_status_valid check (status in ('active', 'converted', 'expired', 'released')),
+    constraint reservations_quantity_positive check (quantity > 0),
+    constraint reservations_expires_after_creation check (expires_at > created_at)
+);
+
+-- Several attempts per order, numbered 1..n.
+create table payments (
+    id           bigint primary key,
+    order_id     bigint not null,
+    attempt_no   int not null,
+    status       varchar(255) not null,
+    amount_minor bigint not null,
+    method       varchar(255) not null,
+    created_at   datetime not null,
+    completed_at datetime,
+    constraint payments_order_fk foreign key (order_id) references orders (id),
+    constraint payments_order_attempt_key unique (order_id, attempt_no),
+    constraint payments_attempt_positive check (attempt_no > 0),
+    constraint payments_status_valid check (status in ('initiated', 'succeeded', 'failed')),
+    constraint payments_amount_positive check (amount_minor > 0),
+    constraint payments_completion_valid check (
+        (status = 'initiated') = (completed_at is null)
+        and (completed_at is null or completed_at >= created_at))
+);
+
+create table shipments (
+    id          bigint primary key,
+    order_id    bigint not null,
+    status      varchar(255) not null,
+    carrier     varchar(255) not null,
+    tracking_no varchar(255),
+    shipped_at  datetime,
+    delivered_at datetime,
+    constraint shipments_order_fk foreign key (order_id) references orders (id),
+    constraint shipments_id_order_key unique (id, order_id),
+    constraint shipments_status_valid check (status in ('preparing', 'shipped', 'delivered')),
+    constraint shipments_status_times_valid check (
+        (status = 'preparing' and shipped_at is null and delivered_at is null)
+        or (status = 'shipped' and shipped_at is not null and delivered_at is null)
+        or (status = 'delivered' and shipped_at is not null and delivered_at is not null
+            and delivered_at >= shipped_at))
+);
+
+-- Composite key. order_id is repeated so both FKs prove shipment and item share an order.
+create table shipment_items (
+    shipment_id   bigint not null,
+    order_item_id bigint not null,
+    order_id      bigint not null,
+    quantity      int not null,
+    primary key (shipment_id, order_item_id),
+    constraint shipment_items_shipment_fk foreign key (shipment_id, order_id)
+        references shipments (id, order_id),
+    constraint shipment_items_order_item_fk foreign key (order_item_id, order_id)
+        references order_items (id, order_id),
+    constraint shipment_items_quantity_positive check (quantity > 0)
+);
+
+create table returns (
+    id           bigint primary key,
+    order_item_id bigint not null,
+    quantity     int not null,
+    reason       varchar(255) not null,
+    status       varchar(255) not null,
+    restocked_qty int,
+    created_at   datetime not null,
+    received_at  datetime,
+    constraint returns_order_item_fk foreign key (order_item_id) references order_items (id),
+    constraint returns_status_valid check (status in ('requested', 'approved', 'received', 'rejected')),
+    constraint returns_quantity_positive check (quantity > 0),
+    constraint returns_restock_valid check (
+        (status = 'received' and restocked_qty is not null and restocked_qty between 0 and quantity
+            and received_at is not null)
+        or (status <> 'received' and restocked_qty is null and received_at is null))
+);
+
+create table refunds (
+    id           bigint primary key,
+    payment_id   bigint not null,
+    return_id    bigint,
+    amount_minor bigint not null,
+    created_at   datetime not null,
+    constraint refunds_payment_fk foreign key (payment_id) references payments (id),
+    constraint refunds_return_fk foreign key (return_id) references returns (id),
+    constraint refunds_amount_positive check (amount_minor > 0)
+);

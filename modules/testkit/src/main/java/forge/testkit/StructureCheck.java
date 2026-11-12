@@ -60,7 +60,7 @@ public final class StructureCheck {
             }
             for (Check ck : t.checks()) {
                 if (!ck.expr().contains("VALUE")) {
-                    count(c, out, "CHECK " + t.name() + "." + ck.name(), "select count(*)" + from + " where not (" + ck.expr() + ")");
+                    count(c, out, "CHECK " + t.name() + "." + ck.name(), "select count(*)" + from + " where not (" + portable(ck.expr()) + ")");
                 }
             }
         }
@@ -74,6 +74,11 @@ public final class StructureCheck {
                 out.add(what + ": " + rs.getLong(1) + " rows");
             }
         }
+    }
+
+    /** num_nonnulls(a, b) is Postgres only; MySQL and SQLite count the not-null tests instead. */
+    private static String portable(String expr) {
+        return expr.replaceAll("num_nonnulls\\((\\w+), (\\w+)\\)", "((($1 is not null) + ($2 is not null)))");
     }
 
     private static String q(String ident) {

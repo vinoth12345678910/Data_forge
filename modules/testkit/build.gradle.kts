@@ -10,6 +10,9 @@ dependencies {
     "testImplementation"(project(":rules"))
     "testImplementation"(libs.findLibrary("testcontainers-postgres").get())
     "testImplementation"(libs.findLibrary("testcontainers-junit").get())
+    "testImplementation"(libs.findLibrary("testcontainers-mysql").get())
+    "testImplementation"(libs.findLibrary("sqlite-driver").get())
+    "testImplementation"(libs.findLibrary("mysql-driver").get())
     "testImplementation"(libs.findLibrary("jackson-yaml").get())
     "testImplementation"(libs.findLibrary("jqwik").get())
 }
