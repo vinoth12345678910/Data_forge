@@ -1,0 +1,106 @@
+# Phase 3 configuration for events-merch: the Phase 2 rules plus state machines (P3.1). Rule names equal the names in expected.yml.
+version: 1
+seed: 42
+clock: "2026-06-01T00:00:00Z"
+ddl: schema.sql
+tables:
+  events:
+    rows: 100
+  merchandise:
+    rows: 100
+  meta:
+    rows: 1
+  order_items:
+    rows: 100
+  orders:
+    rows: 100
+  payments:
+    rows: 100
+  refunds:
+    rows: 100
+  registrations:
+    rows: 100
+  stock:
+    rows: 100
+  ticket_types:
+    rows: 100
+  users:
+    rows: 100
+  warehouses:
+    rows: 100
+rules:
+  - name: order_total_matches_items
+    derive: orders.total_paise = sum(order_items.quantity * order_items.unit_price_paise)
+  - name: succeeded_amount_equals_total
+    derive: payments.amount_paise = payments.order_id.total_paise when payments.status = 'succeeded'
+  - name: payment_completed_after_created
+    check: payments.completed_at >= payments.created_at
+  - name: ticket_quantity_within_capacity
+    limit: sum(ticket_types.quantity) per ticket_types.event_id <= events.capacity
+  - name: registration_within_ticket_quantity
+    limit: sum(registrations.quantity) per registrations.ticket_type_id <= ticket_types.quantity
+  - name: refund_within_payment
+    limit: sum(refunds.amount_paise) per refunds.payment_id <= payments.amount_paise
+  - name: paid_order_has_one_succeeded_payment
+    verify: count(payments.id where payments.status = 'succeeded') = 1 when orders.status in ('paid', 'fulfilled', 'refunded')
+  - name: unpaid_order_has_no_succeeded_payment
+    verify: count(payments.id where payments.status = 'succeeded') = 0 when orders.status in ('pending', 'cancelled')
+  - name: latest_payment_belongs_to_order
+    verify: orders.latest_payment_id.order_id = orders.id when orders.latest_payment_id is not null
+  - name: latest_payment_is_latest
+    verify: count(payments.id) = 0 or (orders.latest_payment_id is not null and orders.latest_payment_id.created_at >= max(payments.created_at))
+  - name: refund_only_on_succeeded_payment
+    verify: refunds.payment_id.status = 'succeeded'
+  - name: registration_before_event
+    before: registrations.created_at < registrations.ticket_type_id.event_id.starts_at
+    by: 1h..30d
+  - name: referrer_joined_first
+    after: users.created_at >= users.referred_by.created_at when users.referred_by is not null
+    by: 0s..90d
+  - name: refund_after_payment
+    after: refunds.created_at >= refunds.payment_id.completed_at
+    by: 0s..14d
+  - name: order_time_after_user_joined
+    after: orders.placed_at >= orders.user_id.created_at
+    by: 0s..3650d
+states:
+  events:
+    column: status
+    start: draft
+    mix: { draft: 10, on_sale: 40, sold_out: 10, closed: 30, cancelled: 10 }
+    transitions: [draft -> on_sale, on_sale -> sold_out, on_sale -> closed, sold_out -> closed, draft -> cancelled, on_sale -> cancelled, sold_out -> cancelled]
+  orders:
+    column: status
+    start: pending
+    mix: { pending: 20, paid: 30, fulfilled: 25, cancelled: 10, refunded: 15 }
+    transitions: [pending -> paid, paid -> fulfilled, pending -> cancelled, paid -> refunded, fulfilled -> refunded]
+    children:
+      payments:
+        fk: order_id
+        status: status
+        at: { column: created_at, from: placed_at, gap: 3600 }
+        latest: latest_payment_id
+        by_state:
+          pending: [initiated]
+          paid: [failed*, succeeded]
+          fulfilled: [failed*, succeeded]
+          cancelled: [failed*]
+          refunded: [succeeded]
+  payments:
+    column: status
+    start: initiated
+    transitions: [initiated -> succeeded, initiated -> failed]
+    children:
+      refunds:
+        fk: payment_id
+        by_state:
+          initiated: []
+          failed: []
+          succeeded: ["refund?"]
+scenarios:
+  default: {}
+  sale_rush:
+    extends: default
+    rows: { orders: 2x, order_items: 2x }
+    mix: { orders.status: { pending: 10, paid: 60, fulfilled: 20, cancelled: 5, refunded: 5 } }
+    burst: { column: orders.placed_at, from: "2026-03-01T00:00:00Z", to: "2026-03-08T00:00:00Z", share: 40 }

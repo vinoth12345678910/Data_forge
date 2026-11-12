@@ -25,7 +25,7 @@ public final class ConfigReader {
 
     private static final ObjectMapper YAML =
         new ObjectMapper(new YAMLFactory()).enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-    private static final Pattern URL = Pattern.compile("postgres://[^/@:?\\s]+(:\\d+)?/[^/@?\\s]+");
+    private static final Pattern URL = Pattern.compile("(postgres|mysql)://[^/@:?\\s]+(:\\d+)?/[^/@?\\s]+|sqlite:[^\\s@?]+");
 
     private ConfigReader() {}
 
@@ -40,7 +40,7 @@ public final class ConfigReader {
             throw new ConfigError("forge.yml must be a map of keys.");
         }
         keys(root, "", "version", "seed", "clock", "locale", "connection", "ddl", "use", "tables",
-            "rules", "states", "scenarios", "cleanup");
+            "rules", "states", "scenarios", "cleanup", "manifest_dir");
 
         JsonNode version = root.get("version");
         if (version == null || !version.isInt() || version.intValue() != 1) {
@@ -60,7 +60,7 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        for (String reserved : List.of("use", "states", "scenarios", "cleanup")) {
+        for (String reserved : List.of("use", "cleanup")) {
             JsonNode n = root.get(reserved);
             if (n != null && !n.isNull() && !n.isEmpty()) {
                 throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
@@ -81,7 +81,112 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules);
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE,
+            text(root, "manifest_dir", ""));
+    }
+
+    private static Map<String, Config.StateConf> states(JsonNode n) {
+        Map<String, Config.StateConf> out = new TreeMap<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isObject()) {
+            throw new ConfigError("states: a map of table name to machine is required.");
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = n.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            String path = "states." + e.getKey();
+            JsonNode m = e.getValue();
+            keys(m, path, "column", "start", "mix", "transitions", "children");
+            String column = text(m, "column", path);
+            if (column == null) {
+                throw new ConfigError(path + ".column: required.");
+            }
+            Map<String, Integer> mix = new TreeMap<>();
+            JsonNode mx = m.get("mix");
+            if (mx != null && !mx.isNull()) {
+                if (!mx.isObject()) {
+                    throw new ConfigError(path + ".mix: a map of status to whole-number weight is required.");
+                }
+                for (Iterator<Map.Entry<String, JsonNode>> w = mx.fields(); w.hasNext(); ) {
+                    Map.Entry<String, JsonNode> we = w.next();
+                    if (!we.getValue().isInt() || we.getValue().intValue() < 0) {
+                        throw new ConfigError(path + ".mix." + we.getKey() + ": a whole number >= 0 is required.");
+                    }
+                    mix.put(we.getKey(), we.getValue().intValue());
+                }
+            }
+            List<String[]> trans = new ArrayList<>();
+            JsonNode tr = m.get("transitions");
+            if (tr != null && !tr.isNull()) {
+                if (!tr.isArray()) {
+                    throw new ConfigError(path + ".transitions: a list such as [pending -> paid] is required.");
+                }
+                for (int i = 0; i < tr.size(); i++) {
+                    String[] ft = tr.get(i).asText().split("\\s*->\\s*");
+                    if (ft.length != 2 || ft[0].isBlank() || ft[1].isBlank()) {
+                        throw new ConfigError(path + ".transitions[" + i + "]: write it as from -> to.");
+                    }
+                    trans.add(new String[] {ft[0].trim(), ft[1].trim()});
+                }
+            }
+            Map<String, Config.ChildConf> kids = new TreeMap<>();
+            JsonNode ch = m.get("children");
+            if (ch != null && !ch.isNull()) {
+                if (!ch.isObject()) {
+                    throw new ConfigError(path + ".children: a map of child table to layout is required.");
+                }
+                for (Iterator<Map.Entry<String, JsonNode>> c = ch.fields(); c.hasNext(); ) {
+                    Map.Entry<String, JsonNode> ce = c.next();
+                    kids.put(ce.getKey(), child(ce.getValue(), path + ".children." + ce.getKey()));
+                }
+            }
+            out.put(e.getKey(), new Config.StateConf(column, text(m, "start", path), mix, trans, kids));
+        }
+        return out;
+    }
+
+    private static Config.ChildConf child(JsonNode c, String path) {
+        keys(c, path, "fk", "status", "number", "at", "latest", "by_state");
+        String fk = text(c, "fk", path);
+        if (fk == null) {
+            throw new ConfigError(path + ".fk: required.");
+        }
+        String atCol = null;
+        String atFrom = null;
+        int gap = 3600;
+        JsonNode at = c.get("at");
+        if (at != null && !at.isNull()) {
+            keys(at, path + ".at", "column", "from", "gap");
+            atCol = text(at, "column", path + ".at");
+            atFrom = text(at, "from", path + ".at");
+            if (atCol == null || atFrom == null) {
+                throw new ConfigError(path + ".at: column and from are required.");
+            }
+            if (at.has("gap")) {
+                if (!at.get("gap").isInt() || at.get("gap").intValue() < 1) {
+                    throw new ConfigError(path + ".at.gap: whole seconds >= 1 are required.");
+                }
+                gap = at.get("gap").intValue();
+            }
+        }
+        JsonNode bs = c.get("by_state");
+        if (bs == null || !bs.isObject() || bs.isEmpty()) {
+            throw new ConfigError(path + ".by_state: required, a map of state to a list of child statuses.");
+        }
+        Map<String, List<String>> by = new TreeMap<>();
+        for (Iterator<Map.Entry<String, JsonNode>> it = bs.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            if (!e.getValue().isArray()) {
+                throw new ConfigError(path + ".by_state." + e.getKey() + ": a list is required (use [] for none).");
+            }
+            List<String> l = new ArrayList<>();
+            for (JsonNode x : e.getValue()) {
+                l.add(x.asText());
+            }
+            by.put(e.getKey(), l);
+        }
+        return new Config.ChildConf(fk, text(c, "status", path), text(c, "number", path), atCol, atFrom, gap, text(c, "latest", path), by);
     }
 
     private static final Pattern RULE_NAME = Pattern.compile("[a-z][a-z0-9_]*");
@@ -101,7 +206,7 @@ public final class ConfigReader {
             if (!r.isObject()) {
                 throw new ConfigError(path + ": a map with name and one of derive, check, limit is required.");
             }
-            keys(r, path, "name", "derive", "check", "limit", "description");
+            keys(r, path, "name", "derive", "check", "limit", "verify", "after", "before", "by", "description");
             String name = text(r, "name", path);
             if (name == null) {
                 throw new ConfigError(path + ".name: required.");
@@ -114,7 +219,7 @@ public final class ConfigReader {
             }
             String kind = null;
             String text = null;
-            for (String k : List.of("derive", "check", "limit")) {
+            for (String k : List.of("derive", "check", "limit", "verify", "after", "before")) {
                 String v = text(r, k, path);
                 if (v != null) {
                     if (kind != null) {
@@ -127,7 +232,15 @@ public final class ConfigReader {
             if (kind == null) {
                 throw new ConfigError(path + ": exactly one of derive, check, limit is required.");
             }
-            out.add(new Config.RuleConf(name, kind, text, text(r, "description", path)));
+            String by = text(r, "by", path);
+            if (by != null && !(kind.equals("after") || kind.equals("before"))) {
+                throw new ConfigError(path + ".by: only an after or before rule has a by.");
+            }
+            if (kind.equals("after") || kind.equals("before")) {
+                Dur.range(by, path + ".by");
+                kind = "check";
+            }
+            out.add(new Config.RuleConf(name, kind, text, text(r, "description", path), by));
         }
         return out;
     }
@@ -145,7 +258,7 @@ public final class ConfigReader {
             throw new ConfigError("connection.url: must not carry a user or password; use connection.user and connection.password_env.");
         }
         if (!URL.matcher(url).matches()) {
-            throw new ConfigError("connection.url: expected postgres://host:port/database, got " + url);
+            throw new ConfigError("connection.url: expected postgres://host:port/database, mysql://host:port/database or sqlite:path/to/file.db, got " + url);
         }
         String env = text(n, "env", "connection");
         if (env == null || !Config.ENVS.contains(env)) {
@@ -160,7 +273,7 @@ public final class ConfigReader {
         if (n == null || n.isNull()) {
             return new TableConf(null, false, new TreeMap<>());
         }
-        keys(n, path, "rows", "keep", "columns");
+        keys(n, path, "rows", "keep", "columns", "correlate");
         Integer rows = null;
         JsonNode r = n.get("rows");
         if (r != null) {
@@ -184,11 +297,26 @@ public final class ConfigReader {
                 cols.put(e.getKey(), column(e.getValue(), path + ".columns." + e.getKey()));
             }
         }
-        return new TableConf(rows, keep, cols);
+        Map<String, String> corr = new TreeMap<>();
+        JsonNode co = n.get("correlate");
+        if (co != null && !co.isNull()) {
+            keys(co, path + ".correlate", "leader", "currency", "phone_code");
+            for (Iterator<Map.Entry<String, JsonNode>> it = co.fields(); it.hasNext(); ) {
+                Map.Entry<String, JsonNode> e = it.next();
+                if (!e.getValue().isTextual()) {
+                    throw new ConfigError(path + ".correlate." + e.getKey() + ": a column name is required.");
+                }
+                corr.put(e.getKey(), e.getValue().textValue());
+            }
+            if (!corr.containsKey("leader")) {
+                throw new ConfigError(path + ".correlate.leader: required, the column that holds the country.");
+            }
+        }
+        return new TableConf(rows, keep, cols, corr);
     }
 
     private static ColConf column(JsonNode n, String path) {
-        keys(n, path, "gen", "locale", "unique", "null_rate", "values", "min", "max");
+        keys(n, path, "gen", "locale", "unique", "null_rate", "values", "min", "max", "dist", "param", "season");
         String gen = text(n, "gen", path);
         if (gen != null && !Config.GENS.contains(gen)) {
             throw new ConfigError(path + ".gen: unknown generator " + gen + ". Known: " + Config.GENS);
@@ -217,7 +345,126 @@ public final class ConfigReader {
             throw new ConfigError(path + ": gen: pick needs values.");
         }
         return new ColConf(gen, text(n, "locale", path), bool(n, "unique", path), nullPer10k, values,
-            scalar(n, "min", path), scalar(n, "max", path));
+            scalar(n, "min", path), scalar(n, "max", path), shape(n, path));
+    }
+
+    private static Map<String, Config.Scenario> scenarios(JsonNode n) {
+        Map<String, Config.Scenario> out = new TreeMap<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isObject()) {
+            throw new ConfigError("scenarios: a map of scenario name to settings is required.");
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = n.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            String path = "scenarios." + e.getKey();
+            JsonNode s = e.getValue();
+            if (s == null || s.isNull()) {
+                out.put(e.getKey(), new Config.Scenario(null, Map.of(), Map.of(), List.of(), null));
+                continue;
+            }
+            keys(s, path, "extends", "rows", "mix", "burst", "edge");
+            Map<String, String> rows = new TreeMap<>();
+            JsonNode rn = s.get("rows");
+            if (rn != null && !rn.isNull()) {
+                keys(rn, path + ".rows", rn.isObject() ? java.util.stream.StreamSupport.stream(
+                    java.util.Spliterators.spliteratorUnknownSize(rn.fieldNames(), 0), false).toArray(String[]::new) : new String[0]);
+                for (Iterator<Map.Entry<String, JsonNode>> r = rn.fields(); r.hasNext(); ) {
+                    Map.Entry<String, JsonNode> re = r.next();
+                    String v = re.getValue().asText();
+                    if (!v.matches("[0-9]+x?")) {
+                        throw new ConfigError(path + ".rows." + re.getKey() + ": a whole number or a multiple such as 5x.");
+                    }
+                    rows.put(re.getKey(), v);
+                }
+            }
+            Map<String, Map<String, Integer>> mix = new TreeMap<>();
+            JsonNode mn = s.get("mix");
+            if (mn != null && !mn.isNull()) {
+                for (Iterator<Map.Entry<String, JsonNode>> m = mn.fields(); m.hasNext(); ) {
+                    Map.Entry<String, JsonNode> me = m.next();
+                    Map<String, Integer> w = new TreeMap<>();
+                    for (Iterator<Map.Entry<String, JsonNode>> x = me.getValue().fields(); x.hasNext(); ) {
+                        Map.Entry<String, JsonNode> xe = x.next();
+                        if (!xe.getValue().isInt() || xe.getValue().intValue() < 0) {
+                            throw new ConfigError(path + ".mix." + me.getKey() + "." + xe.getKey() + ": a whole number >= 0.");
+                        }
+                        w.put(xe.getKey(), xe.getValue().intValue());
+                    }
+                    mix.put(me.getKey(), w);
+                }
+            }
+            List<Config.Burst> bursts = new ArrayList<>();
+            JsonNode bn = s.get("burst");
+            if (bn != null && !bn.isNull()) {
+                for (JsonNode b : bn.isArray() ? bn : new com.fasterxml.jackson.databind.node.ArrayNode(null, List.of(bn))) {
+                    keys(b, path + ".burst", "column", "from", "to", "share");
+                    String col = text(b, "column", path + ".burst");
+                    String from = text(b, "from", path + ".burst");
+                    String to = text(b, "to", path + ".burst");
+                    JsonNode sh = b.get("share");
+                    if (col == null || from == null || to == null || sh == null || !sh.isInt() || sh.intValue() < 1 || sh.intValue() > 100) {
+                        throw new ConfigError(path + ".burst: column, from, to and share (1 to 100) are required.");
+                    }
+                    try {
+                        if (!Instant.parse(from).isBefore(Instant.parse(to))) {
+                            throw new ConfigError(path + ".burst: from must be before to.");
+                        }
+                    } catch (DateTimeParseException ex) {
+                        throw new ConfigError(path + ".burst: from and to are ISO-8601 UTC instants.");
+                    }
+                    bursts.add(new Config.Burst(col, from, to, sh.intValue()));
+                }
+            }
+            out.put(e.getKey(), new Config.Scenario(text(s, "extends", path), rows, mix, bursts, bool(s, "edge", path)));
+        }
+        return out;
+    }
+
+    private static Config.Shape shape(JsonNode n, String path) {
+        String dist = text(n, "dist", path);
+        JsonNode param = n.get("param");
+        JsonNode season = n.get("season");
+        if (dist == null && season == null && param == null) {
+            return null;
+        }
+        if (dist != null && !(dist.equals("zipf") || dist.equals("pareto") || dist.equals("uniform"))) {
+            throw new ConfigError(path + ".dist: zipf, pareto or uniform, got " + dist);
+        }
+        if (param != null && (!param.isInt() || param.intValue() < 50 || param.intValue() > 500)) {
+            throw new ConfigError(path + ".param: whole percent from 50 to 500 (120 means 1.2).");
+        }
+        if (dist != null && !dist.equals("uniform") && param == null) {
+            throw new ConfigError(path + ".param: required with dist " + dist + " (120 means 1.2).");
+        }
+        String by = null;
+        List<Integer> w = null;
+        if (season != null) {
+            keys(season, path + ".season", "by", "weights");
+            by = text(season, "by", path + ".season");
+            int want = "month".equals(by) ? 12 : "weekday".equals(by) ? 7 : "hour".equals(by) ? 24 : -1;
+            if (want < 0) {
+                throw new ConfigError(path + ".season.by: month, weekday or hour.");
+            }
+            JsonNode wn = season.get("weights");
+            if (wn == null || !wn.isArray() || wn.size() != want) {
+                throw new ConfigError(path + ".season.weights: a list of " + want + " whole numbers is required.");
+            }
+            w = new ArrayList<>();
+            long sum = 0;
+            for (JsonNode x : wn) {
+                if (!x.isInt() || x.intValue() < 0) {
+                    throw new ConfigError(path + ".season.weights: whole numbers >= 0.");
+                }
+                w.add(x.intValue());
+                sum += x.intValue();
+            }
+            if (sum == 0) {
+                throw new ConfigError(path + ".season.weights: they add up to 0.");
+            }
+        }
+        return new Config.Shape(dist == null || dist.equals("uniform") ? null : dist, param == null ? null : param.intValue(), by, w);
     }
 
     private static void keys(JsonNode n, String path, String... allowed) {

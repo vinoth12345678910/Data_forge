@@ -27,6 +27,67 @@ docker_up() { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; 
 
 has_tests() { find modules -path '*/src/test/*' -name "$1" 2>/dev/null | grep -q .; }
 
+# e. clean-machine build: a fresh container, a fresh JDK, a fresh copy of the project (no .git, no build output,
+# nothing from the host's ~/.gradle). Only DOWNLOADED dependencies are kept between runs, in the named Docker volume
+# $GRADLE_VOLUME, used as the Gradle user home inside the container. Build output never goes in the volume
+# (the project is a new copy every run and the Gradle build cache is off).
+# Network timeouts are raised for this container only. The build is retried ONCE, and only when the failure text is a
+# network error and not a compile or test failure. PASS is printed only when the build exited 0.
+GRADLE_VOLUME="${GRADLE_VOLUME:-forge-gradle-cache}"
+NET_ERRORS='Read timed out|Remote host terminated the handshake|Connection reset'
+NOT_NETWORK='error: |Compilation failed|tests completed|There were failing tests'
+
+step_e() {
+  echo ">> e. clean-machine build"
+  if ! docker_up; then
+    echo "SKIPPED: Docker is not running"
+    record "SKIPPED" "e. clean-machine build (Docker not running)"
+    return
+  fi
+  local cache=cold
+  if docker volume inspect "$GRADLE_VOLUME" >/dev/null 2>&1 \
+    && docker run --rm -v "$GRADLE_VOLUME":/gradle-home "$IMAGE" sh -c 'ls /gradle-home/caches/modules-2 >/dev/null 2>&1'; then
+    cache=warm
+  fi
+  echo "CACHE: $cache (volume $GRADLE_VOLUME)"
+  local tmp log t0 rc retried=""
+  tmp="$(mktemp -d)"
+  log="$(mktemp)"
+  tar --exclude=.git --exclude=.gradle --exclude=build --exclude=node_modules -cf - . | tar -xf - -C "$tmp"
+  t0=$SECONDS
+  e_build() {
+    docker run --rm -v "$tmp":/work -v "$GRADLE_VOLUME":/gradle-home -e GRADLE_USER_HOME=/gradle-home \
+      -e GRADLE_OPTS="-Dorg.gradle.internal.http.connectionTimeout=120000 -Dorg.gradle.internal.http.socketTimeout=120000" \
+      -w /work "$IMAGE" ./gradlew clean build --no-build-cache 2>&1 | tee "$log"
+    return "${PIPESTATUS[0]}"
+  }
+  set +e
+  e_build
+  rc=$?
+  if [ "$rc" -ne 0 ] && grep -Eq "$NET_ERRORS" "$log" && ! grep -Eq "$NOT_NETWORK" "$log"; then
+    echo "RETRIED: the first container build failed on a network error; running it once more"
+    retried=" RETRIED"
+    e_build
+    rc=$?
+  fi
+  set -e
+  local took=$((SECONDS - t0))
+  local note="(cache: $cache, ${took}s${retried})"
+  rm -rf "$tmp" "$log"
+  echo "e. clean-machine build: cache $cache, ${took}s${retried}"
+  if [ "$rc" -eq 0 ]; then
+    record "PASS   " "e. clean-machine build $note"
+  else
+    fail "e. clean-machine build $note"
+  fi
+}
+
+if [ "${1:-}" = "--only-e" ]; then
+  step_e
+  finish
+  exit 0
+fi
+
 # a. clean build (includes the zero-test check)
 echo ">> a. ./gradlew clean build"
 if ./gradlew clean build; then
@@ -82,27 +143,38 @@ elif ! docker_up; then
   record "SKIPPED" "d. no-network (Docker not running)"
 elif docker run --rm --network none \
     -v "$PWD":/work -v "$HOME/.gradle":/root/.gradle -w /work \
-    "$IMAGE" ./gradlew test --offline --tests '*NoNetworkTest'; then
+    "$IMAGE" ./gradlew :testkit:test --offline --tests '*NoNetworkTest'; then
   record "PASS   " "d. no-network"
 else
   fail "d. no-network"
 fi
 
-# e. clean-machine build: fresh container, Java 21 only, no host Gradle cache.
-# Note: this step needs network inside the container to fetch Gradle and dependencies.
-echo ">> e. clean-machine build"
+# f. cross-database suite (Phase 3): the golden schemas, scenarios and edge mode on SQLite, MySQL and Postgres.
+# One labelled line per database. SKIPPED is never PASS.
+echo ">> f. cross-database suite"
 if ! docker_up; then
   echo "SKIPPED: Docker is not running"
-  record "SKIPPED" "e. clean-machine build (Docker not running)"
+  record "SKIPPED" "f. cross-database: SQLite, MySQL, Postgres (Docker not running)"
 else
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-  tar --exclude=.git --exclude=.gradle --exclude=build --exclude=node_modules -cf - . | tar -xf - -C "$tmp"
-  if docker run --rm -v "$tmp":/work -w /work "$IMAGE" ./gradlew clean build; then
-    record "PASS   " "e. clean-machine build"
+  if ./gradlew :testkit:test --rerun --tests '*DialectSqliteTest' --tests '*CrossDbSqliteCliTest'; then
+    record "PASS   " "f1. cross-database: SQLite"
   else
-    fail "e. clean-machine build"
+    fail "f1. cross-database: SQLite"
+  fi
+  if ./gradlew :testkit:containerTest --tests '*DialectMysqlContainerTest'; then
+    record "PASS   " "f2. cross-database: MySQL"
+  else
+    fail "f2. cross-database: MySQL"
+  fi
+  if ./gradlew :testkit:containerTest --tests '*StatesGoldenContainerTest' --tests '*TemporalGoldenContainerTest' \
+      --tests '*ScenariosGoldenContainerTest' --tests '*RuleGenContainerTest'; then
+    record "PASS   " "f3. cross-database: Postgres"
+  else
+    fail "f3. cross-database: Postgres"
   fi
 fi
+
+# e. clean-machine build (see step_e above)
+step_e
 
 finish

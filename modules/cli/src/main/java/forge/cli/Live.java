@@ -22,12 +22,22 @@ final class Live {
     final Config conf;
     final Db db;
     SchemaGraph graph;
+
+    boolean postgres() {
+        return conf.connection().url().startsWith("postgres://");
+    }
     List<Rule> rules;
+    /** The rules plus the ones the state machines imply: what the verify pass runs. */
+    List<Rule> verifyRules;
 
     Live(Path file) throws IOException {
+        this(file, null, false);
+    }
+
+    Live(Path file, String scenario, boolean edge) throws IOException {
         this.file = file;
         this.text = Files.readString(file);
-        this.conf = ConfigReader.read(text);
+        this.conf = forge.core.Scenarios.apply(ConfigReader.read(text), scenario, edge);
         Config.Conn c = conf.connection();
         if (c == null) {
             throw new ConfigError("forge.yml has no connection. Add connection.url and connection.env (this command works on a live database).");
@@ -41,11 +51,23 @@ final class Live {
 
     /** Reads the schema and checks the rules against it. */
     void open() throws SQLException {
-        graph = PgReader.read(db, conf.connection().schema());
+        if (conf.connection().url().startsWith("postgres://")) {
+            graph = PgReader.read(db, conf.connection().schema());
+        } else {
+            try (java.sql.Connection c = db.open()) {
+                graph = forge.schema.JdbcReader.read(c);
+            }
+        }
         rules = RuleSet.check(conf.rules(), graph);
+        verifyRules = new java.util.ArrayList<>(rules);
+        verifyRules.addAll(forge.rules.StateRules.expand(conf, graph));
     }
 
     Path manifestDir(Path override) {
-        return override != null ? override : file.toAbsolutePath().normalize().getParent().resolve(".forge").resolve("manifests");
+        if (override != null) {
+            return override;
+        }
+        Path base = file.toAbsolutePath().normalize().getParent();
+        return conf.manifestDir() != null ? base.resolve(conf.manifestDir()).normalize() : base.resolve(".forge").resolve("manifests");
     }
 }

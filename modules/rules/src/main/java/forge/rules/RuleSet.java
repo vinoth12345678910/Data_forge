@@ -54,6 +54,10 @@ public final class RuleSet {
             } catch (Problem e) {
                 throw new RuleError(i, c.name(), c.kind(), e.line, e.col, c.text(), e.getMessage());
             }
+            if (c.by() != null) {
+                long[] b = forge.core.Dur.range(c.by(), "rules[" + i + "].by");
+                r = r.withOffsets(b[0], b[1]);
+            }
             out.add(r);
         }
         cycles(out, writer, reads, confs);

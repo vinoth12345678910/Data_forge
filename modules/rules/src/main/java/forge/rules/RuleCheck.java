@@ -32,7 +32,7 @@ final class RuleCheck {
         RuleCheck c = new RuleCheck(g);
         return switch (kind) {
             case DERIVE -> c.derive(index, name, text, p);
-            case CHECK -> c.rowCheck(index, name, text, p);
+            case CHECK, VERIFY -> c.rowCheck(index, name, kind, text, p);
             case LIMIT -> c.limit(index, name, text, p);
         };
     }
@@ -75,7 +75,7 @@ final class RuleCheck {
         return new Rule(name, RuleKind.DERIVE, text, index, tn, cn, v.e(), when, null);
     }
 
-    private Rule rowCheck(int index, String name, String text, RuleReader.Parsed p) {
+    private Rule rowCheck(int index, String name, RuleKind kind, String text, RuleReader.Parsed p) {
         String first = firstTable(p.expr());
         if (first == null) {
             first = firstTable(p.when());
@@ -89,7 +89,7 @@ final class RuleCheck {
         if (v.t() != T.BOOL) {
             throw new Problem(pos(p.expr()), "a check must be true or false, not " + (v.t() == null ? "null" : typeName(v.t(), null)));
         }
-        return new Rule(name, RuleKind.CHECK, text, index, first, null, v.e(), when(p.when(), first), null);
+        return new Rule(name, kind, text, index, first, null, v.e(), when(p.when(), first), null);
     }
 
     private Rule limit(int index, String name, String text, RuleReader.Parsed p) {

@@ -26,6 +26,7 @@ final class VerifyCmd implements Callable<Integer> {
 
     @Spec CommandSpec spec;
     @Option(names = {"-c", "--config"}, defaultValue = "forge.yml") Path config;
+    @Option(names = {"-s", "--scenario"}, description = "Scenario from forge.yml (its rules and states are what is verified)") String scenario;
     @Option(names = "--expected", description = "A golden expected.yml: its rules that are not in forge.yml are listed as not checked") Path expected;
     @Option(names = "--sample", defaultValue = "5", description = "Rows to show per failing rule") int sample;
     @Option(names = "--json", description = "Print the report as JSON") boolean json;
@@ -35,10 +36,10 @@ final class VerifyCmd implements Callable<Integer> {
         PrintWriter out = spec.commandLine().getOut();
         PrintWriter err = spec.commandLine().getErr();
         try {
-            Live live = new Live(config);
+            Live live = new Live(config, scenario, false);
             live.open();
             try (Connection c = live.db.open()) {
-                Report rep = Verifier.run(c, live.graph, live.rules, sample, 120);
+                Report rep = Verifier.run(c, live.graph, live.verifyRules, sample, 120);
                 out.print(json ? rep.json() : rep.text(live.conf.connection().url()));
                 if (!json && expected != null) {
                     listOthers(out, live);

@@ -23,6 +23,7 @@ subprojects {
     // (so a clean build works without Docker) and run via `containerTest`.
     tasks.named<Test>("test") {
         useJUnitPlatform { excludeTags("containers") }
+        systemProperty("golden.dir", rootProject.file("golden").absolutePath)
     }
     val sourceSets = extensions.getByType<SourceSetContainer>()
     tasks.register<Test>("containerTest") {

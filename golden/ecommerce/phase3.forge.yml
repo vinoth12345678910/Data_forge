@@ -1,0 +1,136 @@
+# Phase 3 configuration for ecommerce: the Phase 2 rules plus state machines (P3.1). Rule names equal the names in expected.yml.
+version: 1
+seed: 42
+clock: "2026-06-01T00:00:00Z"
+ddl: schema.sql
+tables:
+  categories:
+    rows: 100
+  coupon_redemptions:
+    rows: 100
+  coupons:
+    rows: 100
+  inventory:
+    rows: 100
+  meta:
+    rows: 1
+  order_items:
+    rows: 100
+  orders:
+    rows: 100
+  payments:
+    rows: 100
+  products:
+    rows: 100
+  refunds:
+    rows: 100
+  reservations:
+    rows: 100
+  returns:
+    rows: 100
+  shipment_items:
+    rows: 100
+  shipments:
+    rows: 100
+  users:
+    rows: 100
+rules:
+  - name: order_subtotal_matches_items
+    derive: orders.subtotal_minor = sum(order_items.quantity * order_items.unit_price_minor)
+  - name: order_discount_matches_coupon
+    derive: >-
+      orders.discount_minor = sum(case when coupon_redemptions.coupon_id.discount_type = 'percent'
+      then orders.subtotal_minor * coupon_redemptions.coupon_id.value / 100
+      else least(coupon_redemptions.coupon_id.value, orders.subtotal_minor) end)
+  - name: order_total_formula
+    derive: orders.total_minor = orders.subtotal_minor - orders.discount_minor + orders.shipping_minor
+  - name: succeeded_amount_equals_total
+    derive: payments.amount_minor = payments.order_id.total_minor when payments.status = 'succeeded'
+  - name: reservation_quantity_matches_item
+    derive: reservations.quantity = reservations.order_item_id.quantity
+  - name: coupon_total_uses_within_limit
+    limit: count(*) per coupon_redemptions.coupon_id <= coupons.max_uses
+  - name: shipped_quantity_within_ordered
+    limit: sum(shipment_items.quantity) per shipment_items.order_item_id <= order_items.quantity
+  - name: refund_within_payment
+    limit: sum(refunds.amount_minor) per refunds.payment_id <= payments.amount_minor
+  - name: refund_for_return_within_value
+    check: >-
+      refunds.amount_minor <= refunds.return_id.quantity * refunds.return_id.order_item_id.unit_price_minor
+      when refunds.return_id is not null
+  - name: paid_order_has_one_succeeded_payment
+    verify: count(payments.id where payments.status = 'succeeded') = 1 when orders.status in ('paid', 'partially_shipped', 'shipped', 'returned')
+  - name: unpaid_order_has_no_succeeded_payment
+    verify: count(payments.id where payments.status = 'succeeded') = 0 when orders.status in ('pending', 'cancelled')
+  - name: no_attempt_after_success
+    verify: orders.id is not null and (max(payments.attempt_no where payments.status = 'succeeded') is null or max(payments.attempt_no where payments.status = 'succeeded') = max(payments.attempt_no))
+  - name: payment_attempts_contiguous
+    verify: orders.id is not null and (count(payments.id) = 0 or max(payments.attempt_no) = count(payments.id))
+  - name: redemption_not_on_cancelled_order
+    verify: coupon_redemptions.order_id.status <> 'cancelled'
+  - name: received_return_has_one_refund
+    verify: count(refunds.id) = case when returns.status = 'received' then 1 else 0 end
+  - name: order_after_user_joined
+    after: orders.placed_at >= orders.user_id.created_at
+    by: 0s..3650d
+  - name: payment_after_order
+    verify: payments.created_at >= payments.order_id.placed_at
+  - name: redemption_within_coupon_window
+    check: coupon_redemptions.redeemed_at >= coupon_redemptions.coupon_id.starts_at and coupon_redemptions.redeemed_at <= coupon_redemptions.coupon_id.ends_at
+  - name: refund_after_return_received
+    after: refunds.created_at >= refunds.return_id.received_at when refunds.return_id is not null
+    by: 0s..14d
+  - name: category_tree_acyclic
+    verify: categories.parent_id is null or categories.parent_id < categories.id
+states:
+  orders:
+    column: status
+    start: pending
+    mix: { pending: 20, paid: 20, partially_shipped: 15, shipped: 25, cancelled: 10, returned: 10 }
+    transitions: [pending -> paid, pending -> cancelled, paid -> partially_shipped, paid -> shipped, partially_shipped -> shipped, shipped -> returned]
+    children:
+      payments:
+        fk: order_id
+        status: status
+        number: attempt_no
+        at: { column: created_at, from: placed_at, gap: 3600 }
+        by_state:
+          pending: [initiated]
+          paid: [failed*, succeeded]
+          partially_shipped: [failed*, succeeded]
+          shipped: [failed*, succeeded]
+          returned: [succeeded]
+          cancelled: [failed*]
+      coupon_redemptions:
+        fk: order_id
+        by_state:
+          pending: ["r?"]
+          paid: ["r?"]
+          partially_shipped: ["r?"]
+          shipped: ["r?"]
+          returned: ["r?"]
+          cancelled: []
+  payments:
+    column: status
+    start: initiated
+    transitions: [initiated -> succeeded, initiated -> failed]
+  returns:
+    column: status
+    start: requested
+    mix: { requested: 25, approved: 25, received: 35, rejected: 15 }
+    transitions: [requested -> approved, requested -> rejected, approved -> received]
+    children:
+      refunds:
+        fk: return_id
+        by_state:
+          requested: []
+          approved: []
+          rejected: []
+          received: [refund]
+scenarios:
+  default: {}
+  sale_rush:
+    extends: default
+    rows: { orders: 2x, order_items: 2x, shipments: 2x, shipment_items: 2x }
+    mix: { orders.status: { pending: 10, paid: 50, partially_shipped: 10, shipped: 20, cancelled: 5, returned: 5 } }
+    burst: { column: orders.placed_at, from: "2026-03-01T00:00:00Z", to: "2026-03-08T00:00:00Z", share: 40 }

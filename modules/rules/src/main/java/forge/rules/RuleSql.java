@@ -28,7 +28,11 @@ public final class RuleSql {
     }
 
     public static Sql compile(Rule r, SchemaGraph g) {
-        Emit e = new Emit(g, r.subject());
+        return compile(r, g, forge.core.Dialect.POSTGRES);
+    }
+
+    public static Sql compile(Rule r, SchemaGraph g, forge.core.Dialect d) {
+        Emit e = new Emit(g, r.subject(), d);
         Table t = g.table(r.subject());
         String from = e.table(r.subject()) + " t";
         String key = key(t);
@@ -39,9 +43,9 @@ public final class RuleSql {
                 String want = e.expr(r.expr());
                 String col = "t." + q(r.target());
                 v = "select " + key + ", " + col + " as actual, " + want + " as expected from " + from + " where "
-                    + (when.isEmpty() ? "" : when + " and ") + col + " is distinct from " + want;
+                    + (when.isEmpty() ? "" : when + " and ") + d.distinct(col, want);
             }
-            case CHECK -> {
+            case CHECK, VERIFY -> {
                 Set<String> cols = new LinkedHashSet<>();
                 own(r.expr(), cols);
                 own(r.when(), cols);
@@ -117,18 +121,20 @@ public final class RuleSql {
     private static final class Emit {
         final SchemaGraph g;
         final String subject;
+        final forge.core.Dialect d;
         final Map<String, String> alias = new HashMap<>();
         int hops;
         int aggs;
 
-        Emit(SchemaGraph g, String subject) {
+        Emit(SchemaGraph g, String subject, forge.core.Dialect d) {
+            this.d = d;
             this.g = g;
             this.subject = subject;
             alias.put(subject, "t");
         }
 
         String table(String name) {
-            return q(g.schema()) + "." + q(name);
+            return d.table(g.schema(), name);
         }
 
         String expr(RuleExpr e) {
@@ -138,7 +144,8 @@ public final class RuleSql {
                 case RuleExpr.Bool b -> b.v() ? "true" : "false";
                 case RuleExpr.Null n -> "null";
                 case RuleExpr.Ref r -> walk(r.hops(), 0, alias.get(r.scope()), r.column());
-                case RuleExpr.Bin b -> wrap(b.l()) + " " + b.op() + " " + wrap(b.r());
+                case RuleExpr.Bin b -> b.op().equals("/") && d == forge.core.Dialect.MYSQL ? d.div(wrap(b.l()), wrap(b.r()))
+                    : wrap(b.l()) + " " + b.op() + " " + wrap(b.r());
                 case RuleExpr.Not n -> "not " + wrap(n.e());
                 case RuleExpr.IsNull n -> wrap(n.e()) + (n.not() ? " is not null" : " is null");
                 case RuleExpr.In n -> {
@@ -156,7 +163,7 @@ public final class RuleSql {
                 case RuleExpr.Fn f -> {
                     List<String> args = new ArrayList<>();
                     f.args().forEach(a -> args.add(expr(a)));
-                    yield f.name() + "(" + String.join(", ", args) + ")";
+                    yield d.fn(f.name()) + "(" + String.join(", ", args) + ")";
                 }
                 case RuleExpr.Agg a -> agg(a);
             };

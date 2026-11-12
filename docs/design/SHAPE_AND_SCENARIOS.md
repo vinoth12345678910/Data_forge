@@ -1,0 +1,61 @@
+# Shape, scenarios and edge cases (Phase 3, decision 3)
+
+**TAKEN** (user delegated; open to change). All of it stays a pure function of (seed, table, column, row, purpose); only integer arithmetic. This amends the seeded-random promise by adding **two more purposes** (`shape`, `edge`) and nothing else; Phase 1 and 2 streams are untouched, so rules-off, shape-off data stays byte-identical.
+
+## Skewed distributions
+
+`gen: int` and `money_minor`, and the foreign-key pick, gain `dist: zipf | pareto | uniform` (default `uniform`, today's behaviour).
+- **Zipf(s)** over `n` ranks, `s` in `1..3` written as a whole-number percent (`s: 120` = 1.2). The cell takes one draw `u` in `[0, 2^32)` and walks a precomputed cumulative table of integer weights `floor(2^32 / rank^s)` per column (`StrictMath.pow`, rounded once, table built at start, `n <= 100000`; bigger `n` is bucketed). Pure.
+- **Pareto(alpha, min)**: inverse CDF `min / u^(1/alpha)` evaluated with `StrictMath.pow` on `u = (draw + 1) / 2^53`, then rounded to a long and clamped to the column range.
+- For a foreign key, rank 1 is the parent that the Phase 1 deal would give first (a popular customer). Deal stays when `dist` is absent.
+- Tolerance in tests: stated per test (a fixed seed and sample size; the share of the top rank within 3 points of the theoretical share; Pareto median within 5%).
+
+## Correlations
+
+`correlate: { country: [currency, phone_code] }` on a table lists columns driven by one **leader** column. The follower is a function of the leader value and a fixed bundled table (`country -> currency, phone code, tz`; append-only, checksum pinned like the name lists). Followers never draw their own value, so they cannot contradict the leader. Verified by a query on the same table in a test (not a rule kind; the bundled table is the source of truth).
+
+## Seasonality
+
+`season: { column: placed_at, by: month, weights: [8,7,8,9,10,12,9,8,9,11,14,20] }` (or `by: weekday`, `by: hour`). The timestamp is drawn by picking a bucket with the weights (integer cut over one draw) and then uniformly inside the bucket, all in UTC epoch seconds, never the default zone. Verified in the gate by binning counts.
+
+## Scenarios
+
+```yaml
+scenarios:
+  default: {}
+  black_friday:
+    extends: default
+    rows: { orders: 5x }                 # multiplier or number
+    mix: { orders.status: { paid: 60, pending: 25, cancelled: 15 } }   # mix sliders override a machine's mix
+    burst: { column: orders.placed_at, from: "2025-11-28T00:00:00Z", to: "2025-11-29T00:00:00Z", share: 40 }
+```
+- `extends` chains merge keys, the child wins; a cycle is an error.
+- `mix` sliders replace the weights of a machine, nothing else; they must name a table with a machine.
+- `burst`: `share` percent of the rows of the column land in the window (dealt by row quota, so exact), the rest follow the normal shape.
+- `forge generate -s <name>` picks one; with no `-s`, `default`. The scenario is part of the generation input: same (seed, scenario) is byte-identical.
+
+## Edge-case mode
+
+`forge generate --edge` (or `edge: true` in a scenario). Per column, a fixed share (default 2%) of rows take an **edge kind**, dealt by row quota from the `edge` stream: NULL (nullable columns only), max length (text columns at the declared length), unicode (combining marks, RTL, emoji, in valid UTF-8, within the length), case-only duplicate (the value of an earlier row with the case flipped, only on columns whose uniqueness is case-sensitive or none), DST (a timestamp one hour either side of a DST transition in a zone such as Asia/Kolkata-free UTC offsets: given as UTC instants of the real transition, so the loader sees them as ordinary values), leap day (Feb 29 of a leap year), injection strings (`'; drop table x;--`, kept inert because every load path binds or quotes). Edge values must still satisfy every check, unique and foreign key; a kind that cannot fit a column is skipped for it. The report lists the count per kind.
+
+## What the gates prove
+
+Shape: fixed seeds and sample sizes, stated tolerance. Scenarios: each declared golden scenario generates and passes every (a) rule; the burst window shows in a binned count. Edge: loads with zero errors and every kind present.
+
+## As built in P3.3 (shape)
+
+- forge.yml: column keys `dist: zipf|pareto` with `param` (whole percent: 120 = 1.2), `season: {by: month|weekday|hour, weights: [...]}`; table key `correlate: {leader: country_col, currency: col, phone_code: col}`. Code: `Shapes`, `Countries` (12 countries, append-only) in `gen`; `Config.Shape`; hooks in `RowGen.shape`.
+- Zipf: integer weights `floor(2^32 / rank^s)` (StrictMath, table of at most 10,000 ranks), binary search on one draw. Pareto: `scale * (u^(-100/alpha) - 1)` with `scale = range / 100`, then clamped to the range. A zipf foreign key is allowed for a plain key to another table (rank 1 is parent row 0); not for unique, self-referencing or tied keys.
+- A shaped column takes its values from its own `shape` stream and ignores the Phase 2 clamps on it: do not put a derive or a time rule on a shaped column (not checked yet: reported as open).
+- The leader of a `correlate` is filled with a country code from the bundled list (uniform); followers are a lookup of it. No time zone follower yet.
+- Tolerances in `ShapeTest`: zipf rank-1 share within 2 points at 20,000 rows; pareto median within 5% and max above 20 times the median; December share within 3 points at 10,000 rows.
+
+## As built in P3.4 (scenarios and edge cases)
+
+- forge.yml `scenarios:` (`extends`, `rows` as `5x` or a number, `mix` per `table.status_column` replacing the whole mix with unlisted statuses at 0, `burst` with `column`, `from`, `to`, `share`, `edge`). `Scenarios.apply` (in `core`) resolves the chain and returns a Config; `Config.Run` carries bursts and edge. `forge generate -s <name> [--edge]` and `forge verify -s <name>` are real. An unknown name, a cycle, a mix status that is not in the machine, or a `rows` key for a table with no count is a `ConfigError`.
+- Burst: a share of the rows (dealt by a keyed shuffle, so exact) take a time inside the window; on a rule-clamped column the window narrows the clamp and is ignored for a row where the rule leaves no room (so the in-window share can be below `share`). The golden scenario lifts the user-join gap to 3650d so the window is reachable.
+- Scaling `rows` can break structure that was only just feasible: the golden `sale_rush` scales every table that a tied key needs (`order_items`, `shipments`, `shipment_items`) with `orders`.
+- Edge mode (`Edges`): kinds NULL, max length (255 for unbounded text), unicode, injection string, case-only duplicate (unique text on a plain unique key only), leap day, DST instants (2024-03-10 07:00Z, 2024-11-03 06:30Z, only when inside the column's range). Row r < number of kinds takes kind r, so every kind is present in any table big enough; then 2% of rows. Columns a check, a rule, a key, a foreign key, a state or shape column touches are left alone.
+- Not built: DST in a named time zone (instants are UTC), a burst on a date column, a `burst` on a state-owned column.
+- Test order slip: P3.4 code was written before its gate test; the gate was proved not hollow afterwards by mutation (unicode string replaced, burst narrowing disabled: both made the gate fail).
+- Found in P3.6: MySQL's default collation compares text without case, so a case-only duplicate breaks a unique key there. Edge mode therefore skips the case-only-duplicate kind when `connection.url` is `mysql://` (Postgres and SQLite compare case-sensitively and keep it).

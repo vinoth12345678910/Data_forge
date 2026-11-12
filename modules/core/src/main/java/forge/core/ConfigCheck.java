@@ -31,7 +31,9 @@ public final class ConfigCheck {
             throw new ConfigError(path + ": a generated column cannot be overridden.");
         }
         for (Fk f : t.fks()) {
-            if (f.columns().contains(name)) {
+            boolean onlyDist = cc.shape() != null && cc.shape().dist() != null && cc.shape().seasonBy() == null
+                && cc.gen() == null && cc.values() == null && cc.min() == null && cc.max() == null && cc.nullPer10k() == null;
+            if (f.columns().contains(name) && !onlyDist) {
                 throw new ConfigError(path + ": a foreign-key column gets its values from the parent table (" + f.name() + ").");
             }
         }

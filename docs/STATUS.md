@@ -146,3 +146,45 @@
 - Next: golden schemas when the user says so.
 - Decisions: Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. Always use bash, not zsh, for generated files and loops.
 - Open: delete duplicate repo `data-forge` (token lacks delete_repo scope); SPEC.md; design brief references.
+
+## 2026-11-12 P3.1 state machines (branch p3-state-machines, stacked on p3-design)
+- Done: `states:` in forge.yml (mix, transitions, children layouts with `by_state`, `number`, `at`, `latest`); `States` + `RowGen` hooks; `verify:` rule kind and `StateRules`; golden `phase3.forge.yml` for events-merch and ecommerce; `StatesGoldenContainerTest` green (both oracles on 5 golden rules per schema, every status appears, mix within 1 point at 10,000 rows, same seed twice byte-identical); gate proven not hollow (removing the succeeded payment fails both oracles on 30 orders).
+- Not done: parent status timestamps along the path (P3.2); `by:` grandparent layouts (reservation rules); speed and memory not re-measured against Phase 2 (only that the 10,000-row mix tests run in seconds).
+- Next: P3.2 `p3-temporal` (time rules, `clock()`, `tree`, two-key limit).
+- Decisions: design docs taken under the user's "ask nothing" delegation (STATE_MACHINES.md has an "As built" section); `rows` of a layout child is ignored; a state check with only aggregates needs an own column.
+- Open: ecommerce 40 and 41 move from (a) to (b) in PHASE3_RESULTS (needs `fill` and sibling time order); PR #26 (Phase 2 roll-up) is unmerged, so Phase 3 PRs stack on `p2-cli`.
+
+## 2026-11-12 P3.2 temporal rules (branch p3-temporal, from p3-state-machines)
+- Done: `after:`/`before:` with `by LO..HI`, `Dur`, `and`-split clamps, `Rule.lo/hi`; 4 events-merch (registration_before_event, referrer_joined_first, refund_after_payment, order_time_after_user_joined) and 5 ecommerce rules (order_after_user_joined, payment_after_order, redemption_within_coupon_window, refund_after_return_received, category_tree_acyclic) pass under both oracles on generated data; each closed rule's broken fixture is still flagged; `TemporalGoldenContainerTest` 4 tests green; proven not hollow (flipping `before` to `>` fails both oracles on 100 rows); P3.1 gate and Phase 2 gates still green.
+- Not done: `clock()`, `tree`, two-key limit, future timestamps (see TEMPORAL_RULES.md "As built"); events-merch event_status_valid_for_time and ecommerce 20, 21, 16, 25, 40, 41, 43 move to (b).
+- Next: P3.3 `p3-shape` (zipf, pareto, correlations, seasonality).
+- Decisions: only ordering is verified, `by` shapes generation; tree acyclic verified by `parent_id < id`.
+- Open: determinism-auditor and scope-guard reviews to run in fresh sessions.
+
+## 2026-11-12 P3.3 shape (branch p3-shape, from p3-temporal)
+- Done: `dist` zipf/pareto (columns and plain foreign keys), `season` (month, weekday, hour), `correlate` (country, currency, phone code), `Shapes`, `Countries`; `ShapeTest` 6 tests green with fixed seeds (zipf rank-1 share within 2 points, pareto median within 5% plus heavy tail, correlated columns never contradict over 5,000 rows, December share within 3 points, unruled columns stable when another table changes 10 to 500 rows, byte-identical twice); proven not hollow (zipf exponent doubled fails with 72.8% vs 27.8%); full `./gradlew build` green.
+- Not done: no golden schema uses shape yet (P3.4 scenarios do); no time-zone correlation; shape on a ruled column is not rejected yet.
+- Next: P3.4 `p3-scenarios` (scenarios, mix sliders, burst, edge-case mode).
+- Decisions: see SHAPE_AND_SCENARIOS.md "As built".
+- Open: determinism-auditor on the diff in a fresh session.
+
+## 2026-11-12 P3.4 scenarios and edge cases (branch p3-scenarios, from p3-shape)
+- Done: scenarios (extends, rows multiples, mix sliders, burst windows), edge-case mode, `forge generate -s/--edge` and `forge verify -s`; `ScenariosGoldenContainerTest` 5 tests green: both golden schemas generate, load and pass every closed rule under our verify pass and the golden SQL in `default` and `sale_rush`; paid share moves by 15+ points; orders double; burst window share >= 25% (default near 0); edge mode loads with zero structure violations and every kind (null, max length, unicode, injection, leap day, DST) is present; case-only duplicate emails both load; proved not hollow by two mutations.
+- Not done: edge DST in a named zone; burst on dates; `saas-multitenant` (report only).
+- Next: P3.5 `p3-dialects` (MySQL and SQLite).
+- Decisions: whole-mix replacement for sliders; gate threshold for the burst is 25% because parent time rules narrow it.
+- Open: I wrote the code before the test on this feature (said above); determinism-auditor on P3.1 to P3.4 in a fresh session.
+
+## 2026-11-12 P3.5 MySQL and SQLite (branch p3-dialects, from p3-scenarios)
+- Done: `Dialect`, dialect-aware `RuleSql` and `Verifier`, `JdbcReader`, `JdbcLoader`, `ManifestJdbc`; translated golden DDL for events-merch and ecommerce on both; `DialectSqliteTest` (4 tests) and `DialectMysqlContainerTest` (2 tests, MySQL 8.4.3) green: read, generate, failed load leaves nothing, load, structure, every rule and state rule PASS under our verify pass, manifest equals rows; compile test for 3 dialects; SQLite gate proved not hollow by mutation (loader off by one fails the meta check).
+- Not done: golden `violations_sql` on MySQL/SQLite, saas-multitenant, Pagila, CLI use of the new loaders (P3.6), MySQL/SQLite manifest rebuild from the database.
+- Next: P3.6 `p3-gate` (cross-database verify step, CLI for three databases, carry-over, PHASE3_RESULTS.md).
+- Decisions: FK checks stay on for the whole run on MySQL; per-dialect hand-translated DDL.
+- Open: dialect-specialist review in a fresh session.
+
+## 2026-11-12 P3.6 cross-database gate and carry-over (branch p3-gate, from p3-dialects)
+- Done: CLI on all three databases (`mysql://`, `sqlite:` URLs, loader and reader chosen by URL), `forge generate -s/--edge` and `forge verify -s` tested on SQLite and MySQL; `manifest_dir`; `NoNetworkTest` (step d); `NullThenUpdatePropertyTest`; verify.sh step f (f1 SQLite, f2 MySQL, f3 Postgres); `PHASE3_RESULTS.md` generated from a test; CONFIG.md updated; case-only duplicates skipped on MySQL (found by the CLI test).
+- Not done: 23 golden rules still deferred (10 b, 13 c); keep tables refused; tied-FK memory not measured; Postgres 17 not run; saas-multitenant report-only.
+- Next: Phase 4 only when told (not started). Review in fresh sessions: scope-guard on every PR, determinism-auditor on P3.1 to P3.4, dialect-specialist on P3.5.
+- Decisions: results counts 20 closed / 10 b / 13 c, not the planned 29 / 2 / 12.
+- Open: PR #26 (Phase 2 roll-up) and the stacked Phase 3 PRs are unmerged; the P3 stack targets p2-cli.

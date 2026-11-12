@@ -106,6 +106,16 @@ public final class RowGen {
         Col base;
         long step;
         boolean cap;
+        /** Set by a state machine: the value of this column for a row, replacing the normal draw. */
+        java.util.function.LongFunction<String> ov;
+        /** Set when a state machine lays this foreign key out: the parent row comes from the layout. */
+        States.Layout lay;
+        /** Set by a zipf foreign key: cumulative weights over parent ranks. */
+        long[] zipf;
+        /** Set by a burst: a share of the rows land inside a window. */
+        Burst burst;
+        /** Set by edge-case mode. */
+        Edges.Edge edge;
     }
 
     private final long seed;
@@ -142,14 +152,6 @@ public final class RowGen {
 
     /** With rules (checked by the rules module, passed in as data). */
     public static RowGen of(SchemaGraph g, Config c, java.util.List<forge.core.Rule> rules) {
-        RowGen gen = of(g, c);
-        if (!rules.isEmpty()) {
-            gen.ruled = new Ruled(gen, g, rules);
-        }
-        return gen;
-    }
-
-    public static RowGen of(SchemaGraph g, Config c) {
         ConfigCheck.check(c, g);
         Map<String, Integer> counts = new TreeMap<>();
         for (Table t : g.tables()) {
@@ -159,7 +161,176 @@ public final class RowGen {
             }
             counts.put(t.name(), tc.rows());
         }
-        return new RowGen(g, c, Planner.plan(g, counts), counts);
+        States st = States.build(c.seed(), g, c, counts);
+        RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts);
+        gen.install(st);
+        gen.shape(c);
+        gen.bursts(c);
+        if (!rules.isEmpty()) {
+            gen.ruled = new Ruled(gen, g, rules);
+        }
+        if (c.run().edge()) {
+            Edges.install(gen, g, rules, c);
+        }
+        return gen;
+    }
+
+    public static RowGen of(SchemaGraph g, Config c) {
+        return of(g, c, java.util.List.of());
+    }
+
+    /** Burst windows of the run: a share of the rows of a timestamp column fall inside a window. */
+    private void bursts(Config c) {
+        for (Config.Burst b : c.run().bursts()) {
+            String[] tc = b.column().split("\\.");
+            Col k = tc.length == 2 && cols.get(tc[0]) != null ? cols.get(tc[0]).get(tc[1]) : null;
+            if (k == null) {
+                throw new GenError("burst: " + b.column() + " is not a generated column (write table.column).");
+            }
+            if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || k.ov != null || k.fk != null) {
+                throw new GenError("burst: " + b.column() + " must be a plain timestamp column.");
+            }
+            long n = rows.get(tc[0]);
+            long from = Instant.parse(b.from()).getEpochSecond();
+            long to = Instant.parse(b.to()).getEpochSecond();
+            k.burst = new Burst(from, to, n == 0 ? null : new Perm(Keys.column(seed, tc[0], tc[1], "burst"), n),
+                n * b.share() / 100, Keys.column(seed, tc[0], tc[1], "burst-at"));
+        }
+    }
+
+    /** A burst window of one column. */
+    static final class Burst {
+        final long from;
+        final long to;
+        final Perm perm;
+        final long cut;
+        final long key;
+
+        Burst(long from, long to, Perm perm, long cut, long key) {
+            this.from = from;
+            this.to = to;
+            this.perm = perm;
+            this.cut = cut;
+            this.key = key;
+        }
+
+        boolean in(long row) {
+            return perm != null && perm.at(row) < cut;
+        }
+
+        long at(long row) {
+            return from + new Cell(key, row).below(to - from);
+        }
+    }
+
+    /** Skew, seasonality and correlation from forge.yml (docs/design/SHAPE_AND_SCENARIOS.md). */
+    private void shape(Config c) {
+        for (Map.Entry<String, Config.TableConf> te : c.tables().entrySet()) {
+            String t = te.getKey();
+            for (Map.Entry<String, Config.ColConf> ce : te.getValue().columns().entrySet()) {
+                Config.Shape sh = ce.getValue().shape();
+                if (sh == null) {
+                    continue;
+                }
+                Col k = need(t, ce.getKey());
+                String where = "tables." + t + ".columns." + ce.getKey();
+                if (k.ov != null) {
+                    throw new GenError(where + ": a state machine already decides this column.");
+                }
+                if (sh.dist() != null && k.fk != null) {
+                    if (!sh.dist().equals("zipf") || k.group != null || k.cluster != null || k.fk.refTable().equals(t)) {
+                        throw new GenError(where + ": a foreign key can be skewed with zipf only when it is a plain key to another table.");
+                    }
+                    k.zipf = Shapes.zipf(rows.get(k.fk.refTable()), sh.param());
+                } else if (sh.dist() != null) {
+                    if (k.dom == null || !k.dom.kind.equals("int") || k.perm != null || k.sequence || k.base != null) {
+                        throw new GenError(where + ": dist needs a plain whole-number column that is not a key or unique.");
+                    }
+                    k.ov = sh.dist().equals("zipf") ? Shapes.zipfInt(k, seed, sh.param()) : Shapes.paretoInt(k, seed, sh.param());
+                }
+                if (sh.seasonBy() != null) {
+                    if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || k.perm != null || k.base != null) {
+                        throw new GenError(where + ": season needs a plain timestamp column.");
+                    }
+                    k.ov = Shapes.season(k, seed, sh.seasonBy(), sh.weights());
+                }
+            }
+            Map<String, String> corr = te.getValue().correlate();
+            if (!corr.isEmpty()) {
+                Col lead = need(t, corr.get("leader"));
+                if (lead.ov != null || lead.fk != null) {
+                    throw new GenError("tables." + t + ".correlate.leader: must be a plain text column.");
+                }
+                lead.ov = Shapes.country(lead, seed);
+                for (Map.Entry<String, String> e : corr.entrySet()) {
+                    if (e.getKey().equals("leader")) {
+                        continue;
+                    }
+                    Col f = need(t, e.getValue());
+                    if (f.ov != null || f.fk != null) {
+                        throw new GenError("tables." + t + ".correlate." + e.getKey() + ": must be a plain text column.");
+                    }
+                    boolean cur = e.getKey().equals("currency");
+                    f.ov = row -> {
+                        String code = lead.ov.apply(row);
+                        return code == null ? null : cur ? Countries.currency(code) : Countries.dial(code);
+                    };
+                }
+            }
+        }
+    }
+
+    /** Hands the state machines to the columns they decide. */
+    private void install(States st) {
+        for (States.Machine m : st.machines.values()) {
+            if (m.conf.column() != null) {
+                Col k = need(m.table, m.conf.column());
+                States.Machine mm = m;
+                k.ov = r -> mm.names[mm.status[(int) r]];
+            }
+        }
+        for (States.Layout lay : st.layouts.values()) {
+            Config.ChildConf cc = lay.conf;
+            need(lay.child, cc.fk()).lay = lay;
+            if (cc.number() != null) {
+                need(lay.child, cc.number()).ov = r -> Long.toString(lay.slot(r) + 1);
+            }
+            if (cc.status() != null) {
+                Col k = need(lay.child, cc.status());
+                k.ov = r -> lay.names[lay.status[(int) r]];
+            }
+            if (cc.latest() != null) {
+                Table ct = tables.get(lay.child);
+                String pk = ct.pk().get(0);
+                need(lay.parent, cc.latest()).ov = p -> lay.cum[(int) p + 1] == lay.cum[(int) p] ? null : keyCell(lay.child, pk, lay.cum[(int) p + 1] - 1);
+            }
+            if (cc.atColumn() != null) {
+                Col k = need(lay.child, cc.atColumn());
+                Col from = need(lay.parent, cc.atFrom());
+                if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || from.dom == null) {
+                    throw new GenError("states." + lay.parent + ".children." + lay.child + ".at: " + cc.atColumn() + " and " + cc.atFrom() + " must be plain timestamp columns.");
+                }
+                long key = Keys.column(seed, lay.child, cc.atColumn(), "layout-at");
+                long gap = cc.atGap();
+                k.ov = r -> {
+                    long p = lay.parent(r);
+                    long t = epoch(cell(lay.parent, cc.atFrom(), p)) + lay.slot(r) * gap + 1 + new Cell(key, r).below(gap);
+                    return k.dom.fmt(Math.min(t, clock));
+                };
+            }
+        }
+    }
+
+    private Col need(String table, String column) {
+        Col k = cols.get(table) == null ? null : cols.get(table).get(column);
+        if (k == null) {
+            throw new GenError("states: " + table + "." + column + " is not a generated column.");
+        }
+        return k;
+    }
+
+    long seed() {
+        return seed;
     }
 
     public Plan plan() {
@@ -1158,6 +1329,25 @@ public final class RowGen {
     // ---- values
 
     private String value(Col k, long row, int att) {
+        if (k.ov != null) {
+            return k.ov.apply(row);
+        }
+        if (k.edge != null) {
+            int kind = k.edge.kind(row);
+            if (kind >= 0) {
+                String v = k.edge.value(kind, row, r -> normal(k, r, 0));
+                if (v != Edges.NONE) {
+                    return v;
+                }
+            }
+        }
+        if (k.burst != null && k.burst.in(row)) {
+            return k.dom.fmt(k.burst.at(row));
+        }
+        return normal(k, row, att);
+    }
+
+    private String normal(Col k, long row, int att) {
         if (k.fk != null) {
             return fkValue(k, row, att);
         }
@@ -1177,6 +1367,9 @@ public final class RowGen {
 
     /** The ordered number of a scalar column, with its comparison base applied. */
     private long raw(Col k, long row, int att) {
+        if (k.burst != null && k.burst.in(row)) {
+            return k.burst.at(row);
+        }
         if (k.base != null) {
             long v = raw(k.base, row, att) + 1 + new Cell(salt(k.vKey, att), row).below(k.step);
             if (k.cap) {
@@ -1213,6 +1406,9 @@ public final class RowGen {
         Fk f = k.fk;
         long parents = rows.get(f.refTable());
         long parentRow;
+        if (k.lay != null) {
+            return k.lay.parent(row);
+        }
         if (k.group != null) {
             parentRow = groupRow(k.group, k.groupIdx, row);
         } else if (k.cluster != null) {
@@ -1231,6 +1427,9 @@ public final class RowGen {
             }
             if (self) {
                 parentRow = row == 0 ? 0 : new Cell(k.fkKey, row).below(row);
+            } else if (k.zipf != null) {
+                Cell cell = new Cell(Keys.column(seed, k.table.name(), k.col.name(), "shape"), row);
+                parentRow = Shapes.rank(k.zipf, cell.below(k.zipf[k.zipf.length - 1]));
             } else {
                 parentRow = deal(k.fkKey, row, parents);
             }

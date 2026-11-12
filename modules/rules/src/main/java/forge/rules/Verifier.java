@@ -25,14 +25,19 @@ public final class Verifier {
             boolean auto = c.getAutoCommit();
             boolean ro = c.isReadOnly();
             c.setAutoCommit(false);
-            c.setReadOnly(true);
+            boolean setRo = forge.core.Dialect.of(c) != forge.core.Dialect.SQLITE;
+            if (setRo) {
+                c.setReadOnly(true);
+            }
             try {
                 for (Rule r : rules) {
                     out.add(one(c, g, r, sample, timeoutSeconds));
                 }
             } finally {
                 c.rollback();
-                c.setReadOnly(ro);
+                if (setRo) {
+                    c.setReadOnly(ro);
+                }
                 c.setAutoCommit(auto);
             }
         } catch (SQLException e) {
@@ -43,11 +48,17 @@ public final class Verifier {
 
     private static RuleResult one(Connection c, SchemaGraph g, Rule r, int sample, int timeoutSeconds) throws SQLException {
         long t0 = System.nanoTime();
-        RuleSql.Sql q = RuleSql.compile(r, g);
+        forge.core.Dialect d = forge.core.Dialect.of(c);
+        RuleSql.Sql q = RuleSql.compile(r, g, d);
         String kind = r.kind().name().toLowerCase(java.util.Locale.ROOT);
         try (Statement s = c.createStatement()) {
-            s.execute("set local statement_timeout = " + (timeoutSeconds * 1000L));
-            s.execute("set local search_path = " + RuleSql.q(g.schema()));
+            if (d == forge.core.Dialect.POSTGRES) {
+                s.execute("set local statement_timeout = " + (timeoutSeconds * 1000L));
+                s.execute("set local search_path = " + RuleSql.q(g.schema()));
+            } else if (d == forge.core.Dialect.MYSQL) {
+                s.execute("set session sql_mode = concat(@@sql_mode, ',ANSI_QUOTES')");
+                s.execute("set session max_execution_time = " + (timeoutSeconds * 1000L));
+            }
             long checked = count(s, q.checked());
             long bad = count(s, q.count());
             List<String> cols = new ArrayList<>();

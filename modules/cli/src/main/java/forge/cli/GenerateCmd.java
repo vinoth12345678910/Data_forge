@@ -27,15 +27,13 @@ final class GenerateCmd implements Callable<Integer> {
     @Spec CommandSpec spec;
     @Option(names = {"-c", "--config"}, defaultValue = "forge.yml", description = "forge.yml to use") Path config;
     @Option(names = "--manifest-dir", description = "Where the local manifest copy goes (default .forge/manifests next to forge.yml)") Path manifestDir;
-    @Option(names = {"-s", "--scenario"}, description = "Scenario (Phase 3)") String scenario;
+    @Option(names = {"-s", "--scenario"}, description = "Scenario from forge.yml (default if none)") String scenario;
+    @Option(names = "--edge", description = "Edge-case mode: NULLs, maximum lengths, unicode, case-only duplicates, leap days, DST, injection strings") boolean edge;
 
     @Override
     public Integer call() {
         PrintWriter out = spec.commandLine().getOut();
         PrintWriter err = spec.commandLine().getErr();
-        if (scenario != null) {
-            return Forge.notBuilt(spec, 3);
-        }
         try {
             return run(out);
         } catch (ConfigError | RuleError | GenError | PlanError | LoadError | ManifestError | SQLException | java.io.IOException e) {
@@ -45,15 +43,17 @@ final class GenerateCmd implements Callable<Integer> {
     }
 
     private Integer run(PrintWriter out) throws SQLException, java.io.IOException {
-        Live live = new Live(config);
+        Live live = new Live(config, scenario, edge);
         if ("prod".equals(live.conf.connection().env())) {
             throw new ConfigError("refusing to run against env prod. Data Forge never generates into prod.");
         }
         live.open();
         RowGen gen = RowGen.of(live.graph, live.conf, live.rules);
         try (Connection c = live.db.open()) {
-            PgLoader.Result r = PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
-                live.manifestDir(manifestDir));
+            PgLoader.Result r = live.postgres()
+                ? PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(), live.manifestDir(manifestDir))
+                : forge.load.JdbcLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
+                    live.manifestDir(manifestDir));
             long rows = 0;
             for (long n : r.rows().values()) {
                 rows += n;
@@ -61,16 +61,16 @@ final class GenerateCmd implements Callable<Integer> {
             out.println("Loaded " + rows + " rows into " + r.rows().size() + " tables (run " + r.runId() + "). Manifest: "
                 + live.manifestDir(manifestDir).resolve(r.runId() + ".json"));
             int code = 0;
-            if (live.rules.isEmpty()) {
+            if (live.verifyRules.isEmpty()) {
                 out.println("No rules in forge.yml: nothing to verify.");
             } else {
-                Report rep = Verifier.run(c, live.graph, live.rules, 5, 120);
+                Report rep = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
                 out.print(rep.text(live.conf.connection().url()));
                 code = rep.exitCode();
             }
             out.println("Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, foreign keys) holds, and only the "
-                + live.rules.size() + " rule(s) in forge.yml are generated and verified. Statuses are random picks; there is no "
-                + "state flow, no time order against a parent and no realism yet.");
+                + live.verifyRules.size() + " rule(s) in forge.yml, plus the rules its state machines imply, are generated and verified. "
+                + "Rules this phase does not handle are not checked (see docs/design/PHASE3_RESULTS.md); there is no full realism yet.");
             return code;
         }
     }
