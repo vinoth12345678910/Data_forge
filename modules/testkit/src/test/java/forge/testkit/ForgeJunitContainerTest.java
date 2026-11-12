@@ -161,7 +161,7 @@ class ForgeJunitContainerTest {
         ok(run(false, ForgeJunitSampleA.class));
         assertEquals(first, SampleRecord.HASH.get("A"), "same seed and scenario: the same data in a new database");
         SampleRecord.HASH.clear();
-        ok(run(false, ForgeJunitSampleB.class));
-        assertNotEquals(first, SampleRecord.HASH.get("B"), "another seed: other data");
+        ok(run(false, ForgeJunitSampleC.class));
+        assertNotEquals(first, SampleRecord.HASH.get("C"), "class C is class A with another seed only: other data");
     }
 }
