@@ -205,7 +205,7 @@ public final class ConfigReader {
             if (!r.isObject()) {
                 throw new ConfigError(path + ": a map with name and one of derive, check, limit is required.");
             }
-            keys(r, path, "name", "derive", "check", "limit", "verify", "description");
+            keys(r, path, "name", "derive", "check", "limit", "verify", "after", "before", "by", "description");
             String name = text(r, "name", path);
             if (name == null) {
                 throw new ConfigError(path + ".name: required.");
@@ -218,7 +218,7 @@ public final class ConfigReader {
             }
             String kind = null;
             String text = null;
-            for (String k : List.of("derive", "check", "limit", "verify")) {
+            for (String k : List.of("derive", "check", "limit", "verify", "after", "before")) {
                 String v = text(r, k, path);
                 if (v != null) {
                     if (kind != null) {
@@ -231,7 +231,15 @@ public final class ConfigReader {
             if (kind == null) {
                 throw new ConfigError(path + ": exactly one of derive, check, limit is required.");
             }
-            out.add(new Config.RuleConf(name, kind, text, text(r, "description", path)));
+            String by = text(r, "by", path);
+            if (by != null && !(kind.equals("after") || kind.equals("before"))) {
+                throw new ConfigError(path + ".by: only an after or before rule has a by.");
+            }
+            if (kind.equals("after") || kind.equals("before")) {
+                Dur.range(by, path + ".by");
+                kind = "check";
+            }
+            out.add(new Config.RuleConf(name, kind, text, text(r, "description", path), by));
         }
         return out;
     }

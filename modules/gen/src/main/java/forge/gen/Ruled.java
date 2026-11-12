@@ -26,7 +26,7 @@ final class Ruled {
     private final SchemaGraph graph;
 
     /** A check that pins a column's range from the other side of a comparison. */
-    private record Clamp(Rule rule, String column, String op, RuleExpr bound) {}
+    private record Clamp(Rule rule, String column, String op, RuleExpr bound, long lo, long hi) {}
 
     private record Limit(Rule rule, String child, Fk fk, String childCol, String parent, String cap) {}
 
@@ -74,8 +74,7 @@ final class Ruled {
                     checks.computeIfAbsent(r.subject(), x -> new ArrayList<>()).add(r);
                     scan(r.expr(), r, r.subject());
                     scan(r.when(), r, r.subject());
-                    Clamp c = clamp(r);
-                    if (c != null) {
+                    for (Clamp c : clamp(r, r.expr())) {
                         clamps.computeIfAbsent(r.subject(), x -> new TreeMap<>()).computeIfAbsent(c.column(), x -> new ArrayList<>()).add(c);
                     }
                 }
@@ -275,18 +274,23 @@ final class Ruled {
     }
 
     /** col <op> expr (or the other way round) on an own scalar column that the other side does not read. */
-    private Clamp clamp(Rule r) {
-        if (!(r.expr() instanceof RuleExpr.Bin b)) {
-            return null;
+    private List<Clamp> clamp(Rule r, RuleExpr e) {
+        if (!(e instanceof RuleExpr.Bin b)) {
+            return List.of();
         }
         String op = b.op();
+        if (op.equals("and")) {
+            List<Clamp> both = new ArrayList<>(clamp(r, b.l()));
+            both.addAll(clamp(r, b.r()));
+            return both;
+        }
         if (!(op.equals("<") || op.equals("<=") || op.equals(">") || op.equals(">="))) {
-            return null;
+            return List.of();
         }
         String lc = ownColumn(b.l(), r.subject());
         String rc = ownColumn(b.r(), r.subject());
         if (lc != null && clampable(r.subject(), lc) && !reads(b.r(), r.subject(), lc)) {
-            return new Clamp(r, lc, op, b.r());
+            return List.of(new Clamp(r, lc, op, b.r(), r.lo(), r.hi()));
         }
         if (rc != null && clampable(r.subject(), rc) && !reads(b.l(), r.subject(), rc)) {
             String flipped = switch (op) {
@@ -295,9 +299,9 @@ final class Ruled {
                 case ">" -> "<";
                 default -> "<=";
             };
-            return new Clamp(r, rc, flipped, b.l());
+            return List.of(new Clamp(r, rc, flipped, b.l(), r.lo(), r.hi()));
         }
-        return null;
+        return List.of();
     }
 
     private static String ownColumn(RuleExpr e, String table) {
@@ -403,11 +407,34 @@ final class Ruled {
             if (!(b instanceof Long x)) {
                 continue;
             }
+            long unit = d.kind.equals("date") ? 86_400L : 1L;
+            long gapLo = cl.lo() / unit;
+            long gapHi = cl.hi() < 0 ? -1 : cl.hi() / unit;
             switch (cl.op()) {
-                case "<=" -> hi = Math.min(hi, x);
-                case "<" -> hi = Math.min(hi, x - 1);
-                case ">=" -> lo = Math.max(lo, x);
-                default -> lo = Math.max(lo, x + 1);
+                case "<=" -> {
+                    hi = Math.min(hi, x - gapLo);
+                    if (gapHi >= 0) {
+                        lo = Math.max(lo, x - gapHi);
+                    }
+                }
+                case "<" -> {
+                    hi = Math.min(hi, x - Math.max(gapLo, 1));
+                    if (gapHi >= 0) {
+                        lo = Math.max(lo, x - Math.max(gapHi, 1));
+                    }
+                }
+                case ">=" -> {
+                    lo = Math.max(lo, x + gapLo);
+                    if (gapHi >= 0) {
+                        hi = Math.min(hi, x + gapHi);
+                    }
+                }
+                default -> {
+                    lo = Math.max(lo, x + Math.max(gapLo, 1));
+                    if (gapHi >= 0) {
+                        hi = Math.min(hi, x + Math.max(gapHi, 1));
+                    }
+                }
             }
             why += " " + r.name();
         }

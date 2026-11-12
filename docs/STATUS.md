@@ -153,3 +153,10 @@
 - Next: P3.2 `p3-temporal` (time rules, `clock()`, `tree`, two-key limit).
 - Decisions: design docs taken under the user's "ask nothing" delegation (STATE_MACHINES.md has an "As built" section); `rows` of a layout child is ignored; a state check with only aggregates needs an own column.
 - Open: ecommerce 40 and 41 move from (a) to (b) in PHASE3_RESULTS (needs `fill` and sibling time order); PR #26 (Phase 2 roll-up) is unmerged, so Phase 3 PRs stack on `p2-cli`.
+
+## 2026-11-12 P3.2 temporal rules (branch p3-temporal, from p3-state-machines)
+- Done: `after:`/`before:` with `by LO..HI`, `Dur`, `and`-split clamps, `Rule.lo/hi`; 4 events-merch (registration_before_event, referrer_joined_first, refund_after_payment, order_time_after_user_joined) and 5 ecommerce rules (order_after_user_joined, payment_after_order, redemption_within_coupon_window, refund_after_return_received, category_tree_acyclic) pass under both oracles on generated data; each closed rule's broken fixture is still flagged; `TemporalGoldenContainerTest` 4 tests green; proven not hollow (flipping `before` to `>` fails both oracles on 100 rows); P3.1 gate and Phase 2 gates still green.
+- Not done: `clock()`, `tree`, two-key limit, future timestamps (see TEMPORAL_RULES.md "As built"); events-merch event_status_valid_for_time and ecommerce 20, 21, 16, 25, 40, 41, 43 move to (b).
+- Next: P3.3 `p3-shape` (zipf, pareto, correlations, seasonality).
+- Decisions: only ordering is verified, `by` shapes generation; tree acyclic verified by `parent_id < id`.
+- Open: determinism-auditor and scope-guard reviews to run in fresh sessions.
