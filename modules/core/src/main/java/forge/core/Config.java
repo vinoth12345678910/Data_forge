@@ -34,6 +34,11 @@ public record Config(
         this(version, seed, clock, locale, connection, ddl, tables, rules, Map.of(), Map.of(), Run.NONE);
     }
 
+    /** The same config pointed at another connection. */
+    public Config withConnection(Conn c) {
+        return new Config(version, seed, clock, locale, c, ddl, tables, rules, states, scenarios, run, manifestDir);
+    }
+
     /** The same config with other table settings. */
     public Config withTables(Map<String, TableConf> t) {
         return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir);

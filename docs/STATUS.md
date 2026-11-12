@@ -202,3 +202,10 @@
 - Next: P4.3 `p4-verify-any`.
 - Decisions: new table, new column, type change are warnings (the user's D1b change); `spec_invalid` errors come from building the generation plan in memory.
 - Open: determinism-auditor and dialect-specialist reviews (fresh sessions).
+
+## 2026-11-12 P4.3 verify on any database (branch p4-verify-any, from p4-drift)
+- Done: gate first (committed red: `VerifyAnyContainerTest` 5 tests and three hand-written load scripts), then `Db.openReadOnly`/`Db.recorder`, `ReadOnly` (statement guard), `Applies` (NOT_APPLICABLE), `forge verify --url --user --password-env --allow-prod --strict-na`. On Postgres, MySQL and SQLite loaded by script (not Data Forge): in-scope rules PASS with rows checked; a missing column or table is NOT_APPLICABLE with the reason and its own count; one broken row flips exactly its rule; the recorded statements are all reads, the guard refuses delete/insert/update/drop/multi-statement, and the read-only session refuses an insert; prod needs `--allow-prod`. Four mutations (guard open, Postgres session not read only, N/A reported as PASS, prod check removed) each failed the gate and were restored with git checkout.
+- Not done: SQLite statement timeout not asserted; verify-any not tried on a large foreign database; test-script fix after the red commit (MySQL ignores inline REFERENCES).
+- Next: P4.4 `p4-outputs`.
+- Decisions: not-applicable never fails the default exit (D3b); `--allow-prod` plus timeouts (D3c as changed).
+- Open: the P4.2 push-hook verify failed once on a Gradle user-home lock caused by my own concurrent Gradle runs (not code); retried unchanged and said so; the dialect-specialist review of P4.2 to P4.4 is for a fresh session.
