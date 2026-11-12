@@ -41,3 +41,11 @@ scenarios:
 ## What the gates prove
 
 Shape: fixed seeds and sample sizes, stated tolerance. Scenarios: each declared golden scenario generates and passes every (a) rule; the burst window shows in a binned count. Edge: loads with zero errors and every kind present.
+
+## As built in P3.3 (shape)
+
+- forge.yml: column keys `dist: zipf|pareto` with `param` (whole percent: 120 = 1.2), `season: {by: month|weekday|hour, weights: [...]}`; table key `correlate: {leader: country_col, currency: col, phone_code: col}`. Code: `Shapes`, `Countries` (12 countries, append-only) in `gen`; `Config.Shape`; hooks in `RowGen.shape`.
+- Zipf: integer weights `floor(2^32 / rank^s)` (StrictMath, table of at most 10,000 ranks), binary search on one draw. Pareto: `scale * (u^(-100/alpha) - 1)` with `scale = range / 100`, then clamped to the range. A zipf foreign key is allowed for a plain key to another table (rank 1 is parent row 0); not for unique, self-referencing or tied keys.
+- A shaped column takes its values from its own `shape` stream and ignores the Phase 2 clamps on it: do not put a derive or a time rule on a shaped column (not checked yet: reported as open).
+- The leader of a `correlate` is filled with a country code from the bundled list (uniform); followers are a lookup of it. No time zone follower yet.
+- Tolerances in `ShapeTest`: zipf rank-1 share within 2 points at 20,000 rows; pareto median within 5% and max above 20 times the median; December share within 3 points at 10,000 rows.
