@@ -6,6 +6,8 @@ dependencies {
     "api"(project(":load"))
     "implementation"(libs.findLibrary("postgres-driver").get())
     "testImplementation"(project(":schema"))
+    "testImplementation"(project(":junit"))
+    "testImplementation"(libs.findLibrary("junit-launcher").get())
     "testImplementation"(project(":cli"))
     "testImplementation"(project(":rules"))
     "testImplementation"(libs.findLibrary("testcontainers-postgres").get())
