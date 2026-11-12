@@ -127,8 +127,15 @@ public final class RowGen {
     private final Map<String, Info> info = new TreeMap<>();
     /** Remembered results. Every value is a pure function of its inputs, so this only saves time; it never changes output. */
     private final java.util.concurrent.ConcurrentHashMap<String, String[]> rowCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicLong rowCacheBytes = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.ConcurrentHashMap<String, long[]> pickCache = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int CACHE_LIMIT = 400_000;
+    /**
+     * The resolved-row cache is bounded by memory, not only by count: about a fifth of the largest heap (51 MB at -Xmx256m),
+     * at least 8 MB. A row costs roughly 500 bytes, so 400,000 rows could hold 200 MB. It only saves time; the cache never
+     * changes a value (every cell is a pure function of its inputs), so the bound cannot change the output.
+     */
+    private static final long ROW_CACHE_BYTES = Math.max(8L << 20, Runtime.getRuntime().maxMemory() / 5);
     private final Map<String, Group> fkGroup = new TreeMap<>();
     private final Map<String, Integer> fkGroupIdx = new TreeMap<>();
     private final Map<String, List<String>> names = new TreeMap<>();
@@ -359,12 +366,25 @@ public final class RowGen {
         String[] hit = rowCache.get(key);
         if (hit == null) {
             hit = draw(table, row);
-            if (rowCache.size() > CACHE_LIMIT) {
+            if (rowCache.size() > CACHE_LIMIT || rowCacheBytes.get() > ROW_CACHE_BYTES) {
                 rowCache.clear();
+                rowCacheBytes.set(0);
             }
             rowCache.put(key, hit);
+            rowCacheBytes.addAndGet(weight(key, hit));
         }
         return hit.clone();
+    }
+
+    /** About how many bytes a cached row holds: the map node, the key, the String[], and each cell (String plus byte[]). */
+    private static long weight(String key, String[] cells) {
+        long w = 32 + 40 + key.length() + 16 + 8L * cells.length;
+        for (String c : cells) {
+            if (c != null) {
+                w += 40 + c.length();
+            }
+        }
+        return w;
     }
 
     private String[] draw(String table, long row) {

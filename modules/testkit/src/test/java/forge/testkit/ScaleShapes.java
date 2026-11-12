@@ -41,10 +41,10 @@ final class ScaleShapes {
     static Map<String, Integer> rows(String shape, int scale) {
         Map<String, Integer> m = new TreeMap<>();
         switch (shape) {
-            case S1 -> m.put("big", 1_000_000);
+            case S1 -> m.put("big", scale > 0 ? scale : 1_000_000);
             case S2 -> {
-                m.put("parents", 1_000_000);
-                m.put("children", 3_000_000);
+                m.put("parents", scale > 0 ? scale : 1_000_000);
+                m.put("children", 3 * (scale > 0 ? scale : 1_000_000));
             }
             case S3 -> {
                 m.put("users", 100_000);

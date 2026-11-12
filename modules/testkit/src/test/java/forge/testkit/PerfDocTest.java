@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,7 +12,6 @@ import org.junit.jupiter.api.Test;
  * ScaleContainerTest). Every shape on every database the design asks for has a row with a positive row count, time,
  * live heap and peak heap, and the Phase 2 numbers are there to compare with.
  */
-@Tag("scale")
 class PerfDocTest {
 
     @Test
@@ -25,7 +23,7 @@ class PerfDocTest {
             {"S4 tied composite keys, 1M-row parents", "postgres"}, {"S1 one table", "mysql"}, {"S1 one table", "sqlite"}}) {
             boolean found = false;
             for (String l : lines) {
-                if (!l.startsWith("|") || !l.contains(want[0]) || !l.contains("| " + want[1] + " |")) {
+                if (!l.startsWith("|") || l.contains("Phase 2") || !l.contains(want[0]) || !l.contains("| " + want[1] + " |")) {
                     continue;
                 }
                 String[] cell = l.split("\\|");

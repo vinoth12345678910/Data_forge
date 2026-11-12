@@ -86,6 +86,8 @@ public final class ScaleMain {
      * forced GC, so what it reads is what the program was still holding.
      */
     private static final class Live extends Thread {
+        /** Sampling period in ms: 500 by default; FORGE_SCALE_SAMPLE_MS makes it finer for short runs. */
+        private static final long PERIOD = System.getenv("FORGE_SCALE_SAMPLE_MS") == null ? 500 : Long.parseLong(System.getenv("FORGE_SCALE_SAMPLE_MS"));
         private volatile boolean running = true;
         private long max;
 
@@ -98,7 +100,7 @@ public final class ScaleMain {
             while (running) {
                 sample();
                 try {
-                    Thread.sleep(500);
+                    Thread.sleep(PERIOD);
                 } catch (InterruptedException e) {
                     return;
                 }

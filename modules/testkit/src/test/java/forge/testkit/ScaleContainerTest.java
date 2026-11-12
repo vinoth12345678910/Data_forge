@@ -36,7 +36,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers(disabledWithoutDocker = false)
 class ScaleContainerTest {
 
-    static final String PG_IMAGE = System.getProperty("forge.pg.image", "postgres:16-alpine");
+    /** The Postgres image: postgres:16-alpine; set FORGE_PG_IMAGE (for example postgres:17-alpine) for an informational run on another version. */
+    static final String PG_IMAGE = System.getenv("FORGE_PG_IMAGE") != null ? System.getenv("FORGE_PG_IMAGE") : "postgres:16-alpine";
     static final int XMX = 256;
     /** Peak heap may use at most this share of the limit, so a near miss fails before an OutOfMemoryError does. */
     static final double HEAP_SHARE = 0.85;
@@ -69,6 +70,11 @@ class ScaleContainerTest {
         List<String> cmd = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx" + xmx, "-cp",
             System.getProperty("forge.test.classpath"), "forge.testkit.ScaleMain", mode, dialect, shape, Integer.toString(scale), Long.toString(seed),
             jdbc, user == null ? "" : user, pw == null ? "" : pw, dir.toString(), System.getProperty("golden.dir")));
+        String extra = System.getenv("FORGE_SCALE_JVMARGS");
+        if (extra != null && !extra.isBlank()) {
+            // diagnosis only (for example -XX:+HeapDumpOnOutOfMemoryError); the gate never sets it
+            cmd.addAll(2, List.of(extra.trim().split("\\s+")));
+        }
         File log = dir.resolve("child-" + mode + "-" + shape + ".log").toFile();
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).redirectOutput(log).start();
         assertTrue(p.waitFor(40, TimeUnit.MINUTES), "child JVM timed out");
@@ -162,10 +168,13 @@ class ScaleContainerTest {
         try (Connection c = DriverManager.getConnection(pgJdbc(db), "postgres", "pw")) {
             assertEquals(1_000_000, one(c, "select count(*) from orders"));
             assertTrue(one(c, "select count(*) from payments") > 1_000_000, "the payment layout made its child rows");
-            assertEquals(0, one(c, "select count(*) from orders o where o.status in ('paid','fulfilled','refunded') and "
-                + "(select count(*) from payments p where p.order_id = o.id and p.status = 'succeeded') <> 1"), "a paid order has exactly one succeeded payment, at a million orders");
-            assertEquals(0, one(c, "select count(*) from orders o where o.total_paise <> coalesce((select sum(i.quantity * i.unit_price_paise) from order_items i where i.order_id = o.id), 0)"),
-                "the derived total holds at a million orders");
+            // set-based (a hash join per check): a correlated subquery per order is quadratic without an index on the foreign key
+            assertEquals(0, one(c, "select count(*) from orders o left join (select order_id, count(*) n from payments where status = 'succeeded' group by order_id) p on p.order_id = o.id "
+                + "where o.status in ('paid','fulfilled','refunded') and coalesce(p.n, 0) <> 1"), "a paid order has exactly one succeeded payment, at a million orders");
+            assertEquals(0, one(c, "select count(*) from orders o left join (select order_id, sum(quantity * unit_price_paise) s from order_items group by order_id) i on i.order_id = o.id "
+                + "where o.total_paise <> coalesce(i.s, 0)"), "the derived total holds at a million orders");
+            assertEquals(0, one(c, "select count(*) from orders o left join (select order_id, count(*) n from payments where status = 'succeeded' group by order_id) p on p.order_id = o.id "
+                + "where o.status in ('pending','cancelled') and coalesce(p.n, 0) <> 0"), "an unpaid order has no succeeded payment");
         }
         record("S3 events-merch rules + states, 1M orders", "postgres", r.rows(), r);
     }
@@ -224,11 +233,13 @@ class ScaleContainerTest {
     @Test
     @Timeout(value = 20, unit = TimeUnit.MINUTES)
     void aDeliberatelyLoweredHeapLimitFailsTheSameRun(@TempDir Path dir) throws Exception {
-        String db = pgDb(ScaleShapes.ddl("s2", "postgres"));
-        // the stated limit is 256 MB; the same S2 run with a limit far below what it needs must be reported as a failure
-        Run low = child("load", "postgres", "s2", 0, 42, "24m", pgJdbc(db), "postgres", "pw", dir);
-        List<String> bad = limits(low, 180, 24);
-        assertFalse(bad.isEmpty(), "the gate must be able to fail: S2 at -Xmx24m was accepted: " + low.line());
+        String db = pgDb(ScaleShapes.ddl("s4", "postgres"));
+        // S4 holds about 210 MB of live heap at one million parent rows (see its own test). 70 MB cannot hold that, on any
+        // machine, so the same run at the lowered limit must be reported as a failure. (A limit near what a run needs is
+        // not a proof: it passes on some runs and fails on others.)
+        Run low = child("load", "postgres", "s4", 1_000_000, 42, "70m", pgJdbc(db), "postgres", "pw", dir);
+        List<String> bad = limits(low, 300, 70);
+        assertFalse(bad.isEmpty(), "the gate must be able to fail: S4 at -Xmx70m was accepted: " + low.line());
         // and the checker itself rejects a run that is over its heap share or its time even when the child exited 0
         assertFalse(limits(new Run(0, "OK rows=1 ms=1000 liveMB=250 maxHeapMB=256", 1, 1000, 250, 250, 256, ""), 60, 256).isEmpty(), "live heap 250 MB of 256 is over 85%");
         assertFalse(limits(new Run(0, "OK rows=1 ms=999999 liveMB=10 maxHeapMB=256", 1, 999999, 10, 10, 256, ""), 60, 256).isEmpty(), "999 s is over a 60 s limit");
