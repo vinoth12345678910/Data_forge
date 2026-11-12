@@ -70,8 +70,8 @@ Counts (PASS / enforced by database / not checked): Postgres 15 / 5 / 7; MySQL 1
 | category_tree_acyclic | PASS (both oracles) | PASS (our verify) | PASS (our verify) |
 | category_depth_bounded | not checked in this phase | not checked in this phase | not checked in this phase | (b) needs a depth-capped parent pick
 | product_in_leaf_category | not checked in this phase | not checked in this phase | not checked in this phase | (c) needs `pick ... where`
-| inventory_reserved_matches_active | not checked in this phase | not checked in this phase | not checked in this phase | (c) needs `fill`
-| stock_on_hand_matches_movements | not checked in this phase | not checked in this phase | not checked in this phase | (c) needs `fill`
+| inventory_reserved_matches_active | not checked in this phase | not checked in this phase | not checked in this phase | (c) needs a derive with a column join (`via child.col = table.col`)
+| stock_on_hand_matches_movements | not checked in this phase | not checked in this phase | not checked in this phase | (c) needs a derive with a column join (`via child.col = table.col`)
 | active_reservation_not_expired | not checked in this phase | not checked in this phase | not checked in this phase | (b) needs timestamps after the clock
 | expired_reservation_has_passed | not checked in this phase | not checked in this phase | not checked in this phase | (b) goes with active_reservation_not_expired (the reservation machine needs future times)
 | reservation_quantity_matches_item | PASS (both oracles) | PASS (our verify) | PASS (our verify) |
