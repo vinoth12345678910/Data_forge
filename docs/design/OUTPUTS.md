@@ -129,3 +129,7 @@ SQL output loads into an empty database on each dialect and verify passes in-sco
 1. **Versioned (`forge.output/1`), consumers ignore unknown fields, breaking changes go to `/2` (recommended).**
 2. **Frozen forever.** No growth.
 3. **Unversioned.** Cheapest, but nothing tells a consumer that something changed.
+
+## APPROVED by the user (Phase 4 reply) with changes
+
+D2a approved. **D2b changed** (replaces the number rules above): in JSON Lines, **`bigint` columns are always JSON strings**; `int` and `smallint` are JSON numbers; `numeric`/decimal and all times are strings; booleans are JSON booleans. Reason: a JSON number loses digits above 2^53 in many readers (JavaScript), so the 64-bit type is always a string, with no exceptions for small values. D2c approved with a stricter promise: **within `forge.output/1` fields are only added; any rename or removal makes `/2`.**

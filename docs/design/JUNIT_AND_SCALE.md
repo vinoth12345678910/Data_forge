@@ -98,3 +98,9 @@ Touch a database it did not create (it records its own names in a per-JVM set an
 ## Carry-over notes for this doc
 
 `keep` tables stay refused by `RowGen`. Postgres 17: one informational run of S1 and S2 on the 17 image (the pinned constant becomes overridable); not a gate.
+
+## APPROVED by the user (Phase 4 reply) with changes
+
+**D4a approved with limits.** (1) If the extension started the container, teardown only **stops the container**; no delete SQL is run. (2) In shared-container mode (a container the test run supplied), `DROP DATABASE` is allowed **only for a name the extension generated** (fixed prefix `forge_` plus a UUID) and recorded in memory in that JVM; any other name is refused. (3) The extension does not use or touch the `cleanup` module or any manifest code. **The user will run safety-reviewer on that diff in a fresh session.**
+**D4b approved:** shapes S1 to S4, including S2 (1,000,000 parents with 3,000,000 children) and S4 (a tied composite foreign key shape); MySQL and SQLite run S1.
+**D4c approved:** measure first; if the tied-key memory is not bounded and not fixed, the report says "not proven bounded".

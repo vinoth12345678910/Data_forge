@@ -91,3 +91,13 @@ Per database: unchanged gives 0; a column type change, an added table, a dropped
 1. **Print them and put them in the JSON; write nothing unless `--suggest-file` is given and is not `forge.yml` (recommended).**
 2. **Print only.** Safest, but a CI job cannot save the suggestion as an artifact without parsing stdout.
 3. **A `--apply` flag that edits `forge.yml`.** Convenient, but it rewrites your file; rejected by the hard rule.
+
+## APPROVED by the user (Phase 4 reply) with changes
+
+D1a, D1c approved as proposed. D1b approved with these changes, which **replace** the severity table above where they differ:
+
+- **New table, new column and type change are warnings**, printed as warnings even when the exit code is 0. (My draft made a new table an error because `forge generate` stops with "No row count". The user's rule wins: it is a warning. The evidence text still says that generate will stop, so the cause is visible.)
+- **A dropped column the spec uses is an error** (a rule, state machine, `columns:` override, `correlate` or burst names it). A dropped table the spec lists is an error. Anything else the in-memory plan or `ConfigCheck` rejects is an error with the planner's message as evidence.
+- Option `--fail-on error|warning|info|none` (default `error`); `--fail-on warning` is the strict CI setting (`warn` is accepted as an alias).
+- Exit codes unchanged: 0 no change at the threshold, 1 change at or above it, 2 could not run.
+- Drift never writes `forge.yml`; the only file it may write is `forge.schema.json` with `--accept`, and `--suggest-file` (never the forge.yml path).

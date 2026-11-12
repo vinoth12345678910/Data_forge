@@ -83,3 +83,7 @@ On Postgres, MySQL and SQLite, loaded by a hand-written script (not Data Forge):
 1. **Yes, read-only, with the label printed (recommended).** Verifying production data is a legitimate use and cannot change it.
 2. **No, same as generate.** Consistent, but it blocks the most useful target.
 3. **Only with `--allow-prod`.** A deliberate extra step; small cost, and it makes the intent explicit.
+
+## APPROVED by the user (Phase 4 reply) with changes
+
+D3a, D3b approved. **D3c changed:** verify on a `prod`-labelled connection is allowed **only with an explicit `--allow-prod` flag**, the session gets a **statement timeout** (Postgres `statement_timeout`, MySQL `max_execution_time`, every dialect also `Statement.setQueryTimeout`), and the environment label is printed in the human output and in `data.env` of the JSON.

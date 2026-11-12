@@ -32,7 +32,7 @@ tables:
       phone: { gen: phone, locale: en_IN, null_rate: 0.10 }
       role:  { gen: pick, values: [customer, staff, admin] }
   countries:
-    keep: true                   # reference table: never generated, never cleaned
+    keep: true                   # NOT BUILT (Phase 5): generate refuses it today
 
 rules: []                        # reserved (Phase 2)
 states: {}                       # reserved (Phase 3)
@@ -75,7 +75,7 @@ Table names are written exactly as the database stores them. A table in another 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `rows` | int >= 0 | `forge init` writes the inferred count | How many rows to generate. |
-| `keep` | bool | `false` | Reference table: never generated, never cleaned. A kept table must not also have `rows`. |
+| `keep` | bool | `false` | **Not built (planned for Phase 5).** Meant as: reference table, never generated, never cleaned. Today `forge generate` refuses a table with `keep: true` with a clear error, because the generator is offline and pure and cannot read a table's keys from the database. A kept table must not also have `rows`. |
 | `columns` | map: column name to column block | `{}` | Overrides. A column that is not listed uses the inferred generator. |
 
 How `forge init` picks `rows`: 100 per table, lowered to the table's capacity when the structure allows fewer (a primary key or unique column limited by a check such as `id = 1`, an enum, or a junction table whose parents allow fewer pairs). A table that cannot be generated at all is reported, not silently skipped.

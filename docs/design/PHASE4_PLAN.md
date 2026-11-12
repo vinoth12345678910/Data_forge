@@ -147,3 +147,8 @@ PASS a. clean build   PASS b. determinism   PASS c. testcontainers   PASS d. no-
 PASS f1. cross-database: SQLite   PASS f2. MySQL   PASS f3. Postgres
 PASS e. clean-machine build (cache: warm, 26s)
 ```
+
+## APPROVED by the user (Phase 4 reply)
+
+All four decisions approved with the changes recorded at the end of `DRIFT.md`, `OUTPUTS.md`, `VERIFY_ANY.md` and `JUNIT_AND_SCALE.md`. Carry-over: `keep` stays refused and is marked "not built" in `CONFIG.md` now (planned for Phase 5); a Postgres 17 informational run is fine; the step e retry test is added in P4.1, the SQLite constraint names in P4.2, and the edge-mode assertion rewrite in P4.4.
+**Process note found while planning:** the pre-commit hook runs the fast tests, so a red gate test cannot be committed if it is a fast test. Each gate test is therefore a container-tagged class (it needs a database anyway) or a bash script test, which the hook does not run, so it can be committed red before any product code.
