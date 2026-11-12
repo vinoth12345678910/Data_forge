@@ -1,0 +1,36 @@
+{
+  "$comment": "forge.output/1: the envelope every command prints with --json. Within /1 fields are only added; a rename or removal makes /2. Consumers ignore unknown fields.",
+  "type": "object",
+  "required": ["schema", "command", "ok", "exit", "tool_version", "data", "warnings", "errors", "elapsed_ms"],
+  "properties": {
+    "schema": {"const": "forge.output/1"},
+    "command": {"enum": ["init", "generate", "verify", "drift", "cleanup", "readiness"]},
+    "ok": {"type": "boolean"},
+    "exit": {"type": "integer"},
+    "tool_version": {"type": "string"},
+    "data": {"type": "object"},
+    "warnings": {"type": "array", "items": {"$ref": "#/definitions/entry"}},
+    "errors": {"type": "array", "items": {"$ref": "#/definitions/entry"}},
+    "elapsed_ms": {"type": "integer"}
+  },
+  "definitions": {
+    "entry": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "rule": {"type": "string"},
+        "table": {"type": "string"},
+        "column": {"type": "string"},
+        "row": {"type": "object"},
+        "phase": {"type": "integer"}
+      }
+    }
+  },
+  "perCommand": {
+    "generate": {"required": ["seed", "loaded", "partial", "not_checked"]},
+    "verify": {"required": ["rules", "counts"]},
+    "init": {"required": ["tables", "notes"]}
+  }
+}
