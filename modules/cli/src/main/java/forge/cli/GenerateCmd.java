@@ -68,8 +68,9 @@ final class GenerateCmd implements Callable<Integer> {
                 out.print(rep.text(live.conf.connection().url()));
                 code = rep.exitCode();
             }
-            out.println("Note: " + live.verifyRules.size() + " rule(s) (forge.yml rules and the rules its state machines imply) were "
-                + "verified in the database. Rules classed as not handled in this phase are not checked; see docs/design/PHASE3_RESULTS.md.");
+            out.println("Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, foreign keys) holds, and only the "
+                + live.verifyRules.size() + " rule(s) in forge.yml, plus the rules its state machines imply, are generated and verified. "
+                + "Rules this phase does not handle are not checked (see docs/design/PHASE3_RESULTS.md); there is no full realism yet.");
             return code;
         }
     }

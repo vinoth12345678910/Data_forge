@@ -36,6 +36,8 @@ final class CrossDbCli {
     static void scenario(Path yml, Path dir) throws Exception {
         String out = run(0, "generate", "-c", yml.toString(), "-s", "sale_rush");
         assertTrue(out.contains("Loaded "), out);
+        assertTrue(out.contains("partial"), "the summary must say plainly that the data is partial: " + out);
+        assertTrue(out.contains("not checked"), "the summary must say that deferred rules are not checked: " + out);
         assertTrue(Files.isDirectory(dir.resolve("manifests-here")), "manifest_dir was used");
         run(0, "verify", "-c", yml.toString(), "-s", "sale_rush");
     }
