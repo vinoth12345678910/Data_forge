@@ -60,7 +60,7 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        for (String reserved : List.of("use", "scenarios", "cleanup")) {
+        for (String reserved : List.of("use", "cleanup")) {
             JsonNode n = root.get(reserved);
             if (n != null && !n.isNull() && !n.isEmpty()) {
                 throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
@@ -81,7 +81,7 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")));
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE);
     }
 
     private static Map<String, Config.StateConf> states(JsonNode n) {
@@ -345,6 +345,80 @@ public final class ConfigReader {
         }
         return new ColConf(gen, text(n, "locale", path), bool(n, "unique", path), nullPer10k, values,
             scalar(n, "min", path), scalar(n, "max", path), shape(n, path));
+    }
+
+    private static Map<String, Config.Scenario> scenarios(JsonNode n) {
+        Map<String, Config.Scenario> out = new TreeMap<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isObject()) {
+            throw new ConfigError("scenarios: a map of scenario name to settings is required.");
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = n.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            String path = "scenarios." + e.getKey();
+            JsonNode s = e.getValue();
+            if (s == null || s.isNull()) {
+                out.put(e.getKey(), new Config.Scenario(null, Map.of(), Map.of(), List.of(), null));
+                continue;
+            }
+            keys(s, path, "extends", "rows", "mix", "burst", "edge");
+            Map<String, String> rows = new TreeMap<>();
+            JsonNode rn = s.get("rows");
+            if (rn != null && !rn.isNull()) {
+                keys(rn, path + ".rows", rn.isObject() ? java.util.stream.StreamSupport.stream(
+                    java.util.Spliterators.spliteratorUnknownSize(rn.fieldNames(), 0), false).toArray(String[]::new) : new String[0]);
+                for (Iterator<Map.Entry<String, JsonNode>> r = rn.fields(); r.hasNext(); ) {
+                    Map.Entry<String, JsonNode> re = r.next();
+                    String v = re.getValue().asText();
+                    if (!v.matches("[0-9]+x?")) {
+                        throw new ConfigError(path + ".rows." + re.getKey() + ": a whole number or a multiple such as 5x.");
+                    }
+                    rows.put(re.getKey(), v);
+                }
+            }
+            Map<String, Map<String, Integer>> mix = new TreeMap<>();
+            JsonNode mn = s.get("mix");
+            if (mn != null && !mn.isNull()) {
+                for (Iterator<Map.Entry<String, JsonNode>> m = mn.fields(); m.hasNext(); ) {
+                    Map.Entry<String, JsonNode> me = m.next();
+                    Map<String, Integer> w = new TreeMap<>();
+                    for (Iterator<Map.Entry<String, JsonNode>> x = me.getValue().fields(); x.hasNext(); ) {
+                        Map.Entry<String, JsonNode> xe = x.next();
+                        if (!xe.getValue().isInt() || xe.getValue().intValue() < 0) {
+                            throw new ConfigError(path + ".mix." + me.getKey() + "." + xe.getKey() + ": a whole number >= 0.");
+                        }
+                        w.put(xe.getKey(), xe.getValue().intValue());
+                    }
+                    mix.put(me.getKey(), w);
+                }
+            }
+            List<Config.Burst> bursts = new ArrayList<>();
+            JsonNode bn = s.get("burst");
+            if (bn != null && !bn.isNull()) {
+                for (JsonNode b : bn.isArray() ? bn : new com.fasterxml.jackson.databind.node.ArrayNode(null, List.of(bn))) {
+                    keys(b, path + ".burst", "column", "from", "to", "share");
+                    String col = text(b, "column", path + ".burst");
+                    String from = text(b, "from", path + ".burst");
+                    String to = text(b, "to", path + ".burst");
+                    JsonNode sh = b.get("share");
+                    if (col == null || from == null || to == null || sh == null || !sh.isInt() || sh.intValue() < 1 || sh.intValue() > 100) {
+                        throw new ConfigError(path + ".burst: column, from, to and share (1 to 100) are required.");
+                    }
+                    try {
+                        if (!Instant.parse(from).isBefore(Instant.parse(to))) {
+                            throw new ConfigError(path + ".burst: from must be before to.");
+                        }
+                    } catch (DateTimeParseException ex) {
+                        throw new ConfigError(path + ".burst: from and to are ISO-8601 UTC instants.");
+                    }
+                    bursts.add(new Config.Burst(col, from, to, sh.intValue()));
+                }
+            }
+            out.put(e.getKey(), new Config.Scenario(text(s, "extends", path), rows, mix, bursts, bool(s, "edge", path)));
+        }
+        return out;
     }
 
     private static Config.Shape shape(JsonNode n, String path) {

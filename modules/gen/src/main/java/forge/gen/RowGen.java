@@ -112,6 +112,10 @@ public final class RowGen {
         States.Layout lay;
         /** Set by a zipf foreign key: cumulative weights over parent ranks. */
         long[] zipf;
+        /** Set by a burst: a share of the rows land inside a window. */
+        Burst burst;
+        /** Set by edge-case mode. */
+        Edges.Edge edge;
     }
 
     private final long seed;
@@ -148,14 +152,6 @@ public final class RowGen {
 
     /** With rules (checked by the rules module, passed in as data). */
     public static RowGen of(SchemaGraph g, Config c, java.util.List<forge.core.Rule> rules) {
-        RowGen gen = of(g, c);
-        if (!rules.isEmpty()) {
-            gen.ruled = new Ruled(gen, g, rules);
-        }
-        return gen;
-    }
-
-    public static RowGen of(SchemaGraph g, Config c) {
         ConfigCheck.check(c, g);
         Map<String, Integer> counts = new TreeMap<>();
         for (Table t : g.tables()) {
@@ -169,7 +165,62 @@ public final class RowGen {
         RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts);
         gen.install(st);
         gen.shape(c);
+        gen.bursts(c);
+        if (!rules.isEmpty()) {
+            gen.ruled = new Ruled(gen, g, rules);
+        }
+        if (c.run().edge()) {
+            Edges.install(gen, g, rules);
+        }
         return gen;
+    }
+
+    public static RowGen of(SchemaGraph g, Config c) {
+        return of(g, c, java.util.List.of());
+    }
+
+    /** Burst windows of the run: a share of the rows of a timestamp column fall inside a window. */
+    private void bursts(Config c) {
+        for (Config.Burst b : c.run().bursts()) {
+            String[] tc = b.column().split("\\.");
+            Col k = tc.length == 2 && cols.get(tc[0]) != null ? cols.get(tc[0]).get(tc[1]) : null;
+            if (k == null) {
+                throw new GenError("burst: " + b.column() + " is not a generated column (write table.column).");
+            }
+            if (k.dom == null || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz")) || k.ov != null || k.fk != null) {
+                throw new GenError("burst: " + b.column() + " must be a plain timestamp column.");
+            }
+            long n = rows.get(tc[0]);
+            long from = Instant.parse(b.from()).getEpochSecond();
+            long to = Instant.parse(b.to()).getEpochSecond();
+            k.burst = new Burst(from, to, n == 0 ? null : new Perm(Keys.column(seed, tc[0], tc[1], "burst"), n),
+                n * b.share() / 100, Keys.column(seed, tc[0], tc[1], "burst-at"));
+        }
+    }
+
+    /** A burst window of one column. */
+    static final class Burst {
+        final long from;
+        final long to;
+        final Perm perm;
+        final long cut;
+        final long key;
+
+        Burst(long from, long to, Perm perm, long cut, long key) {
+            this.from = from;
+            this.to = to;
+            this.perm = perm;
+            this.cut = cut;
+            this.key = key;
+        }
+
+        boolean in(long row) {
+            return perm != null && perm.at(row) < cut;
+        }
+
+        long at(long row) {
+            return from + new Cell(key, row).below(to - from);
+        }
     }
 
     /** Skew, seasonality and correlation from forge.yml (docs/design/SHAPE_AND_SCENARIOS.md). */
@@ -276,6 +327,10 @@ public final class RowGen {
             throw new GenError("states: " + table + "." + column + " is not a generated column.");
         }
         return k;
+    }
+
+    long seed() {
+        return seed;
     }
 
     public Plan plan() {
@@ -1277,6 +1332,22 @@ public final class RowGen {
         if (k.ov != null) {
             return k.ov.apply(row);
         }
+        if (k.edge != null) {
+            int kind = k.edge.kind(row);
+            if (kind >= 0) {
+                String v = k.edge.value(kind, row, r -> normal(k, r, 0));
+                if (v != Edges.NONE) {
+                    return v;
+                }
+            }
+        }
+        if (k.burst != null && k.burst.in(row)) {
+            return k.dom.fmt(k.burst.at(row));
+        }
+        return normal(k, row, att);
+    }
+
+    private String normal(Col k, long row, int att) {
         if (k.fk != null) {
             return fkValue(k, row, att);
         }
@@ -1296,6 +1367,9 @@ public final class RowGen {
 
     /** The ordered number of a scalar column, with its comparison base applied. */
     private long raw(Col k, long row, int att) {
+        if (k.burst != null && k.burst.in(row)) {
+            return k.burst.at(row);
+        }
         if (k.base != null) {
             long v = raw(k.base, row, att) + 1 + new Cell(salt(k.vKey, att), row).below(k.step);
             if (k.cap) {

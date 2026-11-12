@@ -119,7 +119,9 @@ class ConfigReaderTest {
     @Test
     void reservedSectionsMustBeEmpty() {
         ConfigReader.read(GOOD + "use: []\nrules: []\nstates: {}\nscenarios: {}\ncleanup: {}\n");
-        bad(GOOD + "scenarios:\n  default: {}\n", "scenarios", "reserved");
+        assertEquals(1, ConfigReader.read(GOOD + "scenarios:\n  default: {}\n").scenarios().size());
+        bad(GOOD + "scenarios:\n  x:\n    burst: { column: t.c, from: \"2025-01-02T00:00:00Z\", to: \"2025-01-01T00:00:00Z\", share: 10 }\n", "burst", "before");
+        bad(GOOD + "states:\n  orders:\n    colum: status\n", "colum", "unknown key");
         bad(GOOD + "use: [generic]\n", "use", "reserved");
         bad(GOOD + "cleanup:\n  keep: [a]\n", "cleanup", "reserved");
     }

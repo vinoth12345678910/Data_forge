@@ -27,9 +27,13 @@ final class Live {
     List<Rule> verifyRules;
 
     Live(Path file) throws IOException {
+        this(file, null, false);
+    }
+
+    Live(Path file, String scenario, boolean edge) throws IOException {
         this.file = file;
         this.text = Files.readString(file);
-        this.conf = ConfigReader.read(text);
+        this.conf = forge.core.Scenarios.apply(ConfigReader.read(text), scenario, edge);
         Config.Conn c = conf.connection();
         if (c == null) {
             throw new ConfigError("forge.yml has no connection. Add connection.url and connection.env (this command works on a live database).");

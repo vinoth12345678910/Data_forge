@@ -26,7 +26,9 @@ class CliTest {
     @Test
     void stubsAcceptTheirFutureOptions() {
         assertTrue(Run.of("cleanup", "--dry-run").err().contains("not built yet (Phase 5)"));
-        assertTrue(Run.of("generate", "-s", "event-day-rush").err().contains("not built yet (Phase 3)"));
+        // generate -s is real since P3.4: with no forge.yml it fails on the missing file, not with "not built yet"
+        String err = Run.of("generate", "-s", "event-day-rush", "-c", "/nonexistent/forge.yml").err();
+        assertTrue(!err.contains("not built yet") && err.contains("forge generate"), err);
     }
 
     @Test

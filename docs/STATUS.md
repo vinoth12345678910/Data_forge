@@ -167,3 +167,10 @@
 - Next: P3.4 `p3-scenarios` (scenarios, mix sliders, burst, edge-case mode).
 - Decisions: see SHAPE_AND_SCENARIOS.md "As built".
 - Open: determinism-auditor on the diff in a fresh session.
+
+## 2026-11-12 P3.4 scenarios and edge cases (branch p3-scenarios, from p3-shape)
+- Done: scenarios (extends, rows multiples, mix sliders, burst windows), edge-case mode, `forge generate -s/--edge` and `forge verify -s`; `ScenariosGoldenContainerTest` 5 tests green: both golden schemas generate, load and pass every closed rule under our verify pass and the golden SQL in `default` and `sale_rush`; paid share moves by 15+ points; orders double; burst window share >= 25% (default near 0); edge mode loads with zero structure violations and every kind (null, max length, unicode, injection, leap day, DST) is present; case-only duplicate emails both load; proved not hollow by two mutations.
+- Not done: edge DST in a named zone; burst on dates; `saas-multitenant` (report only).
+- Next: P3.5 `p3-dialects` (MySQL and SQLite).
+- Decisions: whole-mix replacement for sliders; gate threshold for the burst is 25% because parent time rules narrow it.
+- Open: I wrote the code before the test on this feature (said above); determinism-auditor on P3.1 to P3.4 in a fresh session.

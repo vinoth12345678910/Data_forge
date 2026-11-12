@@ -10,18 +10,25 @@ import java.util.Set;
  */
 public record Config(
     int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
-    List<RuleConf> rules, Map<String, StateConf> states) {
+    List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run) {
+
+    /** A config without scenarios. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+        List<RuleConf> rules, Map<String, StateConf> states) {
+        this(version, seed, clock, locale, connection, ddl, tables, rules, states, Map.of(), Run.NONE);
+    }
 
     /** A config without states. */
     public Config(
         int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
         List<RuleConf> rules) {
-        this(version, seed, clock, locale, connection, ddl, tables, rules, Map.of());
+        this(version, seed, clock, locale, connection, ddl, tables, rules, Map.of(), Map.of(), Run.NONE);
     }
 
     /** The same config with other table settings. */
     public Config withTables(Map<String, TableConf> t) {
-        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states);
+        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run);
     }
 
     /** A config without rules. */
@@ -45,6 +52,21 @@ public record Config(
     public record ChildConf(
         String fk, String status, String number, String atColumn, String atFrom, int atGap, String latest,
         Map<String, List<String>> byState) {}
+
+    /**
+     * A named scenario (docs/design/SHAPE_AND_SCENARIOS.md). rows maps a table to "5x" (a multiple of its rows) or a
+     * whole number; mix maps "table.column" to new status weights; bursts put a share of a timestamp column in a window.
+     */
+    public record Scenario(
+        String extendsName, Map<String, String> rows, Map<String, Map<String, Integer>> mix, List<Burst> bursts, Boolean edge) {}
+
+    /** share percent of the rows of table.column fall between from and to (ISO instants). */
+    public record Burst(String column, String from, String to, int share) {}
+
+    /** What a run applies on top of the file: burst windows and edge-case mode. */
+    public record Run(List<Burst> bursts, boolean edge) {
+        public static final Run NONE = new Run(List.of(), false);
+    }
 
     /** One rule as written: kind is derive, check, limit or verify (after and before are written as a check with by); text is the rule text; description may be null. */
     public record RuleConf(String name, String kind, String text, String description, String by) {
