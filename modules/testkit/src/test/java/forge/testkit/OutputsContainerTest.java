@@ -350,6 +350,18 @@ class OutputsContainerTest {
                 }
                 int empties = (int) want.rows().get("merchandise").stream().filter(r2 -> "".equals(r2[want.columns().get("merchandise").indexOf("name")])).count();
                 assertTrue(empties > 0, "the awkward override really produced empty strings");
+                List<String> loaded = new ArrayList<>();
+                try (var rs = s.executeQuery("select name from merchandise")) {
+                    while (rs.next()) {
+                        loaded.add(rs.getString(1));
+                    }
+                }
+                int nameCol = want.columns().get("merchandise").indexOf("name");
+                List<String> generated = new ArrayList<>();
+                want.rows().get("merchandise").forEach(r2 -> generated.add(r2[nameCol]));
+                java.util.Collections.sort(loaded);
+                java.util.Collections.sort(generated);
+                assertEquals(generated, loaded, t.dialect() + ": every awkward value (backslash, newline, quotes, comma, Unicode, empty) loads back exactly from the SQL");
                 try (var rs = s.executeQuery("select count(*) from merchandise where name = ''")) {
                     rs.next();
                     assertEquals(empties, rs.getInt(1), t.dialect() + ": empty strings stay empty strings (not NULL) through SQL");
