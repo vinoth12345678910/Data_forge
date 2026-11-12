@@ -188,3 +188,10 @@
 - Next: Phase 4 only when told (not started). Review in fresh sessions: scope-guard on every PR, determinism-auditor on P3.1 to P3.4, dialect-specialist on P3.5.
 - Decisions: results counts 20 closed / 10 b / 13 c, not the planned 29 / 2 / 12.
 - Open: PR #26 (Phase 2 roll-up) and the stacked Phase 3 PRs are unmerged; the P3 stack targets p2-cli.
+
+## 2026-11-12 P4.1 JSON envelope (branch p4-json, from p4-design)
+- Done: gate first (committed red: `JsonEnvelopeContainerTest` 6 tests, `scripts/test-retry.sh`), then `Envelope` (core), `Emit` and a global `--json` (cli), `docs/schema/forge-output-1.json`; every command prints one envelope (stdout only, nothing on stderr); not-built commands return `not_built` with the phase; failed rules carry rule, table and row; exit equals `envelope.exit`; jq reads it; human summary still says "partial" and "not checked". Step e retry rule moved to `scripts/lib/retry.sh` and tested (new verify.sh step g). Mutations (row dropped, human text leaked to stdout, compile errors retried) each failed the gate and were restored with git checkout.
+- Not done: usage errors are not envelopes; `drift` is still not built (P4.2); `not_checked` is a string; envelope determinism across runs not tested (run ids are time-derived).
+- Next: P4.2 `p4-drift`.
+- Decisions: not-built exit stays 1 (exit 3 was never approved); `forge verify --json` raw output replaced.
+- Open: the hook cannot commit a red FAST test, so gates are container-tagged classes or bash tests.
