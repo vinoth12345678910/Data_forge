@@ -216,3 +216,8 @@
 - Next: P4.5 `p4-junit`.
 - Decisions: file manifest has `output_id`, no run id or time; one `removeTemp` for the writer's own temp directory (scope-guard to review).
 - Open: determinism-auditor and dialect-specialist reviews in a fresh session.
+
+## 2026-11-12 P4.4 follow-up: a flaky property found by the clean-machine step
+- The first push of `p4-outputs` failed in step e (clean container) on `NullThenUpdatePropertyTest` (the P3.6 jqwik property): `GenError: registration_before_event ... no value left`. Reproduced at jqwik 400 tries: seed 50, orders 28. Cause: a time rule with a gap (`by 1h..30d`) has no room when its parent's time is within the gap of the earliest time the generator can make; generation fails by design. It is not an outputs bug and it passed in step a by luck of the random draw.
+- Fix (test only, disclosed): the property builds its config without the `by`-gap time rules (it tests cycle fills, not time rules); 400 tries pass. `.jqwik-database` (failure seeds) was tracked in git and is now untracked and ignored.
+- **Open, for the user (generator design):** should a `before`/`after` rule with a gap fall back to ordering only when the gap leaves no room, instead of `GenError`? Today it fails with "no value left" (documented in `TEMPORAL_RULES.md`). Not changed.
