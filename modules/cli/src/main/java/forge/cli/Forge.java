@@ -6,6 +6,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
@@ -16,6 +17,9 @@ public final class Forge implements Runnable {
 
     /** Where environment variables are read from. Tests replace it. */
     public static Function<String, String> env = System::getenv;
+
+    @Option(names = "--json", scope = ScopeType.INHERIT, description = "Print one JSON document (forge.output/1) instead of human text")
+    boolean json;
 
     @Spec
     CommandSpec spec;
@@ -50,7 +54,7 @@ public final class Forge implements Runnable {
         @Spec CommandSpec spec;
 
         public Integer call() {
-            return notBuilt(spec, 4);
+            return new Emit(spec).notBuilt("drift", 4);
         }
     }
 
@@ -61,7 +65,7 @@ public final class Forge implements Runnable {
         @Option(names = "--run") boolean run;
 
         public Integer call() {
-            return notBuilt(spec, 5);
+            return new Emit(spec).notBuilt("cleanup", 5);
         }
     }
 
@@ -70,7 +74,7 @@ public final class Forge implements Runnable {
         @Spec CommandSpec spec;
 
         public Integer call() {
-            return notBuilt(spec, 5);
+            return new Emit(spec).notBuilt("readiness", 5);
         }
     }
 }

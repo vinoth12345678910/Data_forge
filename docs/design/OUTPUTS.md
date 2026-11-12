@@ -133,3 +133,11 @@ SQL output loads into an empty database on each dialect and verify passes in-sco
 ## APPROVED by the user (Phase 4 reply) with changes
 
 D2a approved. **D2b changed** (replaces the number rules above): in JSON Lines, **`bigint` columns are always JSON strings**; `int` and `smallint` are JSON numbers; `numeric`/decimal and all times are strings; booleans are JSON booleans. Reason: a JSON number loses digits above 2^53 in many readers (JavaScript), so the 64-bit type is always a string, with no exceptions for small values. D2c approved with a stricter promise: **within `forge.output/1` fields are only added; any rename or removal makes `/2`.**
+
+## As built in P4.1
+
+- Code: `Envelope` (core), `Emit` (cli: the one place a command prints), a global `--json` (picocli `ScopeType.INHERIT`, works before or after the command), `docs/schema/forge-output-1.json`. In `--json` mode human text is discarded, the envelope is the only thing on stdout and **nothing goes to stderr**.
+- **Exit codes as built** (they equal `envelope.exit`): `init` and `generate`: 0, or 1 for any error (including a bad config; this is the Phase 1 to 3 behaviour, kept so no existing test changes); `verify`: 0, 1 when a rule FAILs or ERRORs, **2 when it could not run**; `cleanup`, `readiness`, `drift` (until built): **1 with `errors[0].code = "not_built"` and `errors[0].phase`**. The proposed exit 3 for not-built was not adopted (it was not approved). A command-line usage error (an unknown option) is still picocli's human message on stderr with exit 2, not an envelope.
+- `generate` data: `run_id`, `seed`, `scenario`, `edge`, `loaded`, `manifest`, `partial: true`, `not_checked` (a **string**, not a count: the number of unhandled rules depends on a golden file the command does not have), plus the verify `rules`, `counts`, `env`. `verify` data: `rules`, `counts`, `env`. `init` data: `tables`, `seed`, `out`, `notes`.
+- Each FAILing rule adds one `rule_failed` error per sampled row, with `rule`, `table` and `row` (the sample's columns as an object, key first). `rule_note` warnings carry the "checked 0 rows" note.
+- The old raw `forge verify --json` output (`{exit, rules}`) is replaced by the envelope.
