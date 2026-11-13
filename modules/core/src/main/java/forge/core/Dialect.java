@@ -10,10 +10,21 @@ import java.sql.SQLException;
 public enum Dialect {
     POSTGRES, MYSQL, SQLITE;
 
+    /** The message for a MariaDB url or server: refused, never guessed as MySQL or Postgres. */
+    public static final String MARIADB = "MariaDB is not supported. Data Forge works with Postgres, MySQL 8.0.16 or later and SQLite; "
+        + "MariaDB differs from MySQL (statement timeout, least and greatest, json) and is untested.";
+
     public static Dialect of(Connection c) {
         try {
             String url = c.getMetaData().getURL();
+            if (url.startsWith("jdbc:mariadb:")) {
+                throw new ConfigError(MARIADB);
+            }
             if (url.startsWith("jdbc:mysql:")) {
+                String version = c.getMetaData().getDatabaseProductVersion();
+                if (version != null && version.toLowerCase(java.util.Locale.ROOT).contains("mariadb")) {
+                    throw new ConfigError(MARIADB + " This server says it is " + version + ".");
+                }
                 return MYSQL;
             }
             if (url.startsWith("jdbc:sqlite:")) {

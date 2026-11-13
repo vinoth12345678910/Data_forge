@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,7 +22,6 @@ import org.junit.jupiter.api.io.TempDir;
  * json). A MariaDB url, or a server that says it is MariaDB, is refused with a clear message; it is never treated as
  * Postgres or MySQL by guess.
  */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class MariaDbRefusedTest {
 
     /** A Connection that only knows its metadata: url and product version. */
