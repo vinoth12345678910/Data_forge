@@ -169,6 +169,7 @@ final class OwnershipKit {
                     Statement s = x.createStatement()) {
                     s.execute("create database " + db);
                     s.execute("grant all on " + db + ".* to 'test'@'%'");
+                    s.execute("grant process on *.* to 'test'@'%'"); // so a test can see a lock wait in information_schema.innodb_trx
                 }
                 String j = c.getJdbcUrl().replace("/start", "/" + db);
                 t = new T(d, j.replace("jdbc:", "").replaceFirst("\\?.*", ""),

@@ -107,6 +107,16 @@ final class Check {
         return r;
     }
 
+    /** The command passed every guard and cleaned the run: exit 0, state cleaned, rows deleted, the backup ran first (P5.4). */
+    static Res accepted(String step, Target t, Supplier<Res> cmd) throws Exception {
+        Res r = cmd.get();
+        r.expect(step, 0);
+        assertEquals("cleaned", r.field(step, "state").asText(), step + ": data.state");
+        assertTrue(r.field(step, "deleted").asLong() > 0, step + ": data.deleted must be above 0: " + r.describe());
+        assertTrue(Files.exists(t.marker()), step + ": the backup command did not run before the delete");
+        return r;
+    }
+
     /** The refusal text has neither the real database name nor the real total. */
     static void quiet(String step, Target t, Res r) throws Exception {
         String all = r.out() + "\n" + r.err();

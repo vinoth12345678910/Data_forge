@@ -19,8 +19,8 @@ All commands take `-c/--config forge.yml` (default `forge.yml`), `--json` (envel
 | Command | Writes to the target database | Deletes |
 |---|---|---|
 | `forge cleanup --dry-run [--run-id ID]` (default when no mode flag) | `_dataforge.dry_runs` row and `_dataforge.audit` rows only | nothing |
-| `forge cleanup --run --confirm-db NAME --confirm-rows N [--run-id ID] [--resume]` | `_dataforge` state and audit rows; the batch deletes | manifest rows that pass every check |
-| `forge cleanup --drop-metadata --confirm-db NAME --confirm-rows N` | drops schema `_dataforge` | nothing in user tables |
+| `forge cleanup --run --confirm-db NAME --confirm-rows N [--run-id ID] [--resume]` | `_dataforge` state and audit rows; the batch deletes | manifest rows that pass every check. `--resume` continues only a run in state `partial` (after a fresh dry run); a run marked `running` is refused (`run_in_progress`), see "Accepted limits" |
+| `forge cleanup --drop-metadata --confirm-db NAME --confirm-rows N` | drops schema `_dataforge` (**not built yet: P5.5**; today it answers `not_built`, exit 1) | nothing in user tables |
 | `forge classify [--run-id ID]` | nothing | nothing |
 | `forge purge --dry-run \| --run --rule NAME ... [--include-unmanifested]` | like cleanup | rows matched by a purge rule that pass the same checks |
 | `forge readiness [--run-id ID]` | nothing | nothing |
@@ -40,7 +40,7 @@ A refusal never leaves the database changed except the `_dataforge` bookkeeping 
 
 ## Run states (`_dataforge.runs.state`, also in the audit log)
 
-`loaded` (set by the loader) -> `running` (cleanup took the lock) -> `cleaned` (all manifest rows gone and verified) or `partial` (a batch failed or the process was interrupted after at least one committed batch) -> after `--drop-metadata` the schema is gone and only the audit file remains. `running` found at the start of a command means a previous process died: it is treated as `partial` and the command refuses to start another run until `--resume` (with a fresh dry run) is given (`run_in_progress`). A refusal before the first deletion returns the state to what it was.
+`loaded` (set by the loader) -> `running` (cleanup took the lock) -> `cleaned` (all manifest rows gone and verified) or `partial` (a batch failed or the process was interrupted after at least one committed batch) -> after `--drop-metadata` the schema is gone and only the audit file remains. `running` found at the start of a command means another cleanup may be working on the run, or that a process died: `--resume` never takes a `running` run over (`run_in_progress`); the operator marks it `partial` by hand once sure (see "Accepted limits" below), then resumes with a fresh dry run. A refusal before the first deletion returns the state to what it was.
 
 Two manifests at once: refused (`two_manifests`). Running cleanup on a `cleaned` run: exit 0, `already_clean`, no SQL deleting anything, one audit entry.
 
@@ -110,3 +110,11 @@ Every cleanup-family envelope has `command` (`cleanup`, `classify`, `purge`, `re
 
 `method` is `delete` or `truncate` (`truncate` only on Postgres, `GUARDS.md` G7); `state` is one of the run states above; a refusal has `"deleted":0`. `data.sql` shows the statement text with parameters as `?` placeholders; it is documentation, not something the run executes from text. `--json` also writes the same audit entries; nothing in the envelope contains a password or the value of `--confirm-*`.
 
+## Accepted limits of cleanup (P5.4 safety review; owner may veto)
+
+- **M1, nulled rows skip the fingerprint check.** A manifest row whose foreign key was set to NULL earlier in the same run (a cycle break or a nullable self reference) is exempt from the fingerprint check when its own batch runs, because the stored fingerprint covers the old foreign key value. An edit to another column of that row between the two batches is not seen.
+- **M2, a partial run that nulled foreign keys cannot be resumed.** The nulled rows no longer match their fingerprints, so the dry run of the partial run reports `rows_edited` and refuses. Safe, but the remaining rows must be cleaned by hand.
+- **M3, `cleanup.allow_triggers` is a trust decision.** For a table listed there, the batch check compares row counts: a trigger that deletes rows of another table and adds the same number back, or a concurrent writer doing so, is not seen. Data Forge cannot know what a trigger does; only list a table whose triggers you have read.
+- **M4, only delete triggers are checked.** Update triggers (cleanup sets some foreign keys of manifest rows to NULL), truncate triggers (Postgres truncate) and Postgres rules are not checked. `forge classify` prints the warning `other_triggers_or_rules` for them. Review them before a cleanup.
+- **M6, a run marked `running` is never taken over.** `--resume` accepts only a `partial` run. If a process died and left `running`, and you are sure nothing is still working on the run, set `runs.state` to `partial` by hand (`update _dataforge.runs set state = 'partial' where run_id = '...'`; MySQL and SQLite: `_dataforge_runs`), run a fresh dry run, then `--resume`.
+- **Other (L1 to L7, see docs/STATUS.md):** SQLite composite manifest keys use a row value list that SQLite rejects (fails closed); a self reference to a non-key column fails closed; the backup tree kill is best effort (a daemonised child can survive); manifest keys are read lazily from the database during the run; a Ctrl-C leaves `running`.

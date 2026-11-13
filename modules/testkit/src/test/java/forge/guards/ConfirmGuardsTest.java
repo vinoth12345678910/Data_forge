@@ -2,6 +2,7 @@ package forge.guards;
 
 import static forge.guards.Check.TOTAL;
 import static forge.guards.Check.guards;
+import static forge.guards.Check.accepted;
 import static forge.guards.Check.ready;
 import static forge.guards.Check.refused;
 import static forge.guards.Check.typed;
@@ -100,8 +101,7 @@ class ConfirmGuardsTest {
         Target t = ready(db, dir);
         t.env("prod");
         t.dry("--allow-prod").expect("prod dry run with --allow-prod", 0);
-        refused("prod with --allow-prod and the typed values", t, true, () -> t.run(withTyped(t, "--allow-prod")), "run_not_built",
-            guards("g1=pass", "g2=pass", "g4=pass", "g6=pass"));
+        accepted("prod with --allow-prod and the typed values", t, () -> t.run(withTyped(t, "--allow-prod")));
     }
 
     /**

@@ -76,6 +76,14 @@ final class Found {
         a.sources = 1;
     }
 
+    /** A cycle or self reference that is larger than cleanup.max_cycle_rows: sum is its rows, manifest the limit. */
+    void cycle(String code, String table, long rows, long limit) {
+        Agg a = by.computeIfAbsent(code + "\0" + table, k -> new Agg(code, table));
+        a.sum = rows;
+        a.manifest = limit;
+        a.sources = 1;
+    }
+
     /** blockers[]: {code, table, count, keys[]}. */
     List<Map<String, Object>> blockers() {
         List<Map<String, Object>> out = new ArrayList<>();
@@ -118,6 +126,10 @@ final class Found {
                 + "). They are not in the manifest. Nothing was deleted.";
             case "delete_trigger" -> t + " has a delete trigger (" + a.first() + "). A trigger can change any table, so Data Forge will not"
                 + " delete from it. If you accept that, list it under cleanup.allow_triggers. Nothing was deleted.";
+            case "cycle_too_large" -> "The cycle through " + t + " holds " + a.sum + " manifest rows, more than cleanup.max_cycle_rows ("
+                + a.manifest + "), and must be deleted in one transaction. Nothing was deleted.";
+            case "self_reference_stuck" -> t + " refers to itself (NOT NULL) and its " + a.sum + " rows would have to be deleted in one"
+                + " transaction, more than cleanup.max_cycle_rows (" + a.manifest + "). Nothing was deleted.";
             case "keep_table_in_manifest" -> t + " is a keep table but run " + runId + " has rows for it. Nothing was deleted.";
             default -> a.code + " " + t;
         };

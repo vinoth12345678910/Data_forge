@@ -81,6 +81,23 @@ public final class GuardsKit {
             return t;
         }
 
+        /** tables: name, rows, name, rows ... as the forge.yml tables block. */
+        public static String rows(Object... tableRows) {
+            return DryHalvesTest.rows(tableRows);
+        }
+
+        /** A target with its own tables and row counts (tables as DryHalvesTest.rows builds them); backup_cmd only touches marker(). */
+        public static Target custom(Db db, Path dir, String tables, String... ddl) throws Exception {
+            Target t = new Target(DryHalvesTest.custom(db.d, dir, tables, ddl));
+            t.backup("touch '" + t.marker() + "'");
+            return t;
+        }
+
+        /** A new plain connection to the target database (for a second session that holds locks). */
+        public java.sql.Connection open() throws java.sql.SQLException {
+            return w.t.open();
+        }
+
         public Db db() {
             return w.d == D.PG ? Db.PG : w.d == D.MY ? Db.MY : Db.SQ;
         }

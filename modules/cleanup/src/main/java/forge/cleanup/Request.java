@@ -11,9 +11,14 @@ import java.nio.file.Path;
  * the typed values of --run (null when the flag was not given); the other commands ignore them.
  */
 public record Request(Db db, SchemaGraph graph, Config conf, Path home, Path manifestDir, boolean allowProd, String runId,
-    String confirmDb, String confirmRows) {
+    String confirmDb, String confirmRows, boolean resume) {
 
     public Request(Db db, SchemaGraph graph, Config conf, Path home, Path manifestDir, boolean allowProd, String runId) {
-        this(db, graph, conf, home, manifestDir, allowProd, runId, null, null);
+        this(db, graph, conf, home, manifestDir, allowProd, runId, null, null, false);
+    }
+
+    public Request(Db db, SchemaGraph graph, Config conf, Path home, Path manifestDir, boolean allowProd, String runId,
+        String confirmDb, String confirmRows) {
+        this(db, graph, conf, home, manifestDir, allowProd, runId, confirmDb, confirmRows, false);
     }
 }
