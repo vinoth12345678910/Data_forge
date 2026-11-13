@@ -68,8 +68,12 @@ Exit codes (all commands): `0` success, `1` the command ran and found a problem 
   001_users.<ext>
   002_events.<ext>
   ...
-  999_cycles.sql        (SQL only, when the plan has null-then-update breaks)
+  000_begin.sql         (SQL only, Postgres, when the plan has deferrable cycles: BEGIN + SET CONSTRAINTS ALL DEFERRED)
+  998_cycles.sql        (SQL only, when the plan has null-then-update breaks: the UPDATEs)
+  999_commit.sql        (SQL only, Postgres, when the plan has deferrable cycles: COMMIT)
 ```
+
+The three script files are not tables, so they are listed in the manifest under `scripts`, each with `file`, `bytes` and `sha256`; `tables` and `scripts` together cover every file in the directory except `manifest.json`. **The files must run in name order on one session** (`cat *.sql | psql`, or one `psql` with several `-f`): `000_begin.sql` opens a transaction that `999_commit.sql` ends, so running each file in its own `psql` call fails.
 
 - **One file per table**, named `NNN_<table>.<ext>`: `NNN` is the table's position in the plan (the load order), so `cat *.sql` in name order loads correctly. A table with 0 rows gets no file.
 - Directory contents depend only on seed, spec, scenario, edge flag, format and dialect: **same seed, byte-identical files**. No time or host appears in any file. **The database run id of Phase 2 cannot be used here: it is derived from the seed, the config hash and the load time (`ManifestBuilder.runId(seed, configSha, at)`), so it differs on every run.** File output therefore carries an `output_id` derived from seed, `config_sha256`, `schema_sha256`, scenario, edge, format and dialect only (no time).
@@ -85,9 +89,13 @@ Exit codes (all commands): `0` success, `1` the command ran and found a problem 
 | empty string | `''` | `""` (quoted) | `""` |
 | quoting | single quotes, `'` doubled; MySQL also writes `\` as `\\`; Postgres and SQLite take backslash literally | RFC 4180: field quoted when it holds `,`, `"`, CR or LF; `"` doubled | standard JSON escapes; non-ASCII written as UTF-8, not `\u` |
 | numbers | bare | bare | integers and booleans as JSON numbers and booleans; `numeric` and timestamps as **strings** (no precision loss) |
-| cycles | `999_cycles.sql` holds the `UPDATE`s that fill the NULLed keys | the NULLed keys are given in `manifest.json`'s `breaks`; the CSV itself has the final values and the loader applies the break | same as CSV |
+| cycles | `998_cycles.sql` holds the `UPDATE`s that fill the NULLed keys | the NULLed keys are given in `manifest.json`'s `breaks`; the CSV itself has the final values and the loader applies the break | same as CSV |
 
 Why CSV NULL is "empty unquoted": it is distinguishable from the empty string, needs no sentinel such as `\N` (which collides with a real value), and parses with any RFC 4180 reader that preserves the quoted/unquoted difference. A reader that cannot make that difference cannot round-trip, and the manifest says so (`null_form`).
+
+**What CSV is for (review fix 4, decided).** CSV is for inspection and for Postgres COPY (`COPY t FROM ... WITH (FORMAT csv, HEADER)` reads an unquoted empty field as NULL and `""` as an empty string, so it round-trips exactly), and it is not for loading into MySQL or SQLite. `OutputsCsvLoadContainerTest` loads the real files to show why: MySQL `LOAD DATA` has no way to tell a quoted empty field from an unquoted one, so it loads without an error but the NULL counts differ; `sqlite3 .import` turns all NULLs into empty strings (0 of 145 stayed NULL on events-merch) and rejects rows whose CHECK needs a NULL (`order_items_one_target`). **To load into MySQL or SQLite use `--out sql`, which is tested to load exactly on all three databases.**
+
+Why this and not a per-dialect NULL token (for example `\N` for MySQL): SQLite has no token at all, so SQLite would still be inspection-only; MySQL would get a CSV that differs from the other two and from what every other reader expects; and the exact path already exists as SQL. Not changing the CSV bytes also keeps `output_id` and the Phase 4 files stable.
 
 ### The manifest file (beside every output)
 
@@ -103,6 +111,7 @@ Why CSV NULL is "empty unquoted": it is distinguishable from the empty string, n
   "format": "csv", "dialect": "postgres", "null_form": "empty-unquoted",
   "tables": [ { "name": "users", "file": "001_users.csv", "rows": 100, "bytes": 4821,
                 "sha256": "...", "columns": ["id","email"], "key": ["id"] } ],
+  "scripts": [ { "file": "998_cycles.sql", "bytes": 310, "sha256": "..." } ],
   "breaks": [ { "table": "orders", "fk": "orders_latest_payment_fk", "how": "null-then-update" } ]
 }
 ```
@@ -147,6 +156,7 @@ D2a approved. **D2b changed** (replaces the number rules above): in JSON Lines, 
 - Code: `OutFiles` (load: writers, manifest, temporary directory and publish) and `forge generate --out sql|csv|json --out-dir <dir> [--dialect postgres|mysql|sqlite]` in `GenerateCmd`. Nothing is loaded and nothing is verified in file mode (there is no database data to verify); the schema is read from the connection and the human and JSON summaries still say the data is partial and that unhandled rules are not checked.
 - Layout as designed: `NNN_table.<ext>` in load order (`jsonl` for JSON), `manifest.json`. For SQL: `000_begin.sql` (`BEGIN; SET CONSTRAINTS ALL DEFERRED;`) and `999_commit.sql` only when the plan has deferrable cycles (Postgres); `998_cycles.sql` holds the `UPDATE`s of null-then-update cycles. Run the files in name order in one session.
 - SQL quoting per dialect: identifiers in `"` (Postgres, SQLite) or backticks (MySQL), tables schema-qualified on Postgres; strings single-quoted with `''`, and on MySQL `\` written as `\\`; number columns bare, booleans `TRUE`/`FALSE`, 500 rows per `INSERT`.
+- SQL header (review fix 5): every table file and `998_cycles.sql` starts with the session settings that make values load the same anywhere: Postgres `SET client_encoding = 'UTF8'; SET TIME ZONE 'UTC';`, MySQL `SET NAMES utf8mb4; SET time_zone = '+00:00';` (a `timestamp` column is converted through the session zone, so without this a non-UTC server default shifts every value, and a latin1 client garbles Unicode). SQLite has neither setting, so its files have no header. `OutputsHeaderContainerTest` loads the edge-mode files into a MySQL server defaulting to +05:30 from a latin1 session and checks the DST and leap-day instants and the Unicode value read back exactly. Postgres `timestamptz` values already carry `+00`, so only the encoding and the zone for a plain `timestamp` depend on the header there.
 - CSV: header of column names; unquoted empty field is NULL, `""` is an empty string; a field is quoted when it holds a comma, a quote, CR or LF. JSON Lines: keys in column order; `bigint` always a JSON string, `int` and `smallint` numbers, `bool` booleans, everything else strings (D2b as changed); non-ASCII written as UTF-8.
 - Manifest: `forge.manifest/1` with `output_id` (UUID derived from seed, config hash, schema hash, scenario, edge, format, dialect), per-table file, rows, bytes, sha256, columns and key, `breaks`, `null_form`. **No time field.**
 - A run writes into `<dir>.tmp-<id>` and moves it into place. On failure the only thing removed is that temporary directory (a path containing `.tmp-` that the call created). A non-empty output directory is refused. **This is the one `deleteIfExists` in Phase 4 file code: scope-guard should look at `OutFiles.removeTemp`.**

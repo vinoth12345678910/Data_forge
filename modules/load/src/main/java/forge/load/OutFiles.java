@@ -56,6 +56,9 @@ public final class OutFiles {
         if (!List.of("sql", "csv", "json").contains(format)) {
             throw new LoadError("--out must be sql, csv or json, not " + format);
         }
+        if (dir.toAbsolutePath().normalize().getParent() == null) {
+            throw new LoadError("output directory " + dir + " is a filesystem root; Data Forge writes into a new directory inside it, not into the root itself.");
+        }
         if (Files.exists(dir) && (!Files.isDirectory(dir) || hasFiles(dir))) {
             throw new LoadError("output directory " + dir + " already has files; Data Forge never writes into a used directory. Use a new or empty one.");
         }
@@ -86,15 +89,15 @@ public final class OutFiles {
             + d.name().toLowerCase(java.util.Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();
         Path parent = dir.toAbsolutePath().normalize().getParent();
         Files.createDirectories(parent);
-        Path tmp = parent.resolve(dir.getFileName() + ".tmp-" + outputId.substring(0, 8));
-        Files.createDirectories(tmp);
+        Path tmp = fresh(parent, dir.getFileName() + ".tmp-" + outputId.substring(0, 8));
         try {
             List<Map<String, Object>> entries = new ArrayList<>();
             List<String> files = new ArrayList<>();
             long total = 0;
             int number = 1;
+            List<Map<String, Object>> scripts = new ArrayList<>();
             if (format.equals("sql") && defer) {
-                files.add(small(tmp, "000_begin.sql", "BEGIN;\nSET CONSTRAINTS ALL DEFERRED;\n"));
+                files.add(small(tmp, "000_begin.sql", "BEGIN;\nSET CONSTRAINTS ALL DEFERRED;\n", scripts));
             }
             String ext = format.equals("json") ? "jsonl" : format;
             for (String name : tables) {
@@ -131,6 +134,7 @@ public final class OutFiles {
             if (format.equals("sql") && !later.isEmpty()) {
                 Digest dg = new Digest();
                 try (Writer w = dg.open(tmp.resolve("998_cycles.sql"))) {
+                    w.write(header(d));
                     for (var e : later.entrySet()) {
                         if (gen.rows(e.getKey()) > 0 && tables.contains(e.getKey())) {
                             updates(w, g.table(e.getKey()), gen, g, d, e.getValue());
@@ -138,9 +142,10 @@ public final class OutFiles {
                     }
                 }
                 files.add("998_cycles.sql");
+                scripts.add(entry("998_cycles.sql", dg));
             }
             if (format.equals("sql") && defer) {
-                files.add(small(tmp, "999_commit.sql", "COMMIT;\n"));
+                files.add(small(tmp, "999_commit.sql", "COMMIT;\n", scripts));
             }
             Map<String, Object> man = new LinkedHashMap<>();
             man.put("schema", "forge.manifest/1");
@@ -160,6 +165,7 @@ public final class OutFiles {
                 default -> "NULL";
             });
             man.put("tables", entries);
+            man.put("scripts", scripts);
             man.put("breaks", breaks);
             DefaultPrettyPrinter pp = new DefaultPrettyPrinter().withObjectIndenter(new DefaultIndenter("  ", "\n")).withArrayIndenter(new DefaultIndenter("  ", "\n"));
             Files.writeString(tmp.resolve("manifest.json"), new ObjectMapper().writer(pp).writeValueAsString(man) + "\n", StandardCharsets.UTF_8);
@@ -174,7 +180,20 @@ public final class OutFiles {
 
     // ---- the three formats
 
+    /**
+     * What every table file and the cycles file start with, so a file run on its own (any client, any server default)
+     * reads and stores the same values: UTF-8 and UTC. SQLite has neither setting.
+     */
+    static String header(Dialect d) {
+        return switch (d) {
+            case POSTGRES -> "SET client_encoding = 'UTF8';\nSET TIME ZONE 'UTC';\n";
+            case MYSQL -> "SET NAMES utf8mb4;\nSET time_zone = '+00:00';\n";
+            default -> "";
+        };
+    }
+
     private static void sql(Writer w, Table t, RowGen gen, SchemaGraph g, Dialect d, TreeSet<String> blank) throws IOException {
+        w.write(header(d));
         List<String> cols = gen.columns(t.name());
         StringBuilder head = new StringBuilder("INSERT INTO ").append(table(g, t.name(), d)).append(" (");
         for (int i = 0; i < cols.size(); i++) {
@@ -317,9 +336,22 @@ public final class OutFiles {
 
     // ---- files
 
-    private static String small(Path tmp, String name, String text) throws IOException {
-        Files.writeString(tmp.resolve(name), text, StandardCharsets.UTF_8);
+    private static String small(Path tmp, String name, String text, List<Map<String, Object>> scripts) throws IOException {
+        Digest dg = new Digest();
+        try (Writer w = dg.open(tmp.resolve(name))) {
+            w.write(text);
+        }
+        scripts.add(entry(name, dg));
         return name;
+    }
+
+    /** A manifest entry for a script file (begin, cycles, commit): its name, size and SHA-256. */
+    private static Map<String, Object> entry(String file, Digest dg) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("file", file);
+        m.put("bytes", dg.bytes());
+        m.put("sha256", dg.hex());
+        return m;
     }
 
     /** A file writer that counts bytes and hashes them as they go. */
@@ -357,6 +389,22 @@ public final class OutFiles {
         String hex() {
             return HexFormat.of().formatHex(md.digest());
         }
+    }
+
+    /**
+     * Creates a temporary directory that did not exist: createDirectory fails on an existing name, so a directory the
+     * user (or an earlier interrupted run) left there is never reused and never emptied. Only a directory created here is removed.
+     */
+    private static Path fresh(Path parent, String name) throws IOException {
+        for (int i = 0; i < 100; i++) {
+            Path p = parent.resolve(i == 0 ? name : name + "-" + i);
+            try {
+                return Files.createDirectory(p);
+            } catch (java.nio.file.FileAlreadyExistsException taken) {
+                // try the next name
+            }
+        }
+        throw new LoadError("could not find a free temporary directory name next to " + parent + " (" + name + "-1 to -99 all exist). Remove the old .tmp- directories.");
     }
 
     private static boolean hasFiles(Path dir) throws IOException {

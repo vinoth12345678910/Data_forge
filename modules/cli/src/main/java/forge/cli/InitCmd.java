@@ -148,6 +148,9 @@ final class InitCmd implements Callable<Integer> {
     }
 
     static String jdbc(String url) {
+        if (url.startsWith("mariadb:") || url.startsWith("jdbc:mariadb:")) {
+            throw new ConfigError(forge.core.Dialect.MARIADB + " Got " + url);
+        }
         if (url.startsWith("mysql://")) {
             return "jdbc:mysql://" + url.substring("mysql://".length()) + "?rewriteBatchedStatements=true";
         }

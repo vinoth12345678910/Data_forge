@@ -50,6 +50,7 @@ final class GenerateCmd implements Callable<Integer> {
             throw new ConfigError("refusing to run against env prod. Data Forge never generates into prod.");
         }
         live.open();
+        e.typeWarnings(live.typeWarnings);
         RowGen gen = RowGen.of(live.graph, live.conf, live.rules);
         if (out != null) {
             return files(e, live, gen);

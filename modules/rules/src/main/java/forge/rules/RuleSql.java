@@ -163,7 +163,8 @@ public final class RuleSql {
                 case RuleExpr.Fn f -> {
                     List<String> args = new ArrayList<>();
                     f.args().forEach(a -> args.add(expr(a)));
-                    yield d.fn(f.name()) + "(" + String.join(", ", args) + ")";
+                    yield f.name().equals("least") || f.name().equals("greatest") ? d.pick(f.name(), args)
+                        : d.fn(f.name()) + "(" + String.join(", ", args) + ")";
                 }
                 case RuleExpr.Agg a -> agg(a);
             };
