@@ -242,4 +242,4 @@
 - Decisions I made (yours to veto): CSV = inspection, not a per-dialect NULL token; least/greatest follow Postgres (NULLs ignored); unknown type = text plus warning; temp dir = first free `.tmp-` name; RED commits of fast tests carry a `containers` tag so the fast-test hook passes, removed in the fix commit.
 - Finding: the old S3 hash (c123c26f...) was not reproducible; the code from before the cache bound gives the same 3957ab91... as now, so the bound changed no output.
 - Open: gap-rule planner headroom (user design); dialect findings not addressed: ReadOnly guard is not dialect-aware, SQLite constraint-name regex, `--dialect` against a database of another type.
-
+- verify.sh (full, on this branch): PASS a clean build, b determinism, c testcontainers, d no-network, f1 SQLite, f2 MySQL, f3 Postgres, h scale smoke, g script tests, e clean-machine build. Nothing SKIPPED.
