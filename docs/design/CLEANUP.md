@@ -57,7 +57,7 @@ Two manifests at once: refused (`two_manifests`). Running cleanup on a `cleaned`
 9. Read-only checks, all of them, collecting every problem before refusing: ownership and fingerprints (D1), keep tables (G6), real-data blocker including composite and self references, cascade/SET NULL/SET DEFAULT effects, delete triggers (D2, D10), counts equal the manifest (G5 pre-check), truncate eligibility (G7).
 10. Backup gate: only now; the command and environment label are printed, then `backup_cmd` runs. (G3)
 11. Batches in reverse load order. Each batch is one transaction: lock the rows, re-verify fingerprints and referencing rows **inside the transaction**, delete, check the deleted count equals the batch size, commit; any mismatch rolls the batch back and stops the run as `partial` (exit 3 if an earlier batch committed, else exit 1 with the state restored).
-12. Final verification: no manifest key remains in any manifest table; counts of keep tables and of all non-manifest rows are unchanged from the dry-run digest.
+12. Final verification: no manifest key remains in any manifest table; keep tables are equal to the dry-run digest; every other non-manifest table has at least its dry-run row count and, when no table is listed in `cleanup.allow_triggers`, exactly its dry-run count (an allowed trigger may add rows, never remove them).
 13. State `cleaned`; audit result entry; exit 0.
 
 ## Batches, cycles, self references (D10)
