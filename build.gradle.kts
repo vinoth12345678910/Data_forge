@@ -31,8 +31,21 @@ subprojects {
         testClassesDirs = sourceSets["test"].output.classesDirs
         classpath = sourceSets["test"].runtimeClasspath
         useJUnitPlatform { includeTags("containers") }
+        // The frozen Phase 5 safety tests run in their own step (safetyTest, verify.sh step i), per feature.
+        filter { excludeTestsMatching("forge.safety.*") }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         // Docker and golden files are inputs Gradle cannot see: never skip as up-to-date.
+        outputs.upToDateWhen { false }
+    }
+    // The frozen Phase 5 safety tests (modules/testkit/src/test/java/forge/safety). scripts/safety-green.txt lists the
+    // ones a branch must pass; scripts/verify.sh step i runs exactly those, and the full suite at the end of Phase 5.
+    tasks.register<Test>("safetyTest") {
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform { includeTags("containers") }
+        filter { includeTestsMatching("forge.safety.*") }
+        systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         outputs.upToDateWhen { false }
     }
     // The scale tests (one million rows, minutes long) carry the "scale" tag and run via `scaleTest` (verify.sh step h).

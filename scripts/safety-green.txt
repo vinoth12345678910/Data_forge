@@ -1,0 +1,9 @@
+# Frozen safety tests (modules/testkit/src/test/java/forge/safety) that this branch must pass.
+# One Gradle --tests pattern per line. A feature adds the patterns it makes green; the last Phase 5 feature
+# replaces the list with the single line  forge.safety.*  (the whole suite). Anything not listed is NOT required
+# on this branch and verify.sh says so. Removing a line to make a failing run pass weakens the gate: do not.
+forge.safety.HarnessSelfTest
+forge.safety.GroupsHToLSelfTest
+forge.safety.TruncateTest.e4_*
+forge.safety.GuardsTest.b1_*
+forge.safety.ResumeAndScopeTest.l3_*
