@@ -39,7 +39,8 @@ final class Emit {
 
     /** An exception as an error entry (and, in human mode, the usual "forge <command>: message" line on stderr). */
     void fail(String command, Exception e) {
-        String code = switch (e.getClass().getSimpleName()) {
+        String named = e instanceof forge.gen.GenError g ? g.code() : e instanceof forge.load.LoadError l ? l.code() : null;
+        String code = named != null ? named : switch (e.getClass().getSimpleName()) {
             case "ConfigError" -> "config_error";
             case "RuleError" -> "rule_error";
             case "GenError" -> "gen_error";

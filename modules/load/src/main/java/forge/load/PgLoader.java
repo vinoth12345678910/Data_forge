@@ -58,6 +58,7 @@ public final class PgLoader {
                     + "Empty it, load into a fresh database, or mark the table keep in forge.yml.");
             }
         }
+        KeepCheck.verify(c, g, conf);
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
         Map<String, Long> pre = new TreeMap<>();
         for (Table t : g.tables()) {

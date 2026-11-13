@@ -62,10 +62,17 @@ public final class KeepSet {
             throw new IndexOutOfBoundsException("keep value " + i + " of " + count);
         }
         if (spans.length > 0 && cols.size() == 1) {
-            int s = 0;
-            while (before[s + 1] <= i) {
-                s++;
+            int lo = 0;
+            int hi = spans.length - 1;
+            while (lo < hi) {
+                int mid = (lo + hi) >>> 1;
+                if (before[mid + 1] <= i) {
+                    lo = mid + 1;
+                } else {
+                    hi = mid;
+                }
             }
+            int s = lo;
             return new String[] {Long.toString(spans[s][0] + (i - before[s]))};
         }
         List<Object> id = ids.get((int) i);
