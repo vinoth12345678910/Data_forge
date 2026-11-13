@@ -57,7 +57,7 @@ class KeepConfigTest {
         String txt = d == D.MY ? "varchar(255)" : "text";
         return OwnershipKit.fresh(d, dir,
             "create table countries (id bigint primary key, name " + txt + " not null)",
-            "create table customers (id bigint primary key, country_id bigint not null references countries (id), name " + txt + " not null)",
+            "create table customers (id bigint primary key, country_id bigint not null, name " + txt + " not null, foreign key (country_id) references countries (id))",
             "insert into countries values (1, 'India'), (2, 'France'), (3, 'Brazil'), (4, 'Kenya'), (5, 'Japan')");
     }
 
