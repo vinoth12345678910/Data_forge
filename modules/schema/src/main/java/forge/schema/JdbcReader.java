@@ -32,6 +32,11 @@ public final class JdbcReader {
 
     private JdbcReader() {}
 
+    /** STUB for the RED commit: warnings are not filled yet. */
+    public static SchemaGraph read(Connection c, List<String> warnings) throws SQLException {
+        return read(c);
+    }
+
     public static SchemaGraph read(Connection c) throws SQLException {
         Dialect d = Dialect.of(c);
         if (d == Dialect.POSTGRES) {
