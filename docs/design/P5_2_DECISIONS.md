@@ -18,3 +18,12 @@ Taken by the builder session under the delegation, for the 14 ambiguities the P5
 12. **SQLite `PRAGMA foreign_keys` read-back**: not done for dry-run or classify (nothing is deleted). Required for deleting commands from P5.4 (the L4 test).
 13. **MySQL read-only role** sees only triggers it has the TRIGGER privilege for: classify may under-report triggers there. Written down here; classify prints a warning `triggers_may_be_incomplete` when the role cannot read them.
 14. **Run id**: `--run-id` wins; else the only run with `state <> 'cleaned'`; two or more is `two_manifests`; none uncleaned but some cleaned is `already_clean`; no runs is `manifest_missing`.
+
+## Review fixes (safety-reviewer findings on P5.2)
+
+15. **SQLite delete triggers (H1, fail closed)**: any SQLite trigger whose text contains the word `delete` (no comment stripping, so a quoted name with `--` or `/*` cannot hide one) counts as a delete trigger on its table, and the table is resolved case-insensitively against the schema's table names. This may over-report (a trigger that only mentions delete, or deletes from another table); it never hides one. Other dialects are unchanged.
+16. **Prod refusal writes nothing to the database (M1)**: with env `prod` and no `--allow-prod`, the dry run writes its intent and refusal entries to the audit file only: no `Meta.ensure`, no audit table row, no `dry_runs` row. An unwritable audit file is still exit 2 `audit_unwritable`. classify already refused first and writes nothing.
+17. **Run state is an allow-list (M2)**: only `loaded` passes. `cleaned` is `already_clean`, a NULL state is `manifest_old_format` (items 7 and 14); every other state (running, partial, cleaning, anything unknown) is `run_not_loaded`.
+18. **Digest before the scans (M3)**: the state digest is taken before the ownership and blocker scans, so a change made by another writer during the scans leaves the stored digest older than the data and a later run sees it as stale.
+19. **Unexpected failure (M4)**: any SQLException or RuntimeException after the intent entry gives an audit result entry with outcome `error` and the message (file, and the table when it can be written), a JSON envelope with code `dry_run_failed`, exit 2, no stack trace.
+20. **Guard 4 in the audit result (L1)**: `g4` is `refuse` whenever the dry run found any blocker (keep table, real rows, cascade, trigger, edited or missing rows); it is `pass` only with no blocker.

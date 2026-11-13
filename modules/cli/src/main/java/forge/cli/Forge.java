@@ -11,8 +11,8 @@ import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
 @Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
-    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, Forge.Cleanup.class,
-        Forge.Readiness.class})
+    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, CleanupCmd.class,
+        ClassifyCmd.class, Forge.Readiness.class})
 public final class Forge implements Runnable {
 
     /** Where environment variables are read from. Tests replace it. */
@@ -47,17 +47,6 @@ public final class Forge implements Runnable {
     static int notBuilt(CommandSpec spec, int phase) {
         spec.commandLine().getErr().println("forge " + spec.name() + ": not built yet (Phase " + phase + ")");
         return 1;
-    }
-
-    @Command(name = "cleanup", description = "Remove generated rows (Phase 5).")
-    static final class Cleanup implements java.util.concurrent.Callable<Integer> {
-        @Spec CommandSpec spec;
-        @Option(names = "--dry-run") boolean dryRun;
-        @Option(names = "--run") boolean run;
-
-        public Integer call() {
-            return new Emit(spec).notBuilt("cleanup", 5);
-        }
     }
 
     @Command(name = "readiness", description = "Go-live readiness check (Phase 5).")
