@@ -68,8 +68,12 @@ Exit codes (all commands): `0` success, `1` the command ran and found a problem 
   001_users.<ext>
   002_events.<ext>
   ...
-  999_cycles.sql        (SQL only, when the plan has null-then-update breaks)
+  000_begin.sql         (SQL only, Postgres, when the plan has deferrable cycles: BEGIN + SET CONSTRAINTS ALL DEFERRED)
+  998_cycles.sql        (SQL only, when the plan has null-then-update breaks: the UPDATEs)
+  999_commit.sql        (SQL only, Postgres, when the plan has deferrable cycles: COMMIT)
 ```
+
+The three script files are not tables, so they are listed in the manifest under `scripts`, each with `file`, `bytes` and `sha256`; `tables` and `scripts` together cover every file in the directory except `manifest.json`. **The files must run in name order on one session** (`cat *.sql | psql`, or one `psql` with several `-f`): `000_begin.sql` opens a transaction that `999_commit.sql` ends, so running each file in its own `psql` call fails.
 
 - **One file per table**, named `NNN_<table>.<ext>`: `NNN` is the table's position in the plan (the load order), so `cat *.sql` in name order loads correctly. A table with 0 rows gets no file.
 - Directory contents depend only on seed, spec, scenario, edge flag, format and dialect: **same seed, byte-identical files**. No time or host appears in any file. **The database run id of Phase 2 cannot be used here: it is derived from the seed, the config hash and the load time (`ManifestBuilder.runId(seed, configSha, at)`), so it differs on every run.** File output therefore carries an `output_id` derived from seed, `config_sha256`, `schema_sha256`, scenario, edge, format and dialect only (no time).
@@ -85,7 +89,7 @@ Exit codes (all commands): `0` success, `1` the command ran and found a problem 
 | empty string | `''` | `""` (quoted) | `""` |
 | quoting | single quotes, `'` doubled; MySQL also writes `\` as `\\`; Postgres and SQLite take backslash literally | RFC 4180: field quoted when it holds `,`, `"`, CR or LF; `"` doubled | standard JSON escapes; non-ASCII written as UTF-8, not `\u` |
 | numbers | bare | bare | integers and booleans as JSON numbers and booleans; `numeric` and timestamps as **strings** (no precision loss) |
-| cycles | `999_cycles.sql` holds the `UPDATE`s that fill the NULLed keys | the NULLed keys are given in `manifest.json`'s `breaks`; the CSV itself has the final values and the loader applies the break | same as CSV |
+| cycles | `998_cycles.sql` holds the `UPDATE`s that fill the NULLed keys | the NULLed keys are given in `manifest.json`'s `breaks`; the CSV itself has the final values and the loader applies the break | same as CSV |
 
 Why CSV NULL is "empty unquoted": it is distinguishable from the empty string, needs no sentinel such as `\N` (which collides with a real value), and parses with any RFC 4180 reader that preserves the quoted/unquoted difference. A reader that cannot make that difference cannot round-trip, and the manifest says so (`null_form`).
 
@@ -103,6 +107,7 @@ Why CSV NULL is "empty unquoted": it is distinguishable from the empty string, n
   "format": "csv", "dialect": "postgres", "null_form": "empty-unquoted",
   "tables": [ { "name": "users", "file": "001_users.csv", "rows": 100, "bytes": 4821,
                 "sha256": "...", "columns": ["id","email"], "key": ["id"] } ],
+  "scripts": [ { "file": "998_cycles.sql", "bytes": 310, "sha256": "..." } ],
   "breaks": [ { "table": "orders", "fk": "orders_latest_payment_fk", "how": "null-then-update" } ]
 }
 ```

@@ -95,8 +95,9 @@ public final class OutFiles {
             List<String> files = new ArrayList<>();
             long total = 0;
             int number = 1;
+            List<Map<String, Object>> scripts = new ArrayList<>();
             if (format.equals("sql") && defer) {
-                files.add(small(tmp, "000_begin.sql", "BEGIN;\nSET CONSTRAINTS ALL DEFERRED;\n"));
+                files.add(small(tmp, "000_begin.sql", "BEGIN;\nSET CONSTRAINTS ALL DEFERRED;\n", scripts));
             }
             String ext = format.equals("json") ? "jsonl" : format;
             for (String name : tables) {
@@ -140,9 +141,10 @@ public final class OutFiles {
                     }
                 }
                 files.add("998_cycles.sql");
+                scripts.add(entry("998_cycles.sql", dg));
             }
             if (format.equals("sql") && defer) {
-                files.add(small(tmp, "999_commit.sql", "COMMIT;\n"));
+                files.add(small(tmp, "999_commit.sql", "COMMIT;\n", scripts));
             }
             Map<String, Object> man = new LinkedHashMap<>();
             man.put("schema", "forge.manifest/1");
@@ -162,6 +164,7 @@ public final class OutFiles {
                 default -> "NULL";
             });
             man.put("tables", entries);
+            man.put("scripts", scripts);
             man.put("breaks", breaks);
             DefaultPrettyPrinter pp = new DefaultPrettyPrinter().withObjectIndenter(new DefaultIndenter("  ", "\n")).withArrayIndenter(new DefaultIndenter("  ", "\n"));
             Files.writeString(tmp.resolve("manifest.json"), new ObjectMapper().writer(pp).writeValueAsString(man) + "\n", StandardCharsets.UTF_8);
@@ -319,9 +322,22 @@ public final class OutFiles {
 
     // ---- files
 
-    private static String small(Path tmp, String name, String text) throws IOException {
-        Files.writeString(tmp.resolve(name), text, StandardCharsets.UTF_8);
+    private static String small(Path tmp, String name, String text, List<Map<String, Object>> scripts) throws IOException {
+        Digest dg = new Digest();
+        try (Writer w = dg.open(tmp.resolve(name))) {
+            w.write(text);
+        }
+        scripts.add(entry(name, dg));
         return name;
+    }
+
+    /** A manifest entry for a script file (begin, cycles, commit): its name, size and SHA-256. */
+    private static Map<String, Object> entry(String file, Digest dg) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("file", file);
+        m.put("bytes", dg.bytes());
+        m.put("sha256", dg.hex());
+        return m;
     }
 
     /** A file writer that counts bytes and hashes them as they go. */
