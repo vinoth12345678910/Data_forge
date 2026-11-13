@@ -264,4 +264,35 @@ class ScaleContainerTest {
         assertEquals(List.of(), limits(d, 240, XMX));
         assertEquals(d.line().split(" ")[1], e.line().split(" ")[1], "S2 (4,000,000 rows with foreign keys): same seed, same hash");
     }
+
+    // ---- review fix 12: the hashes are pinned
+
+    /** One shape's generated output, hashed in a child JVM at the given heap, with its row count and hash checked. */
+    private static String hashOf(String shape, int scale, String xmx, int xmxMb, long rows, Path dir) throws Exception {
+        String ddl = shape.equals("s3") ? Files.readString(Path.of(System.getProperty("golden.dir"), "events-merch/schema.sql")) : ScaleShapes.ddl(shape, "postgres");
+        String db = pgDb(ddl);
+        Run r = child("hash", "postgres", shape, scale, 42, xmx, pgJdbc(db), "postgres", "pw", dir);
+        assertEquals(List.of(), limits(r, 300, xmxMb), shape + " at -Xmx" + xmx);
+        assertEquals(rows, r.rows(), shape + " row count");
+        return r.line().split(" ")[1];
+    }
+
+    @Test
+    @Timeout(value = 40, unit = TimeUnit.MINUTES)
+    void theGeneratedDataOfAllFourShapesIsPinned(@TempDir Path dir) throws Exception {
+        assertEquals(ScalePins.S1, hashOf("s1", 0, XMX + "m", XMX, ScalePins.S1_ROWS, dir), "S1: a change means the generated data changed");
+        assertEquals(ScalePins.S2, hashOf("s2", 0, XMX + "m", XMX, ScalePins.S2_ROWS, dir), "S2: a change means the generated data changed");
+        assertEquals(ScalePins.S3, hashOf("s3", 0, XMX + "m", XMX, ScalePins.S3_ROWS, dir), "S3: a change means the generated data changed");
+        assertEquals(ScalePins.S4, hashOf("s4", 1_000_000, XMX + "m", XMX, ScalePins.S4_ROWS, dir), "S4: a change means the generated data changed");
+    }
+
+    @Test
+    @Timeout(value = 40, unit = TimeUnit.MINUTES)
+    void s3OutputIsTheSameAtTwoHeapSizes(@TempDir Path dir) throws Exception {
+        // The row cache is bounded by a fifth of the heap: 256m and 2g give different cache sizes and must give identical bytes.
+        String small = hashOf("s3", 0, "256m", 256, ScalePins.S3_ROWS, dir);
+        String large = hashOf("s3", 0, "2g", 2048, ScalePins.S3_ROWS, dir);
+        assertEquals(small, large, "the cache bound must not change a single generated value");
+        assertEquals(ScalePins.S3, small);
+    }
 }
