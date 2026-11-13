@@ -122,6 +122,9 @@ Features:
 - No-network test: run the suite in Docker with `--network none`.
 - Docs, README, demo GIF, `jlink` runtime image, release.
 
+Hardening (collected from reviews; each needs its own gate test):
+- Planner headroom for gap rules: a time rule with a minimum gap (`registration_before_event`, by 1h..30d) has no room when its parent's time is within the gap of the earliest time the generator can make, and generation stops with "no value left" (found as the flaky P3.6 property: forge seed 50, 28 orders; regression `GapRuleLimitTest`). The fix is generator or rule-language design, which the user owns: for example shift the parent's time floor by the gap, or clamp to the floor.
+
 Gate: all golden schemas pass every rule; 1M-row run passes; no-network test passes. Tag: `v1.0`
 
 ## If a gate fails

@@ -398,6 +398,7 @@ final class Ruled {
         long lo = up ? d.lo : base - d.lo - (d.space - 1);
         long hi = up ? d.lo + d.space - 1 : base - d.lo;
         String why = "";
+        String gaps = "";
         for (Clamp cl : s.clamps()) {
             Rule r = cl.rule();
             if (r.when() != null && !Boolean.TRUE.equals(eval(r.when(), c))) {
@@ -437,6 +438,7 @@ final class Ruled {
                 }
             }
             why += " " + r.name();
+            gaps += " " + r.name();
         }
         if (k.burst != null && k.burst.in(c.row())) {
             long nlo = Math.max(lo, k.burst.from);
@@ -445,6 +447,12 @@ final class Ruled {
                 lo = nlo;
                 hi = nhi;
             }
+        }
+        if (lo > hi && !gaps.isEmpty()) {
+            // Limits below only lower hi or raise a minimum, so this range stays empty: the same GenError as before, with the real reason.
+            throw new GenError("Rules" + gaps + ": " + c.table() + " row " + c.row() + " column " + s.column()
+                + " has no value left (allowed " + lo + " to " + hi + "): the parent's " + (up ? "value" : "time")
+                + " leaves no room for the minimum gap. Lower the gap, or give the parent rows " + (up ? "larger" : "later") + " values.");
         }
         for (Limit l : s.asChild()) {
             long p = gen.parentRow(c.table(), l.fk(), c.row(), c.att());

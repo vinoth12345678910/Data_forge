@@ -42,3 +42,8 @@ The language change list for the user (c): `fill` (exact allocation) and `pick .
 - `category_tree_acyclic` is verified by the sufficient condition `parent_id < id` (the generator picks an earlier row as parent); the golden recursive query is the second oracle and agrees on the data. Written as `verify:`.
 - A rule path may not walk a foreign-key column that sits in two foreign keys; `registrations.event_id` is one, so the golden file goes through `registrations.ticket_type_id.event_id`.
 - A parent timestamp that a rule itself clamps is read through the finished parent row (`child at` in states now reads `cell()`, not the unruled draw).
+
+## The gap limit, pinned (review fix 9)
+
+A rule with a minimum gap (`created_at < event.starts_at by 1h..30d`) fails with a `GenError` when the parent's time is closer to the earliest time the generator can make than the gap: "the parent's time leaves no room for the minimum gap". `GapRuleLimitTest` pins it at forge seed 50, 28 orders (registrations row 27) on events-merch; the generator is unchanged, only the message was corrected (it used to give the cap advice "Fewer children per parent, or a larger cap"). Open design question, listed in `docs/PLAN.md` under Phase 7 hardening: planner headroom for gap rules.
+

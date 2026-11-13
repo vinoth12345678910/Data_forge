@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.TreeMap;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -24,7 +23,6 @@ import org.junit.jupiter.api.io.TempDir;
  * found this as the "flaky" P3.6 property. It stays a GenError (generator behaviour is not changed here); the message must
  * say what is wrong. SQLite, no Docker.
  */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class GapRuleLimitTest {
 
     static Config conf(int seed, int orders) throws Exception {
