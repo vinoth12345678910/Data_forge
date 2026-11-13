@@ -88,3 +88,25 @@ cleanup:
 ## What Phase 5 does not do
 
 Does not clean anything outside the target database (files, object storage, payment gateway test orders, sent email and SMS, logs, caches, search indexes, soft-deleted rows the app keeps; `readiness` prints this checklist). Does not make backups. Does not delete rows it did not load (except an explicit `purge --include-unmanifested`, which keeps the real-data blocker and the typed confirmation). Does not build any UI (Phase 6), packs or release work (Phase 7).
+
+## JSON shapes (`--json`, envelope `forge.output/1`; only additions are allowed later)
+
+Every cleanup-family envelope has `command` (`cleanup`, `classify`, `purge`, `readiness`), `ok`, `exit`, `errors[]` (one entry per refusal or blocker: `code` from the tables in `GUARDS.md`, `ROW_OWNERSHIP.md`, `CASCADES_AND_TRIGGERS.md`, `message`, `table` when it applies), `warnings[]`, and `data`:
+
+```json
+// cleanup --dry-run
+{"mode":"dry-run","run_id":"6f1c…","manifest_id":"6f1c…","env":"test","db":"forge_test","dry_id":"…","made_at":"2026-11-13T10:00:00Z",
+ "digest":"<hex>","blocked":false,"total_rows":4820,
+ "tables":[{"name":"payments","load_order":9,"manifest_rows":300,"live_rows":300,"method":"delete","method_reason":"inbound foreign key"}],
+ "sql":["DELETE FROM \"public\".\"payments\" WHERE ..."],"blockers":[{"code":"real_rows_reference_manifest","table":"orders","count":2,"keys":["9001","9002"]}],
+ "keep":["countries"],"triggers":[],"backup_cmd_configured":true}
+// cleanup --run (done, refused, partial)
+{"mode":"run","run_id":"…","manifest_id":"…","state":"cleaned","deleted":4820,"batches":12,
+ "by_table":{"payments":{"deleted":300,"method":"delete"}},"backup":{"ran":true,"exit":0,"log":".forge/audit/<run>.backup.log"},
+ "sequences_reset":[{"table":"users","column":"id","next":1}],"audit":{"file":".forge/audit/audit.jsonl","entries":2}}
+// readiness
+{"run_id":"…","passed":false,"checks":[{"name":"counts","status":"fail","code":"counts_differ"},{"name":"metadata","status":"pass"}],"manual_checklist":["uploaded files and object storage","…"]}
+```
+
+`method` is `delete` or `truncate` (`truncate` only on Postgres, `GUARDS.md` G7); `state` is one of the run states above; a refusal has `"deleted":0`. `data.sql` shows the statement text with parameters as `?` placeholders; it is documentation, not something the run executes from text. `--json` also writes the same audit entries; nothing in the envelope contains a password or the value of `--confirm-*`.
+
