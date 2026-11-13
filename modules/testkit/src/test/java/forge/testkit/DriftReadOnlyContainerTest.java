@@ -37,6 +37,9 @@ class DriftReadOnlyContainerTest {
     @Container
     static final MySQLContainer MY = new MySQLContainer(DialectMysqlContainerTest.IMAGE).withUsername("test").withPassword("pw").withDatabaseName("start");
 
+    /** What Db.recorder reports for setReadOnly(true): the statement Connector/J sends for it. */
+    static final String READ_ONLY = "set session transaction read only";
+
     static final Pattern WRITES = Pattern.compile("(?i)^\\s*(insert|update|delete|create|drop|alter|truncate|grant|copy)\\b");
 
     @BeforeAll
@@ -62,9 +65,12 @@ class DriftReadOnlyContainerTest {
         return seen;
     }
 
-    private static void check(String dialect, List<String> seen, String marker) {
-        assertTrue(!seen.isEmpty(), dialect + ": drift sent nothing to the database");
-        assertEquals(marker, seen.get(0), dialect + ": the first thing on the connection must be the read-only setting, saw " + seen);
+    private static void check(String dialect, List<String> seen, String second) {
+        assertTrue(seen.size() > 1, dialect + ": drift sent nothing to the database");
+        assertEquals(READ_ONLY, seen.get(0), dialect + ": the first thing on the connection must be the read-only setting, saw " + seen);
+        if (second != null) {
+            assertEquals(second, seen.get(1), dialect + ": the session must be set read only before any query, saw " + seen);
+        }
         for (String s : seen) {
             assertTrue(!WRITES.matcher(s).find(), dialect + ": drift sent a write: " + s);
         }
@@ -72,10 +78,15 @@ class DriftReadOnlyContainerTest {
 
     @Test
     void postgresDriftIsReadOnly(@TempDir Path dir) throws Exception {
-        try (Connection c = DriverManager.getConnection(PG.getJdbcUrl(), "postgres", "pw")) {
-            DialectGate.script(c, DialectGate.golden("events-merch/schema.sql"));
+        String host = PG.getHost() + ":" + PG.getMappedPort(5432);
+        try (Connection c = DriverManager.getConnection("jdbc:postgresql://" + host + "/postgres", "postgres", "pw"); Statement s = c.createStatement()) {
+            s.execute("create database ro_drift");
         }
-        String url = PG.getJdbcUrl().replace("jdbc:", "").replaceFirst("^postgresql:", "postgres:");
+        try (Connection c = DriverManager.getConnection("jdbc:postgresql://" + host + "/ro_drift", "postgres", "pw"); Statement s = c.createStatement()) {
+            s.setEscapeProcessing(false);
+            s.execute(java.nio.file.Files.readString(DialectGate.golden("events-merch/schema.sql")));
+        }
+        String url = "postgres://" + host + "/ro_drift";
         Path yml = CrossDbCli.config(dir, "events-merch", url, "postgres", "DRIFT_PW");
         check("postgres", drift(yml), "set session characteristics as transaction read only");
     }
@@ -91,6 +102,6 @@ class DriftReadOnlyContainerTest {
         }
         String url = MY.getJdbcUrl().replace("jdbc:", "").replace("/start", "/ro_drift").replaceFirst("\\?.*", "");
         Path yml = CrossDbCli.config(dir, "events-merch", url, "test", "DRIFT_PW");
-        check("mysql", drift(yml), "setReadOnly(true)");
+        check("mysql", drift(yml), null);
     }
 }

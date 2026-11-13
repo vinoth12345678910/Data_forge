@@ -28,11 +28,17 @@ public record Db(String url, String user, String password) {
      */
     public Connection openReadOnly() throws SQLException {
         if (url.startsWith("jdbc:sqlite:")) {
+            String file = url.substring("jdbc:sqlite:".length());
+            int q = file.indexOf('?');
+            file = q < 0 ? file : file.substring(0, q);
+            if (!file.isEmpty() && !file.startsWith(":memory:") && !file.startsWith("file:") && !java.nio.file.Files.exists(java.nio.file.Path.of(file))) {
+                throw new SQLException("SQLite file " + file + " does not exist. Forge never creates a database it only reads.");
+            }
             Properties p = new Properties();
             p.setProperty("open_mode", "1");
             return record(DriverManager.getConnection(url, p));
         }
-        Connection c = DriverManager.getConnection(url, user, password);
+        Connection c = record(DriverManager.getConnection(url, user, password));
         c.setReadOnly(true);
         if (url.startsWith("jdbc:postgresql:")) {
             // pgjdbc ignores setReadOnly in autocommit mode (readOnlyMode=transaction), so the session is set explicitly.
@@ -40,7 +46,7 @@ public record Db(String url, String user, String password) {
                 s.execute("set session characteristics as transaction read only");
             }
         }
-        return record(c);
+        return c;
     }
 
     public String password() {
@@ -64,6 +70,9 @@ public record Db(String url, String user, String password) {
             if (a != null && a.length > 0 && a[0] instanceof String sql && (m.getName().equals("prepareStatement")
                 || m.getName().equals("prepareCall") || m.getName().equals("nativeSQL"))) {
                 sink.accept(sql);
+            }
+            if (m.getName().equals("setReadOnly") && a != null && a.length == 1 && Boolean.TRUE.equals(a[0])) {
+                sink.accept("set session transaction read only"); // what the driver sends for it, so a test sees it as SQL
             }
             Object r = call(c, m, a);
             return r instanceof Statement s && m.getName().equals("createStatement") ? watch(s, sink) : r;

@@ -9,12 +9,10 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Review fix 1: forge drift never writes to the target. On SQLite a missing file must not be created (no Docker). */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class DriftReadOnlyTest {
 
     @Test

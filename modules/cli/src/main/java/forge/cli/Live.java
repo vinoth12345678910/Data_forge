@@ -71,7 +71,7 @@ final class Live {
         if (url.startsWith("postgres://")) {
             return PgReader.read(d, conf.connection().schema());
         }
-        try (java.sql.Connection c = d.open()) {
+        try (java.sql.Connection c = d.openReadOnly()) {
             return forge.schema.JdbcReader.read(c);
         }
     }

@@ -41,8 +41,7 @@ public final class PgReader {
     }
 
     public static SchemaGraph read(Db db, String schema) throws SQLException {
-        try (Connection c = db.open()) {
-            c.setReadOnly(true);
+        try (Connection c = db.openReadOnly()) {
             try (Statement s = c.createStatement()) {
                 // Printed expressions and partition bounds depend on these two session settings.
                 s.execute("set time zone 'UTC'");
