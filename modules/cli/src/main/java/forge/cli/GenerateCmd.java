@@ -60,6 +60,12 @@ final class GenerateCmd implements Callable<Integer> {
                 ? PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(), live.manifestDir(manifestDir))
                 : forge.load.JdbcLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
                     live.manifestDir(manifestDir));
+            try {
+                forge.cleanup.Meta.ensure(c);
+            } catch (SQLException ex) {
+                e.warnings.add(forge.core.Envelope.Entry.of("meta_tables_not_created", "The load worked, but the tables dry_runs and audit"
+                    + " could not be created (" + ex.getMessage() + "). forge cleanup --dry-run will try again."));
+            }
             long rows = 0;
             for (long n : r.rows().values()) {
                 rows += n;

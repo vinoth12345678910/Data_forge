@@ -9,3 +9,7 @@ forge.safety.GuardsTest.b1_*
 forge.safety.ResumeAndScopeTest.l3_*
 forge.safety.KeepTablesTest.d1a_*
 forge.safety.KeepTablesTest.d1b_*
+forge.safety.RealRowsNeverDeletedTest.a5_*
+forge.safety.GuardsTest.b5_*
+forge.safety.ClassifyPurgeTest.k1_*
+forge.safety.AuditLogTest.f2c_*

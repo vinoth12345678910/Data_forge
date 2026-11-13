@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class CliTest {
 
     @ParameterizedTest
-    @CsvSource({"cleanup,5", "readiness,5"})
+    @CsvSource({"readiness,5"})
     void commandsNotBuiltYetSaySoAndFail(String name, int phase) {
         Run r = Run.of(name);
         assertNotEquals(0, r.code());
@@ -24,8 +24,17 @@ class CliTest {
     }
 
     @Test
+    void cleanupDryRunAndClassifyAreBuiltAndExitTwoWithoutAConfig() {
+        for (String cmd : new String[] {"cleanup", "classify"}) {
+            Run r = Run.of(cmd, "-c", "/nonexistent/forge.yml");
+            assertEquals(2, r.code(), cmd + ": " + r.err());
+            assertFalse(r.err().contains("not built yet"), r.err());
+        }
+    }
+
+    @Test
     void stubsAcceptTheirFutureOptions() {
-        assertTrue(Run.of("cleanup", "--dry-run").err().contains("not built yet (Phase 5)"));
+        assertTrue(Run.of("cleanup", "--run").err().contains("not built yet (Phase 5)"));
         // generate -s is real since P3.4: with no forge.yml it fails on the missing file, not with "not built yet"
         String err = Run.of("generate", "-s", "event-day-rush", "-c", "/nonexistent/forge.yml").err();
         assertTrue(!err.contains("not built yet") && err.contains("forge generate"), err);
