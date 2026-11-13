@@ -98,52 +98,11 @@ final class Dry {
         // The digest is taken before the scans: if another writer changes a table while the scans run, the stored digest is
         // the older state, so a later run sees it as stale and refuses. Taken after, it could hide such a change.
         String digest = Digest.of(x);
-        Found found = new Found(runId);
-        List<Manifest.Tbl> tables = new ArrayList<>();
-        Map<String, Keys.Members> members = new TreeMap<>();
-        for (Manifest.Tbl t : m.tables()) {
-            if (Integrity.keep(x.conf(), t.name())) {
-                found.add("keep_table_in_manifest", t.name(), t.rows(), List.of(), null, null, null);
-            } else {
-                tables.add(t);
-                members.put(t.name(), new Keys.Members(t));
-            }
-        }
-        for (Manifest.Tbl t : tables) {
-            Own.Result o = Own.scan(x, t);
-            if (o.edited() > 0) {
-                found.add("rows_edited", t.name(), o.edited(), o.editedKeys(), null, null, null);
-            }
-            if (o.missing() > 0) {
-                found.add("rows_missing", t.name(), o.missing(), o.missingKeys(), null, null, null);
-            }
-            if (o.found() != t.rows()) {
-                found.mismatch(t.name(), t.rows(), o.found());
-            }
-        }
-        for (Blockers.Finding f : Blockers.referencing(x, m, members)) {
-            String code = Blockers.cascades(f.action()) ? "cascade_would_touch_real_rows" : "real_rows_reference_manifest";
-            found.add(code, f.child(), f.count(), f.keys(), f.constraint(), f.parent(), f.action());
-        }
-        List<Map<String, Object>> triggers = new ArrayList<>();
-        List<String> allowed = x.conf().cleanup().allowTriggers();
-        Map<String, List<String>> refused = new TreeMap<>();
-        for (Blockers.Trigger t : Blockers.triggers(x)) {
-            if (!members.containsKey(t.table())) {
-                continue;
-            }
-            Map<String, Object> e = new LinkedHashMap<>();
-            e.put("table", t.table());
-            e.put("trigger", t.name());
-            e.put("allowed", allowed.contains(t.table()));
-            triggers.add(e);
-            if (!allowed.contains(t.table())) {
-                refused.computeIfAbsent(t.table(), k -> new ArrayList<>()).add(t.name());
-            }
-        }
-        for (Map.Entry<String, List<String>> e : refused.entrySet()) {
-            found.add("delete_trigger", e.getKey(), e.getValue().size(), e.getValue(), null, null, null);
-        }
+        Scan sc = scan(x, runId, m);
+        Found found = sc.found();
+        List<Manifest.Tbl> tables = sc.tables();
+        List<Map<String, Object>> triggers = sc.triggers();
+        Map<String, Keys.Members> members = sc.members();
 
         String madeAt = Meta.now(x.ro(), x.d());
         long before = Sql.count(x.ro(), "select count(*) from " + Meta.t(x.d(), "dry_runs") + " where run_id = "
@@ -216,6 +175,60 @@ final class Dry {
         return new Outcome(blocked ? 1 : 0, data, found.errors(), List.of(), text);
     }
 
+    /** What the scans found, and the tables they looked at (keep tables excluded). Shared by --dry-run and the --run guards (G4, G6). */
+    record Scan(Found found, List<Manifest.Tbl> tables, Map<String, Keys.Members> members, List<Map<String, Object>> triggers) {}
+
+    /** The read-only scans of a dry run: keep tables, edited or missing rows, counts, real rows that point at the manifest, triggers. */
+    static Scan scan(Ctx x, String runId, Manifest m) throws SQLException {
+        Found found = new Found(runId);
+        List<Manifest.Tbl> tables = new ArrayList<>();
+        Map<String, Keys.Members> members = new TreeMap<>();
+        for (Manifest.Tbl t : m.tables()) {
+            if (Integrity.keep(x.conf(), t.name())) {
+                found.add("keep_table_in_manifest", t.name(), t.rows(), List.of(), null, null, null);
+            } else {
+                tables.add(t);
+                members.put(t.name(), new Keys.Members(t));
+            }
+        }
+        for (Manifest.Tbl t : tables) {
+            Own.Result o = Own.scan(x, t);
+            if (o.edited() > 0) {
+                found.add("rows_edited", t.name(), o.edited(), o.editedKeys(), null, null, null);
+            }
+            if (o.missing() > 0) {
+                found.add("rows_missing", t.name(), o.missing(), o.missingKeys(), null, null, null);
+            }
+            if (o.found() != t.rows()) {
+                found.mismatch(t.name(), t.rows(), o.found());
+            }
+        }
+        for (Blockers.Finding f : Blockers.referencing(x, m, members)) {
+            String code = Blockers.cascades(f.action()) ? "cascade_would_touch_real_rows" : "real_rows_reference_manifest";
+            found.add(code, f.child(), f.count(), f.keys(), f.constraint(), f.parent(), f.action());
+        }
+        List<Map<String, Object>> triggers = new ArrayList<>();
+        List<String> allowed = x.conf().cleanup().allowTriggers();
+        Map<String, List<String>> refused = new TreeMap<>();
+        for (Blockers.Trigger t : Blockers.triggers(x)) {
+            if (!members.containsKey(t.table())) {
+                continue;
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("table", t.table());
+            e.put("trigger", t.name());
+            e.put("allowed", allowed.contains(t.table()));
+            triggers.add(e);
+            if (!allowed.contains(t.table())) {
+                refused.computeIfAbsent(t.table(), k -> new ArrayList<>()).add(t.name());
+            }
+        }
+        for (Map.Entry<String, List<String>> e : refused.entrySet()) {
+            found.add("delete_trigger", e.getKey(), e.getValue().size(), e.getValue(), null, null, null);
+        }
+        return new Scan(found, tables, members, triggers);
+    }
+
     private static String countsJson(Map<String, Object> planned) {
         List<String> parts = new ArrayList<>();
         for (Map.Entry<String, Object> e : new TreeMap<>(planned).entrySet()) {
@@ -224,7 +237,11 @@ final class Dry {
         return "{" + String.join(",", parts) + "}";
     }
 
-    /** A UUID made from a hash (no random numbers): the run, the state digest, the database time, and how many dry runs came before. */
+    /**
+     * A UUID made from a hash (no random numbers): the run, the state digest, the database time, and how many dry runs came before.
+     * The first four bytes are that count, so two dry runs in the same database second still sort in the order they were made
+     * (the --run guard takes the latest by made_at, then dry_id).
+     */
     private static String dryId(String runId, String digest, String madeAt, long before) {
         MessageDigest d = Integrity.digest();
         byte[] h = d.digest((runId + "\0" + digest + "\0" + madeAt + "\0" + before).getBytes(StandardCharsets.UTF_8));
@@ -234,7 +251,7 @@ final class Dry {
             msb = (msb << 8) | (h[i] & 0xff);
             lsb = (lsb << 8) | (h[8 + i] & 0xff);
         }
-        msb = (msb & 0xffffffffffff0fffL) | 0x5000L;
+        msb = (msb & 0x00000000ffff0fffL) | 0x5000L | ((before & 0xffffffffL) << 32);
         lsb = (lsb & 0x3fffffffffffffffL) | 0x8000000000000000L;
         return new UUID(msb, lsb).toString();
     }

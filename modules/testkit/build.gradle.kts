@@ -9,6 +9,7 @@ dependencies {
     "testImplementation"(project(":junit"))
     "testImplementation"(libs.findLibrary("junit-launcher").get())
     "testImplementation"(project(":cli"))
+    "testImplementation"(project(":cleanup"))
     "testImplementation"(project(":rules"))
     "testImplementation"(libs.findLibrary("testcontainers-postgres").get())
     "testImplementation"(libs.findLibrary("testcontainers-junit").get())
