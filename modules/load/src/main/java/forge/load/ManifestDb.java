@@ -9,6 +9,8 @@ import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /** The _dataforge schema. write runs inside the caller's transaction and never commits. */
 public final class ManifestDb {
@@ -34,7 +36,17 @@ public final class ManifestDb {
             + " fk text not null, how text not null)",
         "create table if not exists _dataforge.run_sequences (run_id uuid not null, table_name text not null,"
             + " column_name text not null, seq_name text not null, before_last bigint, before_called boolean,"
-            + " after_last bigint, after_called boolean)"
+            + " after_last bigint, after_called boolean)",
+        // format 2 (docs/design/MANIFEST.md, ROW_OWNERSHIP.md); a state column that is NULL marks a format 1 run
+        "alter table _dataforge.runs add column if not exists state text",
+        "alter table _dataforge.runs add column if not exists state_by text",
+        "alter table _dataforge.runs add column if not exists state_at timestamptz",
+        "create table if not exists _dataforge.run_fp (run_id uuid not null, table_name text not null, chunk int not null,"
+            + " n int not null, fps bytea not null, primary key (run_id, table_name, chunk))",
+        "create table if not exists _dataforge.run_keep (run_id uuid not null, table_name text not null, spec text not null,"
+            + " primary key (run_id, table_name))",
+        "create table if not exists _dataforge.run_pre (run_id uuid not null, table_name text not null, row_count bigint not null,"
+            + " primary key (run_id, table_name))"
     };
 
     public static void write(Connection c, Manifest m, String fileSha256) throws SQLException {
@@ -43,7 +55,9 @@ public final class ManifestDb {
                 s.execute(d);
             }
         }
-        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.runs values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.runs (run_id, seed, env, tool_version, config_sha256,"
+            + " schema_sha256, clock, loaded_at, file_sha256, state, state_by, state_at)"
+            + " values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             ps.setString(1, m.runId());
             ps.setLong(2, m.seed());
             ps.setString(3, m.env());
@@ -53,6 +67,9 @@ public final class ManifestDb {
             ps.setTimestamp(7, java.sql.Timestamp.from(Instant.parse(m.clock())));
             ps.setTimestamp(8, java.sql.Timestamp.from(Instant.parse(m.loadedAt())));
             ps.setString(9, fileSha256);
+            ps.setString(10, m.format() >= 2 ? "loaded" : null);
+            ps.setString(11, m.format() >= 2 ? System.getProperty("user.name") : null);
+            ps.setTimestamp(12, m.format() >= 2 ? java.sql.Timestamp.from(Instant.parse(m.loadedAt())) : null);
             ps.executeUpdate();
         }
         for (Manifest.Tbl t : m.tables()) {
@@ -107,6 +124,9 @@ public final class ManifestDb {
                 }
             }
         }
+        if (m.format() >= 2) {
+            writeFormat2(c, m);
+        }
         try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_breaks values (?::uuid, ?, ?, ?)")) {
             for (Manifest.Break b : m.breaks()) {
                 ps.setString(1, m.runId());
@@ -138,6 +158,56 @@ public final class ManifestDb {
         }
     }
 
+    private static void writeFormat2(Connection c, Manifest m) throws SQLException {
+        int[] pending = {0};
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_fp values (?::uuid, ?, ?, ?, ?)")) {
+            for (Manifest.Tbl t : m.tables()) {
+                try {
+                    t.fps().each((chunk, n, fps) -> {
+                        try {
+                            ps.setString(1, m.runId());
+                            ps.setString(2, t.name());
+                            ps.setInt(3, chunk);
+                            ps.setInt(4, n);
+                            ps.setBytes(5, fps);
+                            ps.addBatch();
+                            if (++pending[0] == 100) {
+                                ps.executeBatch();
+                                pending[0] = 0;
+                            }
+                        } catch (SQLException e) {
+                            throw new IllegalStateException(e);
+                        }
+                    });
+                } catch (IllegalStateException e) {
+                    if (e.getCause() instanceof SQLException se) {
+                        throw se;
+                    }
+                    throw e;
+                }
+            }
+            ps.executeBatch();
+        }
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_keep values (?::uuid, ?, ?)")) {
+            for (Manifest.Keep k : m.keep()) {
+                ps.setString(1, m.runId());
+                ps.setString(2, k.table());
+                ps.setString(3, k.spec());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_pre values (?::uuid, ?, ?)")) {
+            for (Map.Entry<String, Long> e : new TreeMap<>(m.pre()).entrySet()) {
+                ps.setString(1, m.runId());
+                ps.setString(2, e.getKey());
+                ps.setLong(3, e.getValue());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+    }
+
     public static String fileSha(Connection c, String runId) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("select file_sha256 from _dataforge.runs where run_id = ?::uuid")) {
             ps.setString(1, runId);
@@ -161,8 +231,9 @@ public final class ManifestDb {
         String sch;
         String clock;
         String at;
+        boolean two;
         try (PreparedStatement ps = c.prepareStatement("select seed, env, tool_version, config_sha256, schema_sha256, "
-            + String.format(ISO, "clock") + ", " + String.format(ISO, "loaded_at")
+            + String.format(ISO, "clock") + ", " + String.format(ISO, "loaded_at") + ", state is not null"
             + " from _dataforge.runs where run_id = ?::uuid")) {
             ps.setString(1, runId);
             try (ResultSet r = ps.executeQuery()) {
@@ -176,6 +247,7 @@ public final class ManifestDb {
                 sch = r.getString(5);
                 clock = r.getString(6);
                 at = r.getString(7);
+                two = r.getBoolean(8);
             }
         }
         List<Manifest.Tbl> tables = new ArrayList<>();
@@ -189,7 +261,10 @@ public final class ManifestDb {
                     String form = r.getString(5);
                     List<long[]> ranges = form.equals("ranges") ? ranges(c, runId, name) : List.of();
                     Manifest.Keys keys = form.equals("list") ? sink -> readKeys(c, runId, name, sink) : null;
-                    tables.add(new Manifest.Tbl(name, r.getInt(2), r.getLong(3), r.getLong(6), key, form, ranges, keys));
+                    tables.add(two
+                        ? new Manifest.Tbl(name, r.getInt(2), r.getLong(3), r.getLong(6), key, form, ranges, keys,
+                            (int) ((r.getLong(3) + 999) / 1000), sink -> readFps(c, runId, name, sink))
+                        : new Manifest.Tbl(name, r.getInt(2), r.getLong(3), r.getLong(6), key, form, ranges, keys));
                 }
             }
         }
@@ -216,7 +291,45 @@ public final class ManifestDb {
                 }
             }
         }
-        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, seqs);
+        if (!two) {
+            return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, seqs);
+        }
+        List<Manifest.Keep> keep = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("select table_name, spec from _dataforge.run_keep"
+            + " where run_id = ?::uuid order by table_name")) {
+            ps.setString(1, runId);
+            try (ResultSet r = ps.executeQuery()) {
+                while (r.next()) {
+                    keep.add(new Manifest.Keep(r.getString(1), r.getString(2)));
+                }
+            }
+        }
+        Map<String, Long> pre = new TreeMap<>();
+        try (PreparedStatement ps = c.prepareStatement("select table_name, row_count from _dataforge.run_pre"
+            + " where run_id = ?::uuid order by table_name")) {
+            ps.setString(1, runId);
+            try (ResultSet r = ps.executeQuery()) {
+                while (r.next()) {
+                    pre.put(r.getString(1), r.getLong(2));
+                }
+            }
+        }
+        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, seqs, 2, keep, pre);
+    }
+
+    private static void readFps(Connection c, String runId, String table, Manifest.Chunk sink) {
+        try (PreparedStatement ps = c.prepareStatement("select chunk, n, fps from _dataforge.run_fp"
+            + " where run_id = ?::uuid and table_name = ? order by chunk")) {
+            ps.setString(1, runId);
+            ps.setString(2, table);
+            try (ResultSet r = ps.executeQuery()) {
+                while (r.next()) {
+                    sink.accept(r.getInt(1), r.getInt(2), r.getBytes(3));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static List<long[]> ranges(Connection c, String runId, String table) throws SQLException {

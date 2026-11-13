@@ -59,7 +59,11 @@ public final class PgLoader {
             }
         }
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
-        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, Sequences.before(c, g));
+        Map<String, Long> pre = new TreeMap<>();
+        for (Table t : g.tables()) {
+            pre.put(t.name(), existing(c, g, t.name()));
+        }
+        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, Sequences.before(c, g), pre);
         ManifestFile.Staged staged = ManifestFile.stage(manifestDir, m);
         boolean auto = c.getAutoCommit();
         Map<String, Long> loaded = new LinkedHashMap<>();

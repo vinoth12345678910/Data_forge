@@ -67,7 +67,11 @@ public final class JdbcLoader {
             }
         }
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
-        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, List.of());
+        Map<String, Long> pre = new TreeMap<>();
+        for (Table t : g.tables()) {
+            pre.put(t.name(), existing(c, d, t.name()));
+        }
+        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, List.of(), pre);
         ManifestFile.Staged staged = ManifestFile.stage(manifestDir, m);
         ManifestJdbc.ensure(c);
         boolean auto = c.getAutoCommit();
