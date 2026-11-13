@@ -22,6 +22,8 @@ final class Live {
     final Config conf;
     final Db db;
     SchemaGraph graph;
+    /** One line per column the reader did not know and read as text (MySQL and SQLite). */
+    final List<String> typeWarnings = new java.util.ArrayList<>();
 
     boolean postgres() {
         return conf.connection().url().startsWith("postgres://");
@@ -72,7 +74,7 @@ final class Live {
             return PgReader.read(d, conf.connection().schema());
         }
         try (java.sql.Connection c = d.openReadOnly()) {
-            return forge.schema.JdbcReader.read(c);
+            return forge.schema.JdbcReader.read(c, typeWarnings);
         }
     }
 
@@ -88,7 +90,7 @@ final class Live {
             graph = PgReader.read(db, conf.connection().schema());
         } else {
             try (java.sql.Connection c = db.openReadOnly()) {
-                graph = forge.schema.JdbcReader.read(c);
+                graph = forge.schema.JdbcReader.read(c, typeWarnings);
             }
         }
         forge.rules.Applies.Split split = forge.rules.Applies.split(conf.rules(), graph);
@@ -106,7 +108,7 @@ final class Live {
             graph = PgReader.read(db, conf.connection().schema());
         } else {
             try (java.sql.Connection c = db.open()) {
-                graph = forge.schema.JdbcReader.read(c);
+                graph = forge.schema.JdbcReader.read(c, typeWarnings);
             }
         }
         rules = RuleSet.check(conf.rules(), graph);

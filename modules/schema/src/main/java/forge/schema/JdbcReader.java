@@ -32,12 +32,15 @@ public final class JdbcReader {
 
     private JdbcReader() {}
 
-    /** STUB for the RED commit: warnings are not filled yet. */
-    public static SchemaGraph read(Connection c, List<String> warnings) throws SQLException {
-        return read(c);
+    public static SchemaGraph read(Connection c) throws SQLException {
+        return read(c, new ArrayList<>());
     }
 
-    public static SchemaGraph read(Connection c) throws SQLException {
+    /**
+     * Same, and a column type this reader does not know is read as text with one line added to warnings (the table,
+     * the column and the type), so a database with a json, enum or blob column still reads, drifts and verifies.
+     */
+    public static SchemaGraph read(Connection c, List<String> warnings) throws SQLException {
         Dialect d = Dialect.of(c);
         if (d == Dialect.POSTGRES) {
             throw new IllegalArgumentException("JdbcReader reads MySQL and SQLite; use PgReader for Postgres.");
@@ -60,19 +63,19 @@ public final class JdbcReader {
         names.sort(Comparator.naturalOrder());
         List<Table> tables = new ArrayList<>();
         for (String n : names) {
-            tables.add(table(c, d, md, schema, n));
+            tables.add(table(c, d, md, schema, n, warnings));
         }
         return new SchemaGraph(schema, tables);
     }
 
-    private static Table table(Connection c, Dialect d, DatabaseMetaData md, String schema, String name) throws SQLException {
+    private static Table table(Connection c, Dialect d, DatabaseMetaData md, String schema, String name, List<String> warnings) throws SQLException {
         String cat = d == Dialect.MYSQL ? schema : null;
         List<Column> cols = new ArrayList<>();
         try (ResultSet rs = md.getColumns(cat, null, name, "%")) {
             while (rs.next()) {
                 boolean auto = "YES".equalsIgnoreCase(rs.getString("IS_AUTOINCREMENT"));
                 cols.add(new Column(rs.getString("COLUMN_NAME"), type(rs.getString("TYPE_NAME"), rs.getInt("COLUMN_SIZE"),
-                    rs.getInt("DECIMAL_DIGITS"), rs.wasNull()), rs.getInt("NULLABLE") == DatabaseMetaData.columnNullable,
+                    rs.getInt("DECIMAL_DIGITS"), rs.wasNull(), name + "." + rs.getString("COLUMN_NAME"), warnings), rs.getInt("NULLABLE") == DatabaseMetaData.columnNullable,
                     rs.getString("COLUMN_DEF"), auto ? "BY DEFAULT" : null, null));
             }
         }
@@ -262,7 +265,7 @@ public final class JdbcReader {
         return t;
     }
 
-    private static Type type(String raw, int size, int digits, boolean noDigits) {
+    private static Type type(String raw, int size, int digits, boolean noDigits, String where, List<String> warnings) {
         String t = raw.toLowerCase(Locale.ROOT).replace(" unsigned", "").trim();
         int paren = t.indexOf('(');
         if (paren > 0) {
@@ -279,8 +282,16 @@ public final class JdbcReader {
             case "date" -> new Type("date", 0, null, null, null, List.of(), null);
             case "decimal", "numeric" -> new Type("numeric", 0, null, size, noDigits ? 0 : digits, List.of(), null);
             case "double", "double precision", "real", "float" -> new Type("float8", 0, null, null, null, List.of(), null);
-            case "boolean", "bool", "bit" -> new Type("bool", 0, null, null, null, List.of(), null);
-            default -> throw new IllegalArgumentException("column type " + raw + " is not supported on MySQL or SQLite yet");
+            case "boolean", "bool" -> new Type("bool", 0, null, null, null, List.of(), null);
+            case "bit" -> size == 1 ? new Type("bool", 0, null, null, null, List.of(), null) : generic(raw, where, warnings);
+            default -> generic(raw, where, warnings);
         };
+    }
+
+    /** The generic type for a column this reader does not know: text, and a warning that says which column and why. */
+    private static Type generic(String raw, String where, List<String> warnings) {
+        String what = raw == null || raw.isBlank() ? "has no declared type" : "has type " + raw.toLowerCase(Locale.ROOT) + ", which Data Forge does not know on MySQL or SQLite";
+        warnings.add("column " + where + " " + what + "; it is read as text. Generated values for it are plain text and may not load.");
+        return new Type("text", 0, null, null, null, List.of(), null);
     }
 }

@@ -16,7 +16,6 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.io.TempDir;
  * the whole schema read. It is read as text, and a warning names the table, the column and the type. The warning reaches
  * the report of forge verify and forge drift.
  */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class UnknownTypeTest {
 
     static final String DDL = "create table items (id integer primary key, label text not null, extra, raw blob, uid uuid, doc json);";

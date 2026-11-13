@@ -46,6 +46,7 @@ final class VerifyCmd implements Callable<Integer> {
                 throw new ConfigError("connection.env is prod. forge verify only reads, but a production database needs an explicit --allow-prod.");
             }
             live.openForVerify();
+            e.typeWarnings(live.typeWarnings);
             e.out.println("forge verify  env " + env);
             try (Connection c = forge.rules.ReadOnly.wrap(live.db.openReadOnly())) {
                 Report rep = merge(Verifier.run(c, live.graph, live.verifyRules, sample, 120), live);

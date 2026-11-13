@@ -54,6 +54,14 @@ final class Emit {
         err.println("forge " + command + ": " + e.getMessage());
     }
 
+    /** Columns the schema reader did not know and read as text: a warning each, and a line on stderr in human mode. */
+    void typeWarnings(List<String> lines) {
+        for (String w : lines) {
+            warnings.add(Entry.of("type_fallback", w));
+            err.println("forge: warning: " + w);
+        }
+    }
+
     /** The verify report as data and, for each failing or erroring rule, errors that carry the rule and the row. */
     void report(Report rep, String env) {
         List<Map<String, Object>> rules = new ArrayList<>();

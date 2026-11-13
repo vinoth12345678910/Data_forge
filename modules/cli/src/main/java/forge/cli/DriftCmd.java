@@ -76,6 +76,7 @@ final class DriftCmd implements Callable<Integer> {
         }
         Live live = new Live(config);
         live.openGraph();
+        e.typeWarnings(live.typeWarnings);
         Path snap = config.toAbsolutePath().normalize().getParent().resolve(SNAPSHOT);
         if (accept) {
             Files.writeString(snap, SnapshotFile.write(live.graph));
