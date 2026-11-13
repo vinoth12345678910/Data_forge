@@ -134,6 +134,7 @@ public final class OutFiles {
             if (format.equals("sql") && !later.isEmpty()) {
                 Digest dg = new Digest();
                 try (Writer w = dg.open(tmp.resolve("998_cycles.sql"))) {
+                    w.write(header(d));
                     for (var e : later.entrySet()) {
                         if (gen.rows(e.getKey()) > 0 && tables.contains(e.getKey())) {
                             updates(w, g.table(e.getKey()), gen, g, d, e.getValue());
@@ -179,7 +180,20 @@ public final class OutFiles {
 
     // ---- the three formats
 
+    /**
+     * What every table file and the cycles file start with, so a file run on its own (any client, any server default)
+     * reads and stores the same values: UTF-8 and UTC. SQLite has neither setting.
+     */
+    static String header(Dialect d) {
+        return switch (d) {
+            case POSTGRES -> "SET client_encoding = 'UTF8';\nSET TIME ZONE 'UTC';\n";
+            case MYSQL -> "SET NAMES utf8mb4;\nSET time_zone = '+00:00';\n";
+            default -> "";
+        };
+    }
+
     private static void sql(Writer w, Table t, RowGen gen, SchemaGraph g, Dialect d, TreeSet<String> blank) throws IOException {
+        w.write(header(d));
         List<String> cols = gen.columns(t.name());
         StringBuilder head = new StringBuilder("INSERT INTO ").append(table(g, t.name(), d)).append(" (");
         for (int i = 0; i < cols.size(); i++) {
