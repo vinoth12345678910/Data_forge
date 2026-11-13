@@ -195,3 +195,10 @@ Real rows never deleted: A1 to A6, C1 to C5, D1, K2. Prod refusal, typed confirm
 ## Not covered by these tests (stated, not hidden)
 
 An edit to a column outside the fingerprint (A5 pins it); an identical re-insert of a deleted manifest row (indistinguishable by design); a person who can write both the database and the manifest (outside the threat model); `PRAGMA foreign_keys` that cannot be turned on (L4); concurrency from a second live application during a run beyond what the locks and re-verification in each batch give (no stress test is specified); the `backup_cmd` actually producing a restorable backup (Data Forge only checks the exit code).
+
+## Resolved spec problems (decisions by the builder under the delegation, 2026-11-13; stricter reading wins)
+
+1. **A2/A4/A3 order of codes.** A run after a *blocked* dry run gives exactly `dry_run_blocked` (CLEANUP.md step 8 precedes step 9). The run's own ownership scan is tested by making the change **after a clean dry run**: that makes the digest stale for count/key changes (`dry_run_stale`), so for an **edit that changes no key and no count** (A2, A3) the run must give `rows_edited`.
+2. **Where count and keys live.** `data.blockers[]` (`{code, table, count, keys}`) is canonical (as in `CLEANUP.md` JSON shapes); `errors[]` entries carry `code`, `message`, `table`. The harness accepts either; the product writes `data.blockers[]`.
+3. A2 uses `users.full_name`. 4. The harness default is 300 users. 5. B2: readiness is refused without `--allow-prod`; with it, readiness passes only after cleanup and `--drop-metadata`. 6. `already_clean` appears as `errors[]`-free `data.state:"already_clean"` with exit 0 and `code` `already_clean` in `warnings[]`; `--confirm-rows` for a cleaned run is the manifest total. 7. Two disjoint loads use purpose-built `a_*` / `b_*` schemas. 8. Environment variables reach the product through `Forge.env` (the product must read the environment only through it). 9. An unknown `cleanup:` key is `config_error`, exit 2. 10. B3 text checks as the harness does them. 11. MySQL and SQLite metadata tables are `_dataforge_<name>`; Postgres `_dataforge.<name>` (as `MANIFEST.md`).
+
