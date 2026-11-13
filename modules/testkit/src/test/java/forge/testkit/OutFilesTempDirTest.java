@@ -11,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -19,7 +18,6 @@ import org.junit.jupiter.api.io.TempDir;
  * Review fix 2: forge generate --out never reuses (or deletes in) a directory it did not create, and a filesystem root
  * as --out-dir is a clear error. SQLite, no Docker.
  */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class OutFilesTempDirTest {
 
     record R(int code, String text) {}

@@ -56,6 +56,9 @@ public final class OutFiles {
         if (!List.of("sql", "csv", "json").contains(format)) {
             throw new LoadError("--out must be sql, csv or json, not " + format);
         }
+        if (dir.toAbsolutePath().normalize().getParent() == null) {
+            throw new LoadError("output directory " + dir + " is a filesystem root; Data Forge writes into a new directory inside it, not into the root itself.");
+        }
         if (Files.exists(dir) && (!Files.isDirectory(dir) || hasFiles(dir))) {
             throw new LoadError("output directory " + dir + " already has files; Data Forge never writes into a used directory. Use a new or empty one.");
         }
@@ -86,8 +89,7 @@ public final class OutFiles {
             + d.name().toLowerCase(java.util.Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();
         Path parent = dir.toAbsolutePath().normalize().getParent();
         Files.createDirectories(parent);
-        Path tmp = parent.resolve(dir.getFileName() + ".tmp-" + outputId.substring(0, 8));
-        Files.createDirectories(tmp);
+        Path tmp = fresh(parent, dir.getFileName() + ".tmp-" + outputId.substring(0, 8));
         try {
             List<Map<String, Object>> entries = new ArrayList<>();
             List<String> files = new ArrayList<>();
@@ -357,6 +359,22 @@ public final class OutFiles {
         String hex() {
             return HexFormat.of().formatHex(md.digest());
         }
+    }
+
+    /**
+     * Creates a temporary directory that did not exist: createDirectory fails on an existing name, so a directory the
+     * user (or an earlier interrupted run) left there is never reused and never emptied. Only a directory created here is removed.
+     */
+    private static Path fresh(Path parent, String name) throws IOException {
+        for (int i = 0; i < 100; i++) {
+            Path p = parent.resolve(i == 0 ? name : name + "-" + i);
+            try {
+                return Files.createDirectory(p);
+            } catch (java.nio.file.FileAlreadyExistsException taken) {
+                // try the next name
+            }
+        }
+        throw new LoadError("could not find a free temporary directory name next to " + parent + " (" + name + "-1 to -99 all exist). Remove the old .tmp- directories.");
     }
 
     private static boolean hasFiles(Path dir) throws IOException {
