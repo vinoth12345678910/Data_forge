@@ -115,6 +115,15 @@ Touch a database it did not create (it records its own names in a per-JVM set an
 - Not built / limits: Postgres only (no MySQL or SQLite); a parameterless `config` is not supported (a `forge.yml` is required); sequences not advanced (above); one container per JVM at a time (a class that starts after the last one has stopped starts a new container, which costs seconds); `@ForgeDb` on a method is not supported (class level only).
 - Gate weaknesses found and fixed while writing it: the "another seed gives other data" assertion compared two classes that also differed in scenario, so it is now a class that differs only in seed; and `containerRunning()` first looked at the extension's own reference, so removing `stop()` still passed; it now asks the container itself.
 
+## Review fixes to the JUnit extension (safety review F1 to F4)
+
+The safety-reviewer found the D4a limit holds (it stops only its own container and drops only a database it created). Four smaller findings, handled as follows (`ForgeJunitFixesContainerTest`):
+
+- **F1 fixed.** `ForgeDatabases` records each created name with the server it was created on, and `dropOwn` drops on that server, not on whatever `forge.junit.url` says at teardown. A change to the property mid-class (a build, another test) can no longer leak the database or send the drop elsewhere.
+- **F2 half fixed.** If `create database` fails in `beforeAll`, the container is now released (the last class stops it). **Not changed:** if `start()` itself throws, the half-started container is not stopped by the extension (it is left to Testcontainers' reaper); there is no cheap way to test it, and untested code was not added.
+- **F3 documented, not changed.** **In shared-container mode the schema file (`@ForgeDb(schema = ...)`) is trusted input.** It runs as the server user supplied in `forge.junit.user`, in the new `forge_<uuid>` database, but Postgres can run cluster-wide statements from any database (`create role`, `drop role`, `create tablespace`, `alter system`). Use a shared server whose user may only create databases, and never point `schema` at a file you do not control.
+- **F4 fixed.** The per-class url keeps the query parameters of `forge.junit.url` (`?sslmode=require`, `?ApplicationName=...`).
+
 ## As built in P4.6 (the scale test)
 
 - Code (test side, `testkit`): `ScaleContainerTest` (tag `scale`, the full shapes, run by `scripts/perf.sh`), `ScaleSmokeContainerTest` (tag `containers`, 100,000 rows under `-Xmx64m`, run by `scripts/verify.sh` step h and by step c), `ScaleMain` (the child JVM), `ScaleShapes` (DDL and row counts), `PerfDocTest` (a fast test: `docs/PERF.md` has a measured row for every shape). Build: the `scale` tag is excluded from `test` and runs through the new `scaleTest` task. Product: **one change in `RowGen`**, the resolved-row cache is bounded by memory (about a fifth of the largest heap, at least 8 MB) as well as by 400,000 rows.

@@ -42,7 +42,13 @@ public final class ForgeExtension implements BeforeAllCallback, AfterAllCallback
         ForgeDb a = AnnotationSupport.findAnnotation(ctx.getRequiredTestClass(), ForgeDb.class)
             .orElseThrow(() -> new IllegalStateException("@ForgeDb is missing on " + ctx.getRequiredTestClass()));
         ForgeDatabases.Server server = ForgeDatabases.acquire();
-        String name = ForgeDatabases.create(server);
+        String name;
+        try {
+            name = ForgeDatabases.create(server);
+        } catch (Exception | Error e) {
+            ForgeDatabases.release(server, null);
+            throw e;
+        }
         String url = server.urlOf(name);
         try {
             try (Connection c = DriverManager.getConnection(url, server.user(), server.password()); Statement s = c.createStatement()) {

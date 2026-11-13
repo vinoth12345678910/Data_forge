@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 /**
  * Gives a test class its own seeded database (docs/design/JUNIT_AND_SCALE.md). The class gets a ForgeHandle parameter.
  * schema and config are file paths; ${name} is replaced by the system property of that name.
+ * In shared-container mode (forge.junit.url) the schema file is trusted input: it runs as the shared server's user and
+ * Postgres can run cluster-wide statements (create role, create tablespace) from any database.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
