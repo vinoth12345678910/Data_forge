@@ -59,23 +59,8 @@ Phase 5: add "I wrote the safety tests myself. Run them, report, do not edit." P
 environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts); real-data blocker; count check with rollback; keep list; truncate only at 100% coverage; audit log. Plus sequence reset and manual checklist.
 
 ## Current state (UPDATE EACH SESSION)
-- Date: 2026-11-11
-- Repo: github.com/vinoth12345678910/Data_forge (private). Only this repo; the `data-forge` duplicate is to be deleted.
-- Done: Phase 0.1 skeleton (10 modules, MIT, ci.yml, zero-test check) merged to main. `scripts/verify.sh` + pre-push hook on `p0-verify`.
-- Gate: verified locally with scripts/verify.sh. GitHub Actions is off (Actions budget $0). The Phase 0.1 gate is locally verified only. `.github/workflows/ci.yml` is kept as is.
-- Done: all three golden schemas green on Postgres via `GoldenContainerTest` subclasses: `events-merch` (27 rules), `ecommerce` (50), `saas-multitenant` (64). Cap reached: no more rules are added to the golden schemas. Run container tests with `./gradlew containerTest` (needs Docker); `test` excludes them.
-- Done on `p0-claude-config`: `CLAUDE.md`, `.claude/` agents, skills, hooks (see `docs/HOOKS.md`). Merged (PR #8). The user's live hook checks are still to be run in a fresh session.
-- Phase 1 runs as six stacked branches (user-approved for this phase only): each PR targets the previous feature's branch. Design docs approved 2026-11-10: `docs/CONFIG.md`, `docs/design/SEEDED_RANDOM.md`.
-- Done P1.1 `p1-schema-reader`: `SchemaGraph` in `core`, `PgReader`, `DdlReader` (scratch database), `CheckParser`, snapshot gate `SchemaReaderContainerTest` green on Postgres 16.
-- Done P1.2 `p1-planner`: `Planner`, `Plan`, `Scc`, `PlanError` in `gen`; gates `PlannerTest`, `PlannerPropertyTest` (jqwik), `PlannerContainerTest` green.
-- Done P1.3 `p1-config-cli`: `Config*` in `core`, Picocli `forge` with real `init`, stubs for the rest; `ConfigReaderTest`, `CliTest`, `InitContainerTest` green; `docs/CONFIG.md` frozen.
-- Done P1.4 `p1-generator-core`: `Mix`, `Keys`, `Cell`, `Perm`, `Uniq`, `Dom`, `RowGen`, `Out` in `gen`; `GeneratorDeterminismTest` (verify.sh step b now runs), `MixTest`, `GeneratorStructureTest` green.
-- Done P1.5 `p1-inference-locale`: `Infer`, `Gstin`, `Iban`, `Phone`, `Pincode`, `Names` (en_IN lists) in `gen`; `LocaleGenTest`, `InferTest`, `GeneratorInferenceTest` green.
-- Done P1.6 `p1-holdout-gate`: test-only `TestInsert` and `StructureCheck` in `testkit`; zero-config structure gate green on Pagila and the three goldens (and at 1000 rows per table); `gen` extended (see `docs/design/SEEDED_RANDOM.md`, P1.6 additions, for the user to review). Phase 1 complete pending merge of the six stacked PRs. Do not start Phase 2.
-- Phase 1 is merged to main (PRs #1 to #19). Phase 2 Step 0 (branch `p2-design`): plan and design proposals in `docs/design/` (PHASE2_PLAN, RULE_LANGUAGE, VERIFY_PASS, MANIFEST, PHASE2_RULE_SCOPE) plus a CONFIG.md amendment, awaiting the user's answers D1a to D4. No Phase 2 code yet. Docker was down, so verify.sh steps c and e were SKIPPED.
-- Phase 2 design APPROVED 2026-11-11 (with changes). P2.1 `p2-rule-language` done, gate green incl. container half. P2.2 `p2-verify-pass` done, gate green. P2.3 `p2-manifest` done, gate green. P2.4 `p2-loader` done, gate green (memory proven for two shapes only). P2.5 `p2-rule-aware-gen` done, gate green. P2.6 `p2-cli` done, gate green. Phase 2 complete pending review and merge of PRs #20 to #25 in order; do not start Phase 3. See STATUS.md.
-- Phase 3 is COMPLETE on branches p3-design to p3-gate (P3.6 done; see docs/design/PHASE3_RESULTS.md, 20 of 43 deferred rules closed). Phase 4 not started. Phase 3 (user said "ask nothing, finish it"): design docs in `docs/design/` (STATE_MACHINES, TEMPORAL_RULES, SHAPE_AND_SCENARIOS, DIALECTS, PHASE3_RULE_SCOPE; PR #27). Stack: p2-cli <- p3-design <- p3-state-machines (P3.1 done, gate green) <- p3-temporal <- p3-shape <- p3-scenarios <- p3-dialects <- p3-gate. PR #26 rolls Phase 2 into main (unmerged). Resume from STATUS.md.
-- Phase 4 (approved 2026-11-12, run to the end): design in `docs/design/` (PHASE4_PLAN, DRIFT, OUTPUTS, VERIFY_ANY, JUNIT_AND_SCALE). Stack: p4-design <- p4-json (P4.1 done) <- p4-drift (P4.2 done) <- p4-verify-any (P4.3 done) <- p4-outputs (P4.4 done) <- p4-junit (P4.5 done) <- p4-scale (P4.6 done) <- p4-verify-any <- p4-outputs <- p4-junit <- p4-scale. Resume from STATUS.md.
-- Phase 4 review fixes (2026-11-13, branch `p4-review-fixes`, from main): items 1 to 10 and 12 done test-first; 11 skipped (no PDF in repo). See STATUS.md. Do not start Phase 5.
-- Layout: STRUCTURE.md wins (10 modules, root `golden/`).
-- Open: Design brief needs the user's 2-3 reference tools. Hooks must each be test-triggered once when set up.
+- Date: 2026-11-13
+- Phase 5 in progress, chained on stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done: P5.1 `p5-ownership` (fingerprints, manifest format 2, `cleanup.keep`, keep generation); verify.sh all PASS; PR open against `p5-design`, not merged.
+- Not done: P5.2 to P5.6 (cleanup --dry-run/classify, 8 guards + audit, cleanup --run, readiness/sequences/purge, full suite + PHASE5_RESULTS.md). L4 has no test until P5.4.
+- Next: P5.2 `p5-classify`, from `p5-ownership`.
+- Open: owner review of the delegated safety design; determinism-auditor LOW items in STATUS.md.

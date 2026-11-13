@@ -7,6 +7,7 @@ import forge.core.Expr;
 import forge.core.ConfigCheck;
 import forge.core.Fact;
 import forge.core.Fk;
+import forge.core.KeepSet;
 import forge.core.Part;
 import forge.core.SchemaGraph;
 import forge.core.Table;
@@ -140,10 +141,13 @@ public final class RowGen {
     private final Map<String, Integer> fkGroupIdx = new TreeMap<>();
     private final Map<String, List<String>> names = new TreeMap<>();
     private final Config conf;
+    /** The keep tables (docs/design/KEEP_TABLES.md): never generated; a foreign key to one takes its values from here. */
+    private final Map<String, KeepSet> keeps;
     /** The rule engine; null when there are no rules (then nothing below changes). */
     private Ruled ruled;
 
-    private RowGen(SchemaGraph g, Config c, Plan plan, Map<String, Integer> rowCounts) {
+    private RowGen(SchemaGraph g, Config c, Plan plan, Map<String, Integer> rowCounts, Map<String, KeepSet> keeps) {
+        this.keeps = keeps;
         this.seed = c.seed();
         this.clock = Instant.parse(c.clock()).getEpochSecond();
         this.plan = plan;
@@ -160,16 +164,30 @@ public final class RowGen {
     /** With rules (checked by the rules module, passed in as data). */
     public static RowGen of(SchemaGraph g, Config c, java.util.List<forge.core.Rule> rules) {
         ConfigCheck.check(c, g);
+        Map<String, KeepSet> keeps = new TreeMap<>();
+        for (int i = 0; i < c.cleanup().keep().size(); i++) {
+            KeepSet k = KeepSet.of(g, c.cleanup().keep().get(i), i);
+            keeps.put(k.table(), k);
+        }
         Map<String, Integer> counts = new TreeMap<>();
         for (Table t : g.tables()) {
             Config.TableConf tc = c.tables().get(t.name());
+            if (tc != null && tc.keep()) {
+                KeepSet k = keeps.get(t.name());
+                if (k != null && k.count() > Integer.MAX_VALUE) {
+                    throw new GenError("cleanup.keep: " + t.name() + " lists " + k.count() + " values; at most " + Integer.MAX_VALUE + " are supported.");
+                }
+                counts.put(t.name(), k == null ? 0 : (int) k.count());
+                continue;
+            }
             if (tc == null || tc.rows() == null) {
-                throw new GenError("No row count for table " + t.name() + " in forge.yml (kept tables are not generated yet).");
+                throw new GenError("No row count for table " + t.name() + " in forge.yml (set rows, or keep: true for a reference table).");
             }
             counts.put(t.name(), tc.rows());
         }
+        keepValues(g, c, counts);
         States st = States.build(c.seed(), g, c, counts);
-        RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts);
+        RowGen gen = new RowGen(g, c, Planner.plan(g, counts), counts, keeps);
         gen.install(st);
         gen.shape(c);
         gen.bursts(c);
@@ -180,6 +198,36 @@ public final class RowGen {
             Edges.install(gen, g, rules, c);
         }
         return gen;
+    }
+
+    /**
+     * A foreign key into a keep table that lists no values is refused before any row is made. A nullable one whose
+     * column already has a null share (the inferred default or a null_rate) generates NULL instead.
+     */
+    private static void keepValues(SchemaGraph g, Config c, Map<String, Integer> counts) {
+        for (Table t : g.tables()) {
+            Config.TableConf tc = c.tables().get(t.name());
+            if ((tc != null && tc.keep()) || counts.get(t.name()) == 0) {
+                continue;
+            }
+            for (Fk f : t.fks()) {
+                Config.TableConf pc = c.tables().get(f.refTable());
+                if (pc == null || !pc.keep() || counts.get(f.refTable()) > 0) {
+                    continue;
+                }
+                boolean nullShare = true;
+                for (String col : f.columns()) {
+                    Config.ColConf cc = tc == null ? null : tc.columns().get(col);
+                    int share = cc != null && cc.nullPer10k() != null ? cc.nullPer10k() : DEFAULT_NULL_PER_10K;
+                    nullShare &= t.column(col).nullable() && share > 0;
+                }
+                if (!nullShare) {
+                    throw new GenError("keep_values_missing", t.name() + "." + String.join(", ", f.columns()) + " points to the keep table "
+                        + f.refTable() + ", but cleanup.keep lists no ids or ranges for " + f.refTable()
+                        + ". Data Forge does not read real rows; list the ids a generated row may use.");
+                }
+            }
+        }
     }
 
     public static RowGen of(SchemaGraph g, Config c) {
@@ -417,8 +465,21 @@ public final class RowGen {
         throw new GenError("Table " + table + " row " + row + ": no values satisfy check " + failed + " after " + MAX_ATTEMPTS + " tries.");
     }
 
+    /** The row-th listed value of a keep table's key column; a keep table has no other values (it is never read). */
+    private String keepCell(String table, String column, long row) {
+        KeepSet k = keeps.get(table);
+        int i = k.columns().indexOf(column);
+        if (i < 0) {
+            throw new GenError("keep table " + table + " has no generated values; only its key " + k.columns() + " is listed under cleanup.keep, not " + column + ".");
+        }
+        return k.at(row)[i];
+    }
+
     /** The text of one cell, or null for SQL NULL. */
     public String cell(String table, String column, long row) {
+        if (keeps.containsKey(table)) {
+            return keepCell(table, column, row);
+        }
         Col k = cols.get(table).get(column);
         if (k == null) {
             throw new IllegalArgumentException("no generated column " + table + "." + column);
@@ -1417,6 +1478,9 @@ public final class RowGen {
      * waiting for the children that are asking). Without rules this is exactly cell(), as in Phase 1.
      */
     private String keyCell(String table, String column, long row) {
+        if (keeps.containsKey(table)) {
+            return keepCell(table, column, row);
+        }
         Info ti = info.get(table);
         return ti.ruled ? value(cols.get(table).get(column), row, 0) : cell(table, column, row);
     }

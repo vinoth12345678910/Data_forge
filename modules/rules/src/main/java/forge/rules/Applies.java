@@ -49,7 +49,7 @@ public final class Applies {
         List<NotApplicable> na = new ArrayList<>();
         for (Map.Entry<String, Config.StateConf> e : c.states().entrySet()) {
             Config one = new Config(c.version(), c.seed(), c.clock(), c.locale(), c.connection(), c.ddl(), c.tables(), c.rules(),
-                Map.of(e.getKey(), e.getValue()), c.scenarios(), c.run(), c.manifestDir());
+                Map.of(e.getKey(), e.getValue()), c.scenarios(), c.run(), c.manifestDir(), c.cleanup());
             try {
                 rules.addAll(StateRules.expand(one, g));
             } catch (RuleError | NullPointerException ex) {

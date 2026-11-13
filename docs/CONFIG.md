@@ -32,7 +32,7 @@ tables:
       phone: { gen: phone, locale: en_IN, null_rate: 0.10 }
       role:  { gen: pick, values: [customer, staff, admin] }
   countries:
-    keep: true                   # NOT BUILT (Phase 5): generate refuses it today
+    keep: true                   # reference table: never generated, never cleaned (list its ids under cleanup.keep)
 
 rules: []                        # reserved (Phase 2)
 states: {}                       # reserved (Phase 3)
@@ -75,7 +75,7 @@ Table names are written exactly as the database stores them. A table in another 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `rows` | int >= 0 | `forge init` writes the inferred count | How many rows to generate. |
-| `keep` | bool | `false` | **Not built (planned for Phase 5).** Meant as: reference table, never generated, never cleaned. Today `forge generate` refuses a table with `keep: true` with a clear error, because the generator is offline and pure and cannot read a table's keys from the database. A kept table must not also have `rows`. |
+| `keep` | bool | `false` | Reference table: never generated, never loaded, never cleaned. Foreign keys to it take values only from the ids and ranges listed under `cleanup.keep` (see `design/KEEP_TABLES.md`); with none listed, `forge generate` refuses with `keep_values_missing`. A listed id missing from the database is refused with `keep_value_not_found` and nothing is loaded. A table named in `cleanup.keep` is a keep table even without `keep: true`. A kept table must not also have `rows`. |
 | `columns` | map: column name to column block | `{}` | Overrides. A column that is not listed uses the inferred generator. |
 
 How `forge init` picks `rows`: 100 per table, lowered to the table's capacity when the structure allows fewer (a primary key or unique column limited by a check such as `id = 1`, an enum, or a junction table whose parents allow fewer pairs). A table that cannot be generated at all is reported, not silently skipped.
@@ -169,3 +169,17 @@ Validation (added): exactly one of `derive`, `check`, `limit` per item; an unkno
 - **`connection.url`** also accepts `mysql://host:port/database` and `sqlite:path/to/file.db`.
 - **`manifest_dir`**: implemented (relative to forge.yml; `--manifest-dir` overrides it).
 - Still reserved and empty-only: `use` (Phase 7) and `cleanup` (Phase 5). `connection.backup_cmd` is kept, not run (Phase 5).
+
+## `cleanup:` (P5.1 reads and checks it; the cleanup commands that use it come in P5.2 to P5.5)
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `keep` | list of `{table, ids: [...]}` or `{table, ranges: [[lo,hi]]}` | `[]` | Real rows generated rows may point to. Single-column keys take plain values; a composite referenced key takes arrays. Values are type-checked, duplicates and `lo > hi` are errors. |
+| `allow_triggers` | list of strings | `[]` | Triggers cleanup may let fire. |
+| `batch_rows` | int 1..50000 | 5000 | Delete batch size. |
+| `max_cycle_rows` | int >= 1 | 100000 | Cap for cycle handling. |
+| `backup_timeout_minutes` | number > 0 | 30 | Backup command timeout. |
+| `purge` | list of `{name, table, where}` | `[]` | Named purge rules. |
+| `test_patterns` | list of `{table, column, like}` | `[]` | Patterns that mark test rows. |
+
+An unknown key or a wrong type is a config error with its path. Manifest format 2 is described in `design/MANIFEST.md`.

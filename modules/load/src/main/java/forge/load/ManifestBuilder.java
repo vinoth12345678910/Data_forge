@@ -2,6 +2,7 @@ package forge.load;
 
 import forge.core.Column;
 import forge.core.Config;
+import forge.core.KeepSet;
 import forge.core.SchemaGraph;
 import forge.core.Table;
 import forge.gen.Plan;
@@ -14,6 +15,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -30,6 +33,17 @@ public final class ManifestBuilder {
      */
     public static Manifest build(SchemaGraph g, Config conf, RowGen gen, String configText, String loadedAt, String env,
         List<Manifest.Seq> sequencesBefore) {
+        return make(g, conf, gen, configText, loadedAt, env, sequencesBefore, null);
+    }
+
+    /** Format 2: the same, plus the keep tables, per-row fingerprints and pre, the row count of every table before the load. */
+    public static Manifest build(SchemaGraph g, Config conf, RowGen gen, String configText, String loadedAt, String env,
+        List<Manifest.Seq> sequencesBefore, Map<String, Long> pre) {
+        return make(g, conf, gen, configText, loadedAt, env, sequencesBefore, pre);
+    }
+
+    private static Manifest make(SchemaGraph g, Config conf, RowGen gen, String configText, String loadedAt, String env,
+        List<Manifest.Seq> sequencesBefore, Map<String, Long> pre) {
         String at = Instant.parse(loadedAt).truncatedTo(ChronoUnit.SECONDS).toString();
         String clock = Instant.parse(conf.clock()).truncatedTo(ChronoUnit.SECONDS).toString();
         String configSha = Sha.hex(configText);
@@ -42,7 +56,7 @@ public final class ManifestBuilder {
             if ((tc != null && tc.keep()) || gen.rows(name) == 0) {
                 continue;
             }
-            tables.add(table(g.table(name), order, gen));
+            tables.add(table(g.table(name), order, gen, pre != null));
             loaded.add(name);
         }
         List<Manifest.Break> breaks = new ArrayList<>();
@@ -56,8 +70,30 @@ public final class ManifestBuilder {
             seqs.add(new Manifest.Seq(s.table(), s.column(), s.name(), s.beforeLast(), s.beforeCalled(), last, last != null));
         }
         String runId = runId(conf.seed(), configSha, at);
+        if (pre == null) {
+            return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g)), clock, at,
+                tables, breaks, seqs);
+        }
         return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g)), clock, at,
-            tables, breaks, seqs);
+            tables, breaks, seqs, 2, keep(g, conf), new TreeMap<>(pre));
+    }
+
+    /**
+     * The keep tables, sorted by name: those with listed values carry them (ids and ranges ascending), a keep table
+     * without any (keep: true only) is listed by name. Checks the values against the schema again.
+     */
+    public static List<Manifest.Keep> keep(SchemaGraph g, Config conf) {
+        Map<String, Manifest.Keep> out = new TreeMap<>();
+        for (int i = 0; i < conf.cleanup().keep().size(); i++) {
+            KeepSet k = KeepSet.of(g, conf.cleanup().keep().get(i), i);
+            out.put(k.table(), new Manifest.Keep(k.table(), k.json()));
+        }
+        for (Map.Entry<String, Config.TableConf> e : conf.tables().entrySet()) {
+            if (e.getValue().keep() && !out.containsKey(e.getKey())) {
+                out.put(e.getKey(), new Manifest.Keep(e.getKey(), "{\"table\":" + json(e.getKey()) + "}"));
+            }
+        }
+        return new ArrayList<>(out.values());
     }
 
     private static Long max(RowGen gen, String table, String column) {
@@ -90,7 +126,7 @@ public final class ManifestBuilder {
         return c.type().dims() == 0 && List.of("int2", "int4", "int8").contains(c.type().name());
     }
 
-    private static Manifest.Tbl table(Table t, int order, RowGen gen) {
+    private static Manifest.Tbl table(Table t, int order, RowGen gen, boolean withFps) {
         List<String> key = KeyChoice.choose(t);
         long rows = gen.rows(t.name());
         if (key.size() == 1 && isInt(t.column(key.get(0)))) {
@@ -115,7 +151,8 @@ public final class ManifestBuilder {
                 ranges.add(new long[] {lo, hi});
             }
             ranges.sort((a, b) -> Long.compare(a[0], b[0]));
-            return new Manifest.Tbl(t.name(), order, rows, 0, key, "ranges", ranges, null);
+            return new Manifest.Tbl(t.name(), order, rows, 0, key, "ranges", ranges, null, withFps ? chunks(rows) : 0,
+                withFps ? ordered(t, gen, key.get(0)) : null);
         }
         boolean[] num = new boolean[key.size()];
         for (int i = 0; i < num.length; i++) {
@@ -131,7 +168,67 @@ public final class ManifestBuilder {
                 sink.accept("[" + String.join(",", parts) + "]");
             }
         };
-        return new Manifest.Tbl(t.name(), order, rows, 0, key, "list", List.of(), keys);
+        return new Manifest.Tbl(t.name(), order, rows, 0, key, "list", List.of(), keys, withFps ? chunks(rows) : 0,
+            withFps ? inRowOrder(t, gen) : null);
+    }
+
+    static final int CHUNK = 1000;
+
+    private static int chunks(long rows) {
+        return (int) ((rows + CHUNK - 1) / CHUNK);
+    }
+
+    /** List key form: the keys are in row order, so the i-th fingerprint is the i-th row's. */
+    private static Manifest.Fps inRowOrder(Table t, RowGen gen) {
+        return sink -> {
+            Fingerprint f = new Fingerprint(t, gen.columns(t.name()));
+            long rows = gen.rows(t.name());
+            byte[] buf = new byte[CHUNK * Fingerprint.BYTES];
+            int n = 0;
+            int chunk = 0;
+            for (long row = 0; row < rows; row++) {
+                System.arraycopy(f.of(gen.row(t.name(), row)), 0, buf, n * Fingerprint.BYTES, Fingerprint.BYTES);
+                if (++n == CHUNK || row + 1 == rows) {
+                    sink.accept(chunk++, n, java.util.Arrays.copyOf(buf, n * Fingerprint.BYTES));
+                    n = 0;
+                }
+            }
+        };
+    }
+
+    /** Ranges key form: the keys are ascending (ranges by lo), so the fingerprints follow the key, not the row, order. */
+    private static Manifest.Fps ordered(Table t, RowGen gen, String keyCol) {
+        return sink -> {
+            Fingerprint f = new Fingerprint(t, gen.columns(t.name()));
+            int at = gen.columns(t.name()).indexOf(keyCol);
+            int rows = (int) gen.rows(t.name());
+            long[] keys = new long[rows];
+            byte[] all = new byte[rows * Fingerprint.BYTES];
+            boolean sorted = true;
+            for (int row = 0; row < rows; row++) {
+                String[] cells = gen.row(t.name(), row);
+                keys[row] = Long.parseLong(cells[at]);
+                sorted &= row == 0 || keys[row - 1] < keys[row];
+                System.arraycopy(f.of(cells), 0, all, row * Fingerprint.BYTES, Fingerprint.BYTES);
+            }
+            if (!sorted) {
+                Integer[] idx = new Integer[rows];
+                for (int i = 0; i < rows; i++) {
+                    idx[i] = i;
+                }
+                java.util.Arrays.sort(idx, (a, b) -> Long.compare(keys[a], keys[b]));
+                byte[] by = new byte[all.length];
+                for (int i = 0; i < rows; i++) {
+                    System.arraycopy(all, idx[i] * Fingerprint.BYTES, by, i * Fingerprint.BYTES, Fingerprint.BYTES);
+                }
+                all = by;
+            }
+            for (int chunk = 0; chunk * CHUNK < rows; chunk++) {
+                int n = Math.min(CHUNK, rows - chunk * CHUNK);
+                sink.accept(chunk, n, java.util.Arrays.copyOfRange(all, chunk * CHUNK * Fingerprint.BYTES,
+                    (chunk * CHUNK + n) * Fingerprint.BYTES));
+            }
+        };
     }
 
     /** A JSON string literal. */

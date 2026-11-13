@@ -59,7 +59,7 @@ public final class ForgeExtension implements BeforeAllCallback, AfterAllCallback
             String text = Files.readString(path(a.config()));
             Config read = ConfigReader.read(text);
             Config conf = Scenarios.apply(new Config(read.version(), a.seed(), read.clock(), read.locale(), read.connection(), read.ddl(),
-                read.tables(), read.rules(), read.states(), read.scenarios(), read.run(), read.manifestDir()), a.scenario(), a.edge());
+                read.tables(), read.rules(), read.states(), read.scenarios(), read.run(), read.manifestDir(), read.cleanup()), a.scenario(), a.edge());
             List<Rule> rules = RuleSet.check(conf.rules(), g).stream().filter(r -> r.kind() != RuleKind.VERIFY).toList();
             RowGen gen = RowGen.of(g, conf, rules);
             try (Connection c = DriverManager.getConnection(url, server.user(), server.password())) {

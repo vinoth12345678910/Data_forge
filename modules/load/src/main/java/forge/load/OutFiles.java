@@ -167,6 +167,13 @@ public final class OutFiles {
             man.put("tables", entries);
             man.put("scripts", scripts);
             man.put("breaks", breaks);
+            // the keep list as configured (ids and ranges ascending); a file output cannot check the database
+            ObjectMapper om = new ObjectMapper();
+            List<Object> keep = new ArrayList<>();
+            for (Manifest.Keep k : ManifestBuilder.keep(g, conf)) {
+                keep.add(om.readTree(k.spec()));
+            }
+            man.put("keep", keep);
             DefaultPrettyPrinter pp = new DefaultPrettyPrinter().withObjectIndenter(new DefaultIndenter("  ", "\n")).withArrayIndenter(new DefaultIndenter("  ", "\n"));
             Files.writeString(tmp.resolve("manifest.json"), new ObjectMapper().writer(pp).writeValueAsString(man) + "\n", StandardCharsets.UTF_8);
             files.add("manifest.json");

@@ -126,7 +126,21 @@ class ConfigReaderTest {
         bad(GOOD + "scenarios:\n  x:\n    burst: { column: t.c, from: \"2025-01-02T00:00:00Z\", to: \"2025-01-01T00:00:00Z\", share: 10 }\n", "burst", "before");
         bad(GOOD + "states:\n  orders:\n    colum: status\n", "colum", "unknown key");
         bad(GOOD + "use: [generic]\n", "use", "reserved");
-        bad(GOOD + "cleanup:\n  keep: [a]\n", "cleanup", "reserved");
+        bad(GOOD + "cleanup:\n  keep: [a]\n", "cleanup.keep[0]", "map of keys");
+    }
+
+    @Test
+    void cleanupSection() {
+        Config c = ConfigReader.read(GOOD + "cleanup:\n  keep:\n    - { table: countries, ids: [3, 1], ranges: [[10, 12]] }\n"
+            + "  batch_rows: 50000\n  backup_timeout_minutes: 0.5\n");
+        assertEquals(1, c.cleanup().keep().size());
+        assertEquals(List.of(List.of(3L), List.of(1L)), c.cleanup().keep("countries").ids());
+        assertEquals(50000, c.cleanup().batchRows());
+        assertEquals(0.5, c.cleanup().backupTimeoutMinutes());
+        assertTrue(c.tables().get("countries").keep(), "a table named in cleanup.keep is a keep table");
+        bad(GOOD + "cleanup:\n  batch_rows: 50001\n", "cleanup.batch_rows");
+        bad(GOOD + "cleanup:\n  keep:\n    - { table: t, ids: [1, 1] }\n", "cleanup.keep[0].ids[1]", "duplicate");
+        bad(GOOD + "cleanup:\n  keep:\n    - { table: t, ranges: [[5, 2]] }\n", "cleanup.keep[0].ranges[0]");
     }
 
     @Test

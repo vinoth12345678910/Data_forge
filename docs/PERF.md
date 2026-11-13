@@ -44,6 +44,10 @@ The SHA-256 of every generated cell, streamed by `ScaleMain` in hash mode (a `@t
 
 S3 gives this hash at `-Xmx256m`, at `-Xmx2g` (`ScaleContainerTest.s3OutputIsTheSameAtTwoHeapSizes`, a permanent test: the row cache is a fifth of the heap, so the two sizes use different cache sizes) and with the code from before the cache was bounded. **Correction:** an earlier version of this file quoted `c123c26f…54716a` for the same rows. It does not reproduce: it appears nowhere but in the docs and no committed code makes it, so how it was computed is unknown (not a different seed or sizing; the S3 shape did not change). It was replaced by the value the committed harness produces.
 
+## P5.1 fingerprint cost (measured 2026-11-13, one machine, `-Xmx256m`)
+
+Each row now gets a 16-byte fingerprint, computed from the generator cells when the manifest is built. The cells are generated twice more per table (once to stage the `.fps` file, once to write `run_fp`). Against the P4.6 rows below (same shapes, same machine): S1 postgres 2.8 s to 4.4 s, S2 19.4 s to 23.2 s, S4 31.6 s to 36.8 s, S3 177 s to 272.8 s (the S3 limit is 300 s, so it has little room left). Live heap stayed within the limit in all six shapes (peak 123 to 426 MB). The pinned output hashes still match. A single run each, so small differences are noise; the S3 increase is real in size, not a measured cause. Reducing the double generation (compute the fingerprints once and keep them) is open and not done.
+
 ## Measurements
 
 | date | release | shape | database | rows | seconds | live MB | peak MB | Xmx | note |
@@ -62,3 +66,9 @@ S3 gives this hash at `-Xmx256m`, at `-Xmx2g` (`ScaleContainerTest.s3OutputIsThe
 | 2026-11-12 | p4-scale-pg17-informational | S1 one table | sqlite | 1000000 | 4.4 | 8 | 91 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:17-alpine |
 | 2026-11-12 | p4-scale-pg17-informational | S4 tied composite keys, 1M-row parents | postgres | 3010000 | 29.1 | 131 | 400 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:17-alpine |
 | 2026-11-12 | p4-scale-pg17-informational | S3 events-merch rules + states, 1M orders | postgres | 4019699 | 165.0 | 125 | 304 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:17-alpine |
+| 2026-11-13 | p5.1 | S1 one table | postgres | 1000000 | 4.4 | 33 | 123 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+| 2026-11-13 | p5.1 | S2 1M parents + 3M children | postgres | 4000000 | 23.2 | 77 | 188 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+| 2026-11-13 | p5.1 | S1 one table | mysql | 1000000 | 12.6 | 34 | 173 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+| 2026-11-13 | p5.1 | S1 one table | sqlite | 1000000 | 6.0 | 32 | 124 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+| 2026-11-13 | p5.1 | S4 tied composite keys, 1M-row parents | postgres | 3010000 | 36.8 | 154 | 424 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+| 2026-11-13 | p5.1 | S3 events-merch rules + states, 1M orders | postgres | 4019699 | 272.8 | 156 | 426 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
