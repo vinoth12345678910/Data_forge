@@ -93,6 +93,10 @@ The three script files are not tables, so they are listed in the manifest under 
 
 Why CSV NULL is "empty unquoted": it is distinguishable from the empty string, needs no sentinel such as `\N` (which collides with a real value), and parses with any RFC 4180 reader that preserves the quoted/unquoted difference. A reader that cannot make that difference cannot round-trip, and the manifest says so (`null_form`).
 
+**What CSV is for (review fix 4, decided).** CSV is for inspection and for Postgres COPY (`COPY t FROM ... WITH (FORMAT csv, HEADER)` reads an unquoted empty field as NULL and `""` as an empty string, so it round-trips exactly), and it is not for loading into MySQL or SQLite. `OutputsCsvLoadContainerTest` loads the real files to show why: MySQL `LOAD DATA` has no way to tell a quoted empty field from an unquoted one, so it loads without an error but the NULL counts differ; `sqlite3 .import` turns all NULLs into empty strings (0 of 145 stayed NULL on events-merch) and rejects rows whose CHECK needs a NULL (`order_items_one_target`). **To load into MySQL or SQLite use `--out sql`, which is tested to load exactly on all three databases.**
+
+Why this and not a per-dialect NULL token (for example `\N` for MySQL): SQLite has no token at all, so SQLite would still be inspection-only; MySQL would get a CSV that differs from the other two and from what every other reader expects; and the exact path already exists as SQL. Not changing the CSV bytes also keeps `output_id` and the Phase 4 files stable.
+
 ### The manifest file (beside every output)
 
 `manifest.json` (keys in fixed order, no timestamps):
