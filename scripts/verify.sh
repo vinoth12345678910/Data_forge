@@ -186,6 +186,38 @@ else
   fail "h. scale smoke"
 fi
 
+# i. frozen safety tests (Phase 5): the tests were written by the test-first agent from docs/design/CLEANUP_SAFETY_TESTS.md
+# and frozen at the commit in scripts/safety-frozen.txt; the builder may not change them. This step (1) fails if they
+# changed since, and (2) runs the patterns in scripts/safety-green.txt, which a feature adds as it makes tests pass.
+echo ">> i. safety suite (frozen tests)"
+frozen="$(head -n1 scripts/safety-frozen.txt 2>/dev/null || true)"
+if [ -z "$frozen" ] || ! git cat-file -e "$frozen^{commit}" 2>/dev/null; then
+  echo "SKIPPED: no frozen safety commit available"
+  record "SKIPPED" "i. safety suite (no frozen commit in scripts/safety-frozen.txt)"
+elif ! git diff --quiet "$frozen" -- modules/testkit/src/test/java/forge/safety; then
+  git diff --stat "$frozen" -- modules/testkit/src/test/java/forge/safety
+  fail "i. safety suite (frozen tests were edited after $frozen)"
+elif ! docker_up; then
+  echo "SKIPPED: Docker is not running"
+  record "SKIPPED" "i. safety suite (Docker not running)"
+else
+  args=()
+  while IFS= read -r line; do
+    case "$line" in ''|'#'*) ;; *) args+=(--tests "$line") ;; esac
+  done < scripts/safety-green.txt
+  if [ "${#args[@]}" -eq 0 ]; then
+    record "SKIPPED" "i. safety suite (scripts/safety-green.txt lists no tests)"
+  elif ./gradlew :testkit:safetyTest "${args[@]}"; then
+    if grep -qx 'forge.safety.\*' scripts/safety-green.txt; then
+      record "PASS   " "i. safety suite (all frozen tests)"
+    else
+      record "PASS   " "i. safety suite (${#args[@]} listed groups; the rest of the frozen tests are NOT yet required, see docs/STATUS.md)"
+    fi
+  else
+    fail "i. safety suite"
+  fi
+fi
+
 # g. script tests: the step e retry rule must retry a network error and never a compile or test failure
 echo ">> g. script tests"
 if bash scripts/test-retry.sh; then

@@ -149,3 +149,27 @@ Questions for you, the owner of cleanup: (1) is "refuse non-empty tables" accept
 - `loaded_at` and `run_id` are fixed by the caller before the transaction (`loadedAt`, whole seconds UTC; run id = SHA-256 of seed, config text and `loadedAt`), so the files can be staged and hashed before commit. `breaks` and `sequences` are written sorted by table, then name.
 - `RowGen` does not generate `keep` tables yet (Phase 1 limit), so a keep table is skipped by the builder but that path is untested.
 - Code: `forge.load` has `Manifest`, `ManifestBuilder`, `ManifestDb`, `ManifestFile` (`stage`, `publish`, `discard`, `rebuild`), `KeyChoice`, `Sequences`.
+
+## Phase 5 changes: manifest format 2 (delegated design, 2026-11-13; the owner must review before merging)
+
+Answers to the cleanup questions left above (by the Phase 5 defaults D1 to D13; details in `CLEANUP.md`, `ROW_OWNERSHIP.md`, `GUARDS.md`, `KEEP_TABLES.md`):
+
+1. **Non-empty target tables:** unchanged, the loader still refuses them. The pre-run state of every table is recorded (`run_pre`, below).
+2. **Keep tables are listed in the manifest** (`run_keep`, `"keep"` in the JSON), with the ids and ranges generated rows may reference.
+3. **The SQL the loader ran is not recorded** and cleanup must not trust SQL text. Cleanup works from keys and fingerprints only.
+4. **The "assumptions" table above is confirmed with these additions:** the "count check" compares against `row_count` *and* per-row fingerprints; "truncate only at 100% coverage" is decided inside the truncating transaction (`GUARDS.md` G7); a changed `schema_sha256` stops cleanup; **a database copy and a file copy that differ stop cleanup**, and cleanup never rebuilds the file by itself.
+
+New and changed storage (same transaction as the rows, on all three dialects; names as in `ManifestJdbc`):
+
+| Item | Change |
+|---|---|
+| `runs.state` | new text column: `loaded`, `running`, `cleaned`, `partial`; `runs.state_by` (OS user), `runs.state_at` |
+| `run_fp` | per-row fingerprints in chunks of 1,000 (`ROW_OWNERSHIP.md`), 16 bytes per row |
+| `run_keep` | `(run_id, table_name, spec)` keep tables with their listed values |
+| `run_pre` | `(run_id, table_name, row_count)`: the row count of **every** table of the schema just before the load (0 for loaded tables) |
+| `dry_runs` | `(dry_id, run_id, kind, made_at, digest, blocked, counts)` (`GUARDS.md` G2) |
+| `audit` | append-only `(id, at, os_user, command, run_id, manifest_id, env, phase, outcome, entry)` (`GUARDS.md` G8) |
+| local file | JSON `"format": 2`, `"keep"`, `"pre"` (per table counts), per table `"fp_chunks"`; new `<run_id>.fps`; `file_sha256` covers JSON + keys + fps |
+
+A manifest of format 1 is refused by cleanup (`manifest_old_format`). `forge generate` writes format 2 from P5.1 on. The fingerprint cost at 1,000,000 rows (rows, bytes, load seconds) is measured in P5.1 and recorded in `docs/PERF.md`.
+

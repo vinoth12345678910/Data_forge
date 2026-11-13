@@ -243,3 +243,12 @@
 - Finding: the old S3 hash (c123c26f...) was not reproducible; the code from before the cache bound gives the same 3957ab91... as now, so the bound changed no output.
 - Open: gap-rule planner headroom (user design); dialect findings not addressed: ReadOnly guard is not dialect-aware, SQLite constraint-name regex, `--dialect` against a database of another type.
 - verify.sh (full, on this branch): PASS a clean build, b determinism, c testcontainers, d no-network, f1 SQLite, f2 MySQL, f3 Postgres, h scale smoke, g script tests, e clean-machine build. Nothing SKIPPED.
+
+## 2026-11-13 Phase 5 start: design and frozen safety tests (branch p5-design, from main)
+- Pre-flight: Phase 4 and the review fixes are merged (PR #44); `bash scripts/verify.sh` passes on main (all 10 steps). **`docs/EXTENSIONS.md` does not exist** (not on main, not in git history); the owner said to continue, so the Phase 5 out-of-scope list used is the one in the prompt (no UI, no packs or release work). Docker reachable.
+- Done: S1 design docs (`CLEANUP`, `ROW_OWNERSHIP`, `CASCADES_AND_TRIGGERS`, `GUARDS`, `KEEP_TABLES`, `CLASSIFY_PURGE_READINESS`, `MANIFEST` format 2) with the delegation line on top; S2 `CLEANUP_SAFETY_TESTS.md` (about 50 tests, 20 resolved spec problems); S3 safety tests written by the `test-first` agent in four invocations (harness + A,B; C,D; E,F,G; H to L), not by the builder.
+- **SAFETY TESTS FROZEN AT e1df4ec.** 289 cases in `modules/testkit/src/test/java/forge/safety/`: 255 RED because the product behaviour does not exist yet (cleanup options, `classify`, `purge`, manifest format 2, keep ids, audit log), 33 pass by design (24 harness self-tests, E4 dialect behaviour, B1, L3), 1 skipped (L4, not testable black box). Every RED test was checked to fail at the first missing command or artifact, not at compile or setup. No test was ever run against a working product, so **no mutation check of the safety tests against the product has been possible yet**; each feature must do one (below).
+- Not done: all product code (P5.1 to P5.6). Decisions taken under the delegation are in `CLEANUP_SAFETY_TESTS.md` (resolved problems 1 to 20), notably: `data.blockers[]` carries count and keys; allowed triggers may add rows to other tables but never remove any; `manifest_missing` is exit 1.
+- Next: P5.1 `p5-ownership` (fingerprints, manifest format 2, keep key).
+- Open: the owner must review the delegated safety design before merging anything.
+
