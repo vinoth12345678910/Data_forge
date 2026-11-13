@@ -1,3 +1,5 @@
+SAFETY TESTS FROZEN AT e1df4ec
+
 Safety design delegated by the owner to the defaults in the Phase 5 prompt, 2026-11-13. The owner must review before merging.
 
 # Cleanup safety tests: the specification (black box)
