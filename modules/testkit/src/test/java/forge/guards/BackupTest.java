@@ -78,6 +78,16 @@ class BackupTest {
     }
 
     @Test
+    void maskHidesTheOtherPromisedForms() {
+        String m = Backup.mask("AWS_SECRET_ACCESS_KEY=abc123 pg_dump --password hunter2 db; mysqldump -phunter3 db; psql postgres://u:p/ss@h/db");
+        assertFalse(m.contains("abc123"), m);
+        assertFalse(m.contains("hunter2"), m);
+        assertFalse(m.contains("hunter3"), m);
+        assertFalse(m.contains("p/ss"), m);
+        assertTrue(m.contains("pg_dump") && m.contains("@h/db"), m);
+    }
+
+    @Test
     void logIsMode600AndHoldsStdoutAndStderr() throws Exception {
         Path log = tmp.resolve("sub").resolve("b.log");
         Backup.run("echo out-line; echo err-line 1>&2", 1, log);

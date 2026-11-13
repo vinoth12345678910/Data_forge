@@ -33,53 +33,95 @@ final class Own {
 
     private Own() {}
 
+    /** One table's scan set-up, built once: the columns, the fingerprint and what to select. */
+    static final class Plan {
+        private final Ctx x;
+        private final Table tbl;
+        private final Manifest.Tbl t;
+        private final List<String> cols = new ArrayList<>();
+        private final List<String> covered;
+        private final List<String> select = new ArrayList<>();
+        private final List<String> quoted = new ArrayList<>();
+        final List<String> keyQuoted;
+        private final Fingerprint f;
+
+        Plan(Ctx x, Manifest.Tbl t) throws SQLException {
+            this.x = x;
+            this.t = t;
+            this.tbl = x.g().table(t.name());
+            if (tbl == null) {
+                throw new SQLException("table " + t.name() + " of the manifest is not in the schema");
+            }
+            for (Column c : tbl.columns()) {
+                if (c.generated() == null) {
+                    cols.add(c.name());
+                }
+            }
+            this.f = new Fingerprint(tbl, cols);
+            this.covered = Fingerprint.covered(tbl, cols);
+            select.addAll(t.key());
+            for (String c : covered) {
+                if (!select.contains(c)) {
+                    select.add(c);
+                }
+            }
+            for (String c : select) {
+                quoted.add(x.d().q(c));
+            }
+            this.keyQuoted = quoted.subList(0, t.key().size());
+        }
+
+        Table table() {
+            return tbl;
+        }
+
+        Manifest.Tbl manifest() {
+            return t;
+        }
+
+        /** The keys of one slice of a fingerprint chunk (offset is where the slice starts in the chunk), sorted into present, edited and missing. */
+        Slice check(List<String[]> keys, byte[] fps, int offset) throws SQLException {
+            Map<String, String[]> live = read(x, tbl, t, select, quoted, keyQuoted, keys);
+            List<String[]> present = new ArrayList<>();
+            List<String[]> edited = new ArrayList<>();
+            List<String[]> missing = new ArrayList<>();
+            for (int j = 0; j < keys.size(); j++) {
+                String[] k = keys.get(j);
+                String[] row = live.get(Keys.norm(k));
+                if (row == null) {
+                    missing.add(k);
+                } else if (same(f, tbl, cols, covered, select, row, fps, offset + j)) {
+                    present.add(k);
+                } else {
+                    present.add(k);
+                    edited.add(k);
+                }
+            }
+            return new Slice(present, edited, missing);
+        }
+    }
+
+    /** What one slice of keys looked like: present (edited ones are also in present), edited, missing. */
+    record Slice(List<String[]> present, List<String[]> edited, List<String[]> missing) {}
+
     static Result scan(Ctx x, Manifest.Tbl t) throws SQLException {
-        Table tbl = x.g().table(t.name());
-        if (tbl == null) {
-            throw new SQLException("table " + t.name() + " of the manifest is not in the schema");
-        }
-        List<String> cols = new ArrayList<>();
-        for (Column c : tbl.columns()) {
-            if (c.generated() == null) {
-                cols.add(c.name());
-            }
-        }
-        Fingerprint f = new Fingerprint(tbl, cols);
-        List<String> covered = Fingerprint.covered(tbl, cols);
-        List<String> select = new ArrayList<>(t.key());
-        for (String c : covered) {
-            if (!select.contains(c)) {
-                select.add(c);
-            }
-        }
-        List<String> quoted = new ArrayList<>();
-        for (String c : select) {
-            quoted.add(x.d().q(c));
-        }
-        List<String> keyQuoted = quoted.subList(0, t.key().size());
+        Plan plan = new Plan(x, t);
         Map<Integer, byte[]> stored = new TreeMap<>();
         t.fps().each((chunk, n, fps) -> stored.put(chunk, fps));
-
         long[] n = new long[3];
         List<String> edited = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         int[] chunk = {0};
         Keys.chunks(t, keys -> {
-            Map<String, String[]> live = read(x, tbl, t, select, quoted, keyQuoted, keys);
-            byte[] fps = stored.get(chunk[0]);
-            for (int j = 0; j < keys.size(); j++) {
-                String[] k = keys.get(j);
-                String[] row = live.get(Keys.norm(k));
-                if (row == null) {
-                    n[2]++;
-                    keep(missing, k);
-                    continue;
-                }
-                n[0]++;
-                if (!same(f, tbl, cols, covered, select, row, fps, j)) {
-                    n[1]++;
-                    keep(edited, k);
-                }
+            Slice s = plan.check(keys, stored.get(chunk[0]), 0);
+            n[0] += s.present().size();
+            n[1] += s.edited().size();
+            n[2] += s.missing().size();
+            for (String[] k : s.edited()) {
+                keep(edited, k);
+            }
+            for (String[] k : s.missing()) {
+                keep(missing, k);
             }
             chunk[0]++;
         });

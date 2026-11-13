@@ -49,12 +49,17 @@ final class Resolve {
         return new Pick(null, null, true, missing(x, null));
     }
 
+    /** A stopped run: a later command may look at it (dry run) and, with --resume, continue it. */
+    static boolean resumable(String state) {
+        return "partial".equals(state) || "running".equals(state);
+    }
+
     private static Pick state(Ctx x, String run, String state) {
         if ("cleaned".equals(state)) {
             return new Pick(run, state, true, new Refusal("already_clean",
                 "Run " + run + " is already cleaned: no manifest rows remain. Nothing to delete."));
         }
-        if (state != null && !"loaded".equals(state)) {
+        if (state != null && !"loaded".equals(state) && !resumable(state)) {
             return new Pick(run, state, true, new Refusal("run_not_loaded", "Run " + run + " is in state " + state
                 + ". Only a run in state loaded can be dry-run. Nothing was deleted."));
         }

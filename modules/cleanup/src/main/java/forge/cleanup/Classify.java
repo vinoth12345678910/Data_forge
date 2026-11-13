@@ -137,6 +137,14 @@ final class Classify {
             warnings.add(Entry.of("triggers_may_be_incomplete", "This database user may not see every trigger (MySQL shows triggers"
                 + " only to users with the TRIGGER privilege), so the trigger list can be incomplete."));
         }
+        // M4 (accepted limit): cleanup looks only at delete triggers. Say what else could write while it runs; no new check.
+        for (String[] o : otherWriters()) {
+            if (manifest.containsKey(o[0])) {
+                warnings.add(Entry.of("other_triggers_or_rules", o[0] + " has " + o[2] + " " + o[1] + ". Cleanup checks only delete triggers:"
+                    + " an update trigger (cleanup nulls some foreign keys of manifest rows), a truncate trigger or a rule can still write to"
+                    + " other tables, and no check of Data Forge sees what they do. Review them before a cleanup."));
+            }
+        }
         List<Map<String, Object>> soft = new ArrayList<>();
         for (Manifest.Tbl mt : manifest.values()) {
             for (Column c : x.g().table(mt.name()).columns()) {
@@ -399,5 +407,41 @@ final class Classify {
             }
         }
         return false;
+    }
+
+    /** Update triggers, truncate triggers and (Postgres) rules per table: {table, name, kind}. Best effort; an unreadable catalog gives none. */
+    private List<String[]> otherWriters() {
+        List<String[]> out = new ArrayList<>();
+        try {
+            switch (x.d()) {
+                case POSTGRES -> {
+                    for (String[] r : Sql.rows(x.ro(), "select c.relname, t.tgname, case when (t.tgtype & 16) <> 0 then 'update trigger'"
+                        + " else 'truncate trigger' end from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid ="
+                        + " c.relnamespace where n.nspname = ? and not t.tgisinternal and ((t.tgtype & 16) <> 0 or (t.tgtype & 32) <> 0)"
+                        + " order by 1, 2", x.g().schema())) {
+                        out.add(new String[] {r[0], r[1], r[2]});
+                    }
+                    for (String[] r : Sql.rows(x.ro(), "select tablename, rulename, 'rule' from pg_rules where schemaname = ? order by 1, 2",
+                        x.g().schema())) {
+                        out.add(new String[] {r[0], r[1], r[2]});
+                    }
+                }
+                case MYSQL -> {
+                    for (String[] r : Sql.rows(x.ro(), "select event_object_table, trigger_name, 'update trigger' from information_schema.triggers"
+                        + " where trigger_schema = database() and lower(event_manipulation) = 'update' order by 1, 2")) {
+                        out.add(new String[] {r[0], r[1], r[2]});
+                    }
+                }
+                case SQLITE -> {
+                    for (String[] r : Sql.rows(x.ro(), "select tbl_name, name, 'update trigger' from sqlite_master where type = 'trigger'"
+                        + " and lower(sql) like '%update%' order by 1, 2")) {
+                        out.add(new String[] {r[0], r[1], r[2]});
+                    }
+                }
+            }
+        } catch (SQLException | RuntimeException ignored) {
+            // classify is advice: an unreadable catalog only means no warning
+        }
+        return out;
     }
 }

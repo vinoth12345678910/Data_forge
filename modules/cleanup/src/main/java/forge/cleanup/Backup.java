@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  */
 public final class Backup {
 
-    /** exitCode is -1 when the command could not start or was killed on timeout. */
+    /** exitCode is -1 when the command was killed on timeout, -2 when the run was interrupted. */
     public record Result(int exitCode, boolean timedOut) {
         public boolean ok() {
             return !timedOut && exitCode == 0;
@@ -23,7 +23,10 @@ public final class Backup {
     }
 
     private static final Pattern SECRET = Pattern.compile(
-        "(?i)((?:password|passwd|pwd|secret|token|api[_-]?key)\\s*[=:]\\s*)(\"[^\"]*\"|'[^']*'|\\S+)|(://[^/\\s:@]+:)[^@\\s/]+@");
+        "(?i)((?:[\\w.-]*(?:pass|secret|token|api[_-]?key|access[_-]?key)[\\w.-]*)\\s*[=:]\\s*)(\"[^\"]*\"|'[^']*'|\\S+)"
+            + "|((?:--?(?:pass|password|passwd|pwd|token|secret)[\\w-]*)\\s+)(\\S+)"
+            + "|(\\s-p)(?=\\S)(\\S+)"
+            + "|(://[^/\\s:@]+:)\\S*@");
 
     private Backup() {}
 
@@ -53,23 +56,38 @@ public final class Backup {
         } catch (InterruptedException e) {
             killTree(p.toHandle());
             Thread.currentThread().interrupt();
-            return new Result(-1, true);
+            return new Result(-2, false);
         }
     }
 
     /** Descendants first (collected before anything dies), then the shell itself. */
     private static void killTree(ProcessHandle h) {
-        java.util.List<ProcessHandle> all = h.descendants().toList();
-        for (ProcessHandle d : all) {
-            d.destroyForcibly();
+        for (int round = 0; round < 50; round++) {
+            java.util.List<ProcessHandle> all = h.descendants().toList();
+            if (all.isEmpty()) {
+                break;
+            }
+            for (ProcessHandle d : all) {
+                d.destroyForcibly();
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
         h.destroyForcibly();
     }
 
-    /** Best effort, for printing only: hides values after password=, token: and so on, and the password in a URL. */
+    /** Best effort, for printing only: hides values after password=, token: and so on, --password x, -pX, and the password in a URL. */
     public static String mask(String text) {
-        return SECRET.matcher(text).replaceAll(m -> m.group(1) != null
-            ? java.util.regex.Matcher.quoteReplacement(m.group(1) + "****")
-            : java.util.regex.Matcher.quoteReplacement(m.group(3) + "****@"));
+        return SECRET.matcher(text).replaceAll(m -> {
+            String keep = m.group(1) != null ? m.group(1) : m.group(3) != null ? m.group(3) : m.group(5) != null ? m.group(5) : null;
+            if (keep != null) {
+                return java.util.regex.Matcher.quoteReplacement(keep + "****");
+            }
+            return java.util.regex.Matcher.quoteReplacement(m.group(7) + "****@");
+        });
     }
 }

@@ -1,6 +1,7 @@
 package forge.guards;
 
 import static forge.guards.Check.guards;
+import static forge.guards.Check.accepted;
 import static forge.guards.Check.ready;
 import static forge.guards.Check.refused;
 import static forge.guards.Check.withTyped;
@@ -25,7 +26,7 @@ import org.junit.jupiter.params.provider.EnumSource;
  * P5.3 gate, guard G2 (dry run first) and the re-scan (G4, G6) of forge cleanup --run (GUARDS.md, P5_3_DECISIONS.md 5 to 9). The
  * typed values are always right here, so a refusal can only come from the dry run record or from the rows. Setup is generate,
  * plain SQL and forge cleanup --dry-run; the metadata rows are edited by SQL where a test needs an old, future or foreign dry run.
- * Every test that refuses has a control that is accepted (it ends in run_not_built). RED today: --run answers not_built.
+ * Every test that refuses has a control that is accepted (since P5.4 it cleans the run, in a database of its own).
  */
 @Tag("containers")
 class DryRunGuardsTest {
@@ -60,10 +61,11 @@ class DryRunGuardsTest {
     @ParameterizedTest
     @EnumSource(Db.class)
     void dryRunStaleByAge(Db db, @TempDir Path dir) throws Exception {
-        Target t = ready(db, dir);
-        t.ageDryRuns(23);
-        refused("23 hours old (control: accepted)", t, true, () -> t.run(withTyped(t)), "run_not_built", PASSED);
-        t.ageDryRuns(2);
+        Target c = ready(db, dir.resolve("control"));
+        c.ageDryRuns(23);
+        accepted("23 hours old (control: accepted)", c, () -> c.run(withTyped(c)));
+        Target t = ready(db, dir.resolve("subject"));
+        t.ageDryRuns(25);
         refused("25 hours old", t, true, () -> t.run(withTyped(t)), "dry_run_stale", G2);
         t.ageDryRuns(-27);
         refused("2 hours in the future", t, true, () -> t.run(withTyped(t)), "dry_run_stale", G2);
@@ -104,19 +106,20 @@ class DryRunGuardsTest {
         t.sql("delete from gp_child where id = 900001");
         t.dry().expect("a newest, clean dry run", 0);
         assertEquals(3, t.dryRows(), "setup: three dry runs");
-        refused("newest dry run is clean, older ones are stale or blocked", t, true, () -> t.run(withTyped(t)), "run_not_built", PASSED);
+        accepted("newest dry run is clean, older ones are stale or blocked", t, () -> t.run(withTyped(t)));
     }
 
     /** A row inserted after the dry run changes the state digest: stale, even though the row is nobody's business. */
     @ParameterizedTest
     @EnumSource(Db.class)
     void anInsertAfterTheDryRunMakesItStale(Db db, @TempDir Path dir) throws Exception {
-        Target t = ready(db, dir);
-        refused("control: nothing changed", t, true, () -> t.run(withTyped(t)), "run_not_built", PASSED);
+        Target c = ready(db, dir.resolve("control"));
+        accepted("control: nothing changed", c, () -> c.run(withTyped(c)));
+        Target t = ready(db, dir.resolve("subject"));
         t.sql("insert into gp_parent (id, name) values (900001, 'a real parent nobody references')");
         refused("a row was inserted", t, true, () -> t.run(withTyped(t)), "dry_run_stale", G2);
         t.dry().expect("a fresh dry run", 0);
-        refused("after a fresh dry run it is accepted again", t, true, () -> t.run(withTyped(t)), "run_not_built", PASSED);
+        accepted("after a fresh dry run it is accepted again", t, () -> t.run(withTyped(t)));
     }
 
     /**
@@ -126,10 +129,13 @@ class DryRunGuardsTest {
     @ParameterizedTest
     @EnumSource(Db.class)
     void aRealChildAddedAfterACleanDryRunIsFoundByTheRescan(Db db, @TempDir Path dir) throws Exception {
-        Target t = Target.pair(db, dir, Check.PARENTS, Check.CHILDREN);
+        Target c = Target.pair(db, dir.resolve("control"), Check.PARENTS, Check.CHILDREN);
+        c.sql(REAL_CHILD);
+        c.dry().expect("clean dry run (the real child references nothing)", 0);
+        accepted("control: accepted", c, () -> c.run(withTyped(c)));
+        Target t = Target.pair(db, dir.resolve("subject"), Check.PARENTS, Check.CHILDREN);
         t.sql(REAL_CHILD);
         t.dry().expect("clean dry run (the real child references nothing)", 0);
-        refused("control: accepted", t, true, () -> t.run(withTyped(t)), "run_not_built", PASSED);
         t.sql("update gp_child set parent_id = 3 where id = 900001");
         Res r = refused("the real child now references a manifest parent", t, true, () -> t.run(withTyped(t)),
             "real_rows_reference_manifest", RESCAN, false);

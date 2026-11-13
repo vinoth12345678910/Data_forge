@@ -57,6 +57,9 @@ final class Dry {
                     return refuse(audit, pick.runId(), new Refusal("env_prod_needs_allow",
                         "connection.env is prod. Cleanup on production needs --allow-prod and the typed confirmation."), "refuse");
                 }
+                if (pick.refusal() != null && pick.refusal().code().equals("already_clean")) {
+                    return alreadyClean(audit, pick.runId(), pick.refusal());
+                }
                 if (pick.refusal() != null) {
                     return refuse(audit, pick.runId(), pick.refusal(), "pass");
                 }
@@ -64,13 +67,29 @@ final class Dry {
                 if (chk.refusal() != null) {
                     return refuse(audit, pick.runId(), chk.refusal(), "pass");
                 }
-                return look(audit, pick.runId(), db, chk.manifest());
+                return look(audit, pick.runId(), db, chk.manifest(), Resolve.resumable(pick.state()));
             } catch (Audit.Unwritable u) {
                 return unwritable(pick.runId(), u);
             } catch (SQLException | IOException | RuntimeException ex) {
                 return failed(audit, pick.runId(), ex);
             }
         }
+    }
+
+    /** A cleaned run has nothing left to dry-run: exit 0, no dry_runs row (GUARDS.md, already_clean). */
+    private Outcome alreadyClean(Audit audit, String runId, Refusal p) throws Audit.Unwritable {
+        Map<String, Object> counts = new LinkedHashMap<>();
+        counts.put("deleted", 0);
+        audit.result("already_clean", Audit.guards(null), counts, null);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("mode", "dry-run");
+        data.put("run_id", runId);
+        data.put("env", x.env());
+        data.put("state", "cleaned");
+        data.put("already_clean", true);
+        data.put("blocked", false);
+        data.put("deleted", 0);
+        return new Outcome(0, data, List.of(), List.of(), List.of("forge cleanup --dry-run: " + p.message()));
     }
 
     /** Anything unexpected after the intent entry: an error result entry (file, and table if it works), exit 2, no stack trace. */
@@ -94,11 +113,11 @@ final class Dry {
     }
 
     /** Looks at the rows, builds the report, writes the audit result and the dry_runs row. */
-    private Outcome look(Audit audit, String runId, String db, Manifest m) throws SQLException, Audit.Unwritable {
+    private Outcome look(Audit audit, String runId, String db, Manifest m, boolean partial) throws SQLException, Audit.Unwritable {
         // The digest is taken before the scans: if another writer changes a table while the scans run, the stored digest is
         // the older state, so a later run sees it as stale and refuses. Taken after, it could hide such a change.
         String digest = Digest.of(x);
-        Scan sc = scan(x, runId, m);
+        Scan sc = scan(x, runId, m, partial);
         Found found = sc.found();
         List<Manifest.Tbl> tables = sc.tables();
         List<Map<String, Object>> triggers = sc.triggers();
@@ -120,11 +139,13 @@ final class Dry {
             r.put("load_order", t.loadOrder());
             r.put("manifest_rows", t.rows());
             r.put("live_rows", Sql.count(x.ro(), "select count(*) from " + x.tbl(t.name())));
-            r.put("method", "delete");
-            r.put("method_reason", REASON);
+            String why = partial ? "a resumed run deletes in batches" : Delete.truncateReason(x, t, sc.own().get(t.name()));
+            r.put("method", why == null ? "truncate" : "delete");
+            r.put("method_reason", why == null ? "Postgres: the table holds only manifest rows, no trigger, no foreign key from another table" : why);
             rows.add(r);
-            planned.put(t.name(), t.rows());
-            total += t.rows();
+            long left = partial ? sc.own().get(t.name()).found() : t.rows();
+            planned.put(t.name(), left);
+            total += left;
         }
         List<String> keep = new ArrayList<>();
         for (Map.Entry<String, Config.TableConf> e : new TreeMap<>(x.conf().tables()).entrySet()) {
@@ -176,10 +197,16 @@ final class Dry {
     }
 
     /** What the scans found, and the tables they looked at (keep tables excluded). Shared by --dry-run and the --run guards (G4, G6). */
-    record Scan(Found found, List<Manifest.Tbl> tables, Map<String, Keys.Members> members, List<Map<String, Object>> triggers) {}
+    record Scan(Found found, List<Manifest.Tbl> tables, Map<String, Keys.Members> members, List<Map<String, Object>> triggers,
+        Map<String, Own.Result> own) {}
 
     /** The read-only scans of a dry run: keep tables, edited or missing rows, counts, real rows that point at the manifest, triggers. */
     static Scan scan(Ctx x, String runId, Manifest m) throws SQLException {
+        return scan(x, runId, m, false);
+    }
+
+    /** partial: rows already deleted by an earlier part of a stopped run are not missing, they are done. */
+    static Scan scan(Ctx x, String runId, Manifest m, boolean partial) throws SQLException {
         Found found = new Found(runId);
         List<Manifest.Tbl> tables = new ArrayList<>();
         Map<String, Keys.Members> members = new TreeMap<>();
@@ -191,21 +218,26 @@ final class Dry {
                 members.put(t.name(), new Keys.Members(t));
             }
         }
+        Map<String, Own.Result> own = new TreeMap<>();
         for (Manifest.Tbl t : tables) {
             Own.Result o = Own.scan(x, t);
+            own.put(t.name(), o);
             if (o.edited() > 0) {
                 found.add("rows_edited", t.name(), o.edited(), o.editedKeys(), null, null, null);
             }
-            if (o.missing() > 0) {
+            if (o.missing() > 0 && !partial) {
                 found.add("rows_missing", t.name(), o.missing(), o.missingKeys(), null, null, null);
             }
-            if (o.found() != t.rows()) {
+            if (o.found() != t.rows() && !partial) {
                 found.mismatch(t.name(), t.rows(), o.found());
             }
         }
         for (Blockers.Finding f : Blockers.referencing(x, m, members)) {
             String code = Blockers.cascades(f.action()) ? "cascade_would_touch_real_rows" : "real_rows_reference_manifest";
             found.add(code, f.child(), f.count(), f.keys(), f.constraint(), f.parent(), f.action());
+        }
+        for (String[] c : Delete.cycleProblems(x, m, tables)) {
+            found.cycle(c[0], c[1], Long.parseLong(c[2]), Long.parseLong(c[3]));
         }
         List<Map<String, Object>> triggers = new ArrayList<>();
         List<String> allowed = x.conf().cleanup().allowTriggers();
@@ -226,7 +258,7 @@ final class Dry {
         for (Map.Entry<String, List<String>> e : refused.entrySet()) {
             found.add("delete_trigger", e.getKey(), e.getValue().size(), e.getValue(), null, null, null);
         }
-        return new Scan(found, tables, members, triggers);
+        return new Scan(found, tables, members, triggers, own);
     }
 
     private static String countsJson(Map<String, Object> planned) {

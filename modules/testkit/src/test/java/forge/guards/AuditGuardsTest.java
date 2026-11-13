@@ -1,5 +1,6 @@
 package forge.guards;
 
+import static forge.guards.Check.accepted;
 import static forge.guards.Check.ready;
 import static forge.guards.Check.withTyped;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,8 +41,9 @@ class AuditGuardsTest {
     @ParameterizedTest
     @EnumSource(Db.class)
     void auditFileUnwritable(Db db, @TempDir Path dir) throws Exception {
-        Target t = ready(db, dir);
-        t.run(withTyped(t)).expect("control: the log is writable", 1, "run_not_built");
+        Target c = ready(db, dir.resolve("control"));
+        accepted("control: the log is writable", c, () -> c.run(withTyped(c)));
+        Target t = ready(db, dir.resolve("subject"));
         t.breakAuditFile();
         String user0 = t.userSnap();
         String meta0 = t.metaSnap(true);
@@ -55,8 +57,9 @@ class AuditGuardsTest {
     @ParameterizedTest
     @EnumSource(Db.class)
     void auditTableUnwritable(Db db, @TempDir Path dir) throws Exception {
-        Target t = ready(db, dir);
-        t.run(withTyped(t)).expect("control: the log is writable", 1, "run_not_built");
+        Target c = ready(db, dir.resolve("control"));
+        accepted("control: the log is writable", c, () -> c.run(withTyped(c)));
+        Target t = ready(db, dir.resolve("subject"));
         t.breakAuditTable();
         String user0 = t.userSnap();
         t.run(withTyped(t)).expect("audit table cannot take the row", 2, "audit_unwritable");

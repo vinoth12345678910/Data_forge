@@ -35,13 +35,14 @@ final class Typed {
             + " would delete. Type the plain digits shown by the dry run. Nothing was deleted.");
     }
 
-    /** The rows a cleanup would delete from: every manifest table that is not a keep table. */
+    /**
+     * The rows the manifest holds: every manifest table. A table later marked keep is still counted (the run is refused for it
+     * as a blocker; the typed total does not hide that table).
+     */
     static long total(forge.core.Config conf, Manifest m) {
         long n = 0;
         for (Manifest.Tbl t : m.tables()) {
-            if (!Integrity.keep(conf, t.name())) {
-                n += t.rows();
-            }
+            n += t.rows();
         }
         return n;
     }
