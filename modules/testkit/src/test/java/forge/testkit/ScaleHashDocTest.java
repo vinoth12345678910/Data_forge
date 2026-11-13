@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,7 +12,6 @@ import org.junit.jupiter.api.Test;
  * docs/PERF.md says what its memory columns are. A doc that quotes a hash nobody can reproduce, or drifts from the
  * pins, fails here (no Docker).
  */
-@Tag("containers") // RED commit only: lets the fast-test hook pass; the fix commit removes this tag
 class ScaleHashDocTest {
 
     static String doc(String path) throws Exception {
@@ -25,7 +23,7 @@ class ScaleHashDocTest {
         for (String path : new String[] {"docs/PERF.md", "docs/design/JUNIT_AND_SCALE.md"}) {
             String text = doc(path);
             assertTrue(text.contains(ScalePins.S3), path + " must quote the pinned S3 hash " + ScalePins.S3);
-            assertFalse(text.contains("c123c26f"), path + " still quotes the old S3 hash that could not be reproduced");
+            assertFalse(text.contains("c123c26f79c68b55002d91f77c1f44cc30fd89bdfa2da51c37a4d5742f54716a"), path + " still quotes the old S3 hash in full (a correction may name its first characters only)");
         }
     }
 

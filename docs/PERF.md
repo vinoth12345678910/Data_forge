@@ -6,6 +6,7 @@ Speed and memory of generating and loading one million rows, recorded per releas
 
 - **Child JVM, `-Xmx256m`.** The generator, the loader and the JDBC driver run in a child JVM with that heap. The database runs in its own container and is not under the limit.
 - **live MB** is the largest heap still in use after a forced GC, sampled every 500 ms: what the run really held. The gate requires it to stay at or below 85% of the limit (217 MB).
+- **peak RSS includes off-heap memory** (metaspace, thread stacks, the JDBC driver's buffers, the JIT), so under `-Xmx256m` it reads about 220 MB for S1 and S2 and 350 to 400 MB for S3 and S4 (measured in the review, `/usr/bin/time -l`). It is not a heap number and the limit does not apply to it: **the gate measures live heap** (the line above), which is the memory the generator and loader were still holding.
 - **peak MB** is the Phase 2 figure: the sum of each memory pool's own peak. It counts garbage and adds peaks that never happened together, so it can exceed `-Xmx` (it read 425 MB under a 256 MB limit once). It is kept only so a number can be compared with Phase 2; it is not a measure of memory use.
 - **Time limits (gate):** S1 60 s, S2 180 s, S3 300 s, S4 300 s on Postgres; S1 600 s on MySQL and SQLite.
 - Shapes: **S1** one simple table, 1,000,000 rows. **S2** 1,000,000 parents and 3,000,000 children. **S3** events-merch with its rules and state machines, 1,000,000 orders (about 4,000,000 rows; the `registrations` count is 4,000 because the generator, correctly, will not make more registrations than the event capacities allow). **S4** a tied composite foreign key schema (teams and members each tied to their tenant by a two-column key) with 1,000,000-row parent tables, 3,010,000 rows in all.
@@ -28,7 +29,20 @@ The full load of the 1,000,000 shape (generation plus the Postgres COPY and the 
 - Rows of release `p4-scale-pg17-informational` are the same suite on `postgres:17-alpine`: **informational, not a gate**. They agree with Postgres 16 within a few percent.
 - The `note` column of the MySQL and SQLite rows names the Postgres image of the run's container; those two shapes ran in their own database (MySQL 8.4.3 in a container, SQLite in-process).
 - A run under about 5 s gets few live-heap samples; its live MB is a lower bound.
-- S3 (events-merch with rules and state machines) first ran out of memory at 256 MB because the row cache could hold 250,000 to 360,000 rows; the cache is now bounded by memory and the SHA-256 of the 4,019,699 generated rows is unchanged (`c123c26f79c68b55002d91f77c1f44cc30fd89bdfa2da51c37a4d5742f54716a`). Details in `docs/design/JUNIT_AND_SCALE.md`.
+- S3 (events-merch with rules and state machines) first ran out of memory at 256 MB because the row cache could hold 250,000 to 360,000 rows; the cache is now bounded by memory and the SHA-256 of the 4,019,699 generated rows is unchanged: `3957ab91ff73edf24744dd37041bfd40574f175ac6e1e0ae9fdb5579c0ed393c` (see "Pinned hashes"). Details in `docs/design/JUNIT_AND_SCALE.md`.
+
+## Pinned hashes (review fix 12)
+
+The SHA-256 of every generated cell, streamed by `ScaleMain` in hash mode (a `@table` line per table, cells separated by a tab, NULL as `\N`, rows by a newline), seed 42. They live in `ScalePins` and `ScaleContainerTest.theGeneratedDataOfAllFourShapesIsPinned` asserts them, so a change to generated data fails a test; `ScaleHashDocTest` checks that this file quotes the S3 value.
+
+| shape | rows | SHA-256 |
+|---|---|---|
+| S1 one table | 1,000,000 | `baf80ea02196b14293c865f6354bf02b253dd6ecf00d9c4331e5980b51b7abf8` |
+| S2 1M parents + 3M children | 4,000,000 | `80cc2e84e92dac30e20702987e8e43e2794e3da24eba62ea8cef19ccea226887` |
+| S3 events-merch rules + states, 1M orders | 4,019,699 | `3957ab91ff73edf24744dd37041bfd40574f175ac6e1e0ae9fdb5579c0ed393c` |
+| S4 tied composite keys, 1M-row parents | 3,010,000 | `e15f7113987024f9917fb6e1651b5130a0e2005ac38cbc9626b60a3f3e18be75` |
+
+S3 gives this hash at `-Xmx256m`, at `-Xmx2g` (`ScaleContainerTest.s3OutputIsTheSameAtTwoHeapSizes`, a permanent test: the row cache is a fifth of the heap, so the two sizes use different cache sizes) and with the code from before the cache was bounded. **Correction:** an earlier version of this file quoted `c123c26f…54716a` for the same rows. It does not reproduce: it appears nowhere but in the docs and no committed code makes it, so how it was computed is unknown (not a different seed or sizing; the S3 shape did not change). It was replaced by the value the committed harness produces.
 
 ## Measurements
 
