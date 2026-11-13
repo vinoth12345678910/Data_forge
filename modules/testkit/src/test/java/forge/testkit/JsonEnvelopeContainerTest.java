@@ -188,8 +188,8 @@ class JsonEnvelopeContainerTest {
 
     @Test
     void notBuiltCommandsReturnAJsonErrorNamingThePhase() throws Exception {
-        // cleanup --run stays unbuilt (P5.4); a bare cleanup is the dry run since P5.2
-        for (String[] c : new String[][] {{"cleanup", "5", "--run"}, {"readiness", "5"}}) {
+        // cleanup --resume stays unbuilt (P5.4); a bare cleanup is the dry run since P5.2, --run is the guards since P5.3
+        for (String[] c : new String[][] {{"cleanup", "5", "--resume"}, {"readiness", "5"}}) {
             JsonNode doc = c.length > 2 ? envelope(forge(c[0], c[2], "--json"), c[0]) : envelope(forge(c[0], "--json"), c[0]);
             assertFalse(doc.get("ok").asBoolean());
             JsonNode e = doc.get("errors").get(0);

@@ -13,6 +13,11 @@ public final class Cleanup {
         return Dry.run(q);
     }
 
+    /** forge cleanup --run in P5.3: the guards only. Never deletes; a run that passes every guard ends in run_not_built. */
+    public static Outcome run(Request q) throws SQLException, IOException {
+        return Guards.run(q);
+    }
+
     /** forge classify. Writes nothing at all. */
     public static Outcome classify(Request q) throws SQLException, IOException {
         return Classify.run(q);
