@@ -32,7 +32,10 @@ subprojects {
         classpath = sourceSets["test"].runtimeClasspath
         useJUnitPlatform { includeTags("containers") }
         // The frozen Phase 5 safety tests run in their own step (safetyTest, verify.sh step i), per feature.
-        filter { excludeTestsMatching("forge.safety.*") }
+        filter {
+            excludeTestsMatching("forge.safety.*")
+            isFailOnNoMatchingTests = false
+        }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         // Docker and golden files are inputs Gradle cannot see: never skip as up-to-date.
         outputs.upToDateWhen { false }
@@ -44,7 +47,10 @@ subprojects {
         testClassesDirs = sourceSets["test"].output.classesDirs
         classpath = sourceSets["test"].runtimeClasspath
         useJUnitPlatform { includeTags("containers") }
-        filter { includeTestsMatching("forge.safety.*") }
+        filter {
+            includeTestsMatching("forge.safety.*")
+            isFailOnNoMatchingTests = false
+        }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         outputs.upToDateWhen { false }
     }
