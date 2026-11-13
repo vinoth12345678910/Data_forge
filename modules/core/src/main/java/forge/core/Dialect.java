@@ -61,6 +61,30 @@ public enum Dialect {
         return name;
     }
 
+    /**
+     * least or greatest of the arguments, the Postgres way on all three databases: a NULL argument is ignored and the
+     * result is NULL only when every argument is NULL. MySQL LEAST/GREATEST and SQLite min/max return NULL if any
+     * argument is NULL, so there each argument is replaced by the first non-NULL argument when it is NULL itself
+     * (least(a,b) becomes least(coalesce(a,b), coalesce(b,a))); the smallest or largest value is not changed by that.
+     */
+    public String pick(String name, java.util.List<String> args) {
+        if (this == POSTGRES || args.size() == 1) {
+            return name + "(" + String.join(", ", args) + ")";
+        }
+        java.util.List<String> fixed = new java.util.ArrayList<>();
+        for (int i = 0; i < args.size(); i++) {
+            java.util.List<String> order = new java.util.ArrayList<>();
+            order.add(args.get(i));
+            for (int j = 0; j < args.size(); j++) {
+                if (j != i) {
+                    order.add(args.get(j));
+                }
+            }
+            fixed.add("coalesce(" + String.join(", ", order) + ")");
+        }
+        return fn(name) + "(" + String.join(", ", fixed) + ")";
+    }
+
     /** Integer division of two integer expressions, truncating toward zero. */
     public String div(String a, String b) {
         return this == MYSQL ? "(" + a + " div " + b + ")" : "(" + a + " / " + b + ")";
