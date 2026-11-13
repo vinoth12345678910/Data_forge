@@ -252,3 +252,9 @@
 - Next: P5.1 `p5-ownership` (fingerprints, manifest format 2, keep key).
 - Open: the owner must review the delegated safety design before merging anything.
 
+
+## 2026-11-13 P5.1 ownership (branch p5-ownership, from p5-design; PR targets p5-design)
+- Done: gate first (committed RED: `OwnershipManifestV2Test`, `KeepConfigTest`), then `cleanup:` config (keys, `KeepSet`), fingerprints `forge-fp/1`, manifest format 2 (`.fps`, `run_fp`/`run_keep`/`run_pre`, `runs.state`, hash over json+keys+fps) on PG, MySQL, SQLite, keep-table generation with `keep_values_missing` and `keep_value_not_found`. `d1a_*`, `d1b_*` added to `safety-green.txt`. Mutation check: 3 mutations, 2 caught, 1 survived (text/composite id sort untested), fixed with `KeepOrderTest`. verify.sh: all 11 steps PASS, nothing SKIPPED. scope-guard clean; determinism-auditor no high or medium.
+- Not done / not covered: **L4 (SQLite foreign_keys read-back) is not covered by a test** (test owed in P5.4); determinism-auditor LOW items left open: `KeepSet.of` sorts ranges by `lo` only and does not re-check overlap (unreachable from a config file), `ManifestBuilder.ordered` int overflow on a huge range-form table, `forge-fp/1` does not pin the date/text formats; fingerprints are generated twice per table (S3 177 s to 272.8 s of 300 s, see PERF.md), not reduced.
+- Decisions I made (yours to veto): keep-id existence is checked before the load transaction (MySQL/SQLite `ensure` runs before it, and `d1b` needs no leftover tables); manifest `keep` is written sorted, not as listed; fingerprints computed when the manifest is built from generator cells. I changed the `KeepConfigTest` fixture to a table-level foreign key (MySQL ignores inline REFERENCES); assertions untouched.
+- Open: the owner must review the delegated safety design; whether to cut the double fingerprint generation.
