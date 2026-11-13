@@ -2,6 +2,11 @@
 
 Stack: Java 21, Gradle (Kotlin DSL), Picocli, Jackson YAML, ANTLR4, Javalin, JUnit 5, Testcontainers, jqwik. UI: React + Vite + TypeScript. Source of truth: `docs/SPEC.md`. This file is the build order. The plan is PHASE-WISE only.
 
+## New order (owner decision, 2026-11-13)
+The plan is narrowed to: **finish Phase 5** (P5.5 readiness, sequences, purge, `--drop-metadata`; P5.6 full suite, 1M-row cleanup measurement, `PHASE5_RESULTS.md`), then **a shared service layer** (`docs/design/SERVICE_LAYER.md`), then the **MCP server**, then a **thin TUI** (`modules/tui`) and a **small web UI** (Phase 6, below), then a **lite release** (Phase 7).
+Dropped (kept described only in `docs/EXTENSIONS.md`, not built): Prisma and ORM ingest, entity-centric seeding, test wrappers, CI and migration reporting, fuzz packs, queue and storage adapters. The full Phase 6 below is replaced by the web UI lite. The golden schemas get no new rules.
+The TUI and the web UI are built by another tool (Google Antigravity), which may edit only `ui/`, `modules/tui/` and `docs/ui/`; the Java service layer, the HTTP API, the docs and all safety rules stay with Claude Code. No UI, TUI or MCP tool may delete, truncate, run `cleanup --run`, run `purge` or run a backup.
+
 ## What Data Forge is
 Data Forge generates test users and all other test data (orders, payments, registrations and so on) that is valid, realistic and follows the BUSINESS RULES, in any relational database, offline. It reads the schema, applies the rules (derived columns, capacity limits, state machines, time order), then verifies the data and later cleans it out before go-live. Every decision must serve that goal.
 
@@ -26,7 +31,9 @@ Data Forge generates test users and all other test data (orders, payments, regis
 | 3 | `gen`, `rules`, `load` (MySQL, SQLite) |
 | 4 | `cli`, `load`, `junit` |
 | 5 | `cleanup`, `cli` |
-| 6 | `server`, `ui` |
+| service layer, MCP | `service` (new, shared by CLI, MCP, TUI and HTTP), `server`, `mcp` |
+| 6 (web UI lite) | `server`, `ui` (built by Antigravity) |
+| TUI | `tui` (built by Antigravity) |
 | 7 | `packs`, `golden`, `scripts` |
 
 ## Golden schemas
@@ -105,17 +112,19 @@ Gate (USER writes these tests, Claude only runs and reports):
 
 User owns: the whole safety design. Tag: `phase-5`
 
-## Phase 6: Web UI
+## Phase 6: Web UI lite (replaces the full Phase 6)
 Features:
-- Javalin server (localhost only, REST + SSE). React shell with Tailwind and shadcn/ui.
-- Screens: Connect, Schema graph (React Flow + dagre), Rules (Monaco), Scenarios (sliders + Recharts), Preview (TanStack Table), Run (progress bar), Verify, Drift, Go-live wizard (stepper, typed confirmation, disabled red button until database name and row total match), History.
-- Red banner for prod on every screen. Why-this-row explainer.
-- UI edits `forge.yml` through the API so CLI and UI never disagree.
-- Bundle all fonts and icons. No CDN links.
+- The Java server (Javalin, `127.0.0.1` only, session token, Host and Origin checks) serves the JSON API of `docs/design/UI_API.md` and `ui/dist` as static files. Polling for progress.
+- Five screens only: **Connect** (URL, environment label, read-only schema check), **Schema graph** (tables and foreign keys, cycles and self references visible), **Run** (scenario and seed, generate, progress, summary that says the data is partial and which rules are not checked), **Verify** (passed, failed with rule and row, and "not checked in this phase" shown separately, never as a pass), **Go-live** (cleanup **dry run** counts, readiness, the manual checklist and the exact terminal command a human must type; **no** button, call or endpoint runs a cleanup, purge or backup).
+- Red banner for prod on every screen. Dark mode default. Bundled fonts and icons, no external URLs. Strict TypeScript, TanStack Query.
+- Dropped from the old Phase 6: Rules editor, Scenarios sliders, Preview, Drift, History screens, the Go-live wizard with a run button, the why-this-row explainer, the `forge.yml` editor.
 
-Gate: browser smoke test passes (Playwright): connect, generate, verify, dry-run cleanup; and a full cutover rehearsal from the browser. Tag: `phase-6`
+Gate: a Playwright smoke test against the real local server in Docker (connect, schema graph renders, generate, verify shows passed, failed and not-checked separately, go-live shows the dry run and the command); a test that fails if `ui/src` calls any delete, truncate, cleanup-run, purge or backup endpoint; a build check that fails on any external URL in `ui/`; a test that enumerates the server routes and fails on any delete, truncate, cleanup-run, purge or backup name. Tag: `phase-6`
 
-## Phase 7: Packs and release
+## TUI (after the MCP server)
+A thin terminal UI in `modules/tui` over the same service layer: connect, schema, generate, verify, cleanup dry run and readiness. Same rule: no cleanup run, purge, truncate, delete or backup. Built by Antigravity.
+
+## Phase 7: Packs and release (lite)
 Features:
 - Built-in packs: generic, ecommerce, events, SaaS and banking.
 - All golden schemas on three databases.

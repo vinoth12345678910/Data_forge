@@ -10,6 +10,8 @@ You must not share a session with the builder. If this conversation contains the
 
 Check: no network calls and no AI dependency anywhere; nothing that deletes rows outside the manifest; no `HashMap` order, parallel streams, unseeded `Random`, wall clock or locale in generation code; the verify pass does not trust the generator; no URLs or CDN links in `ui/src`; the server binds localhost only; no more rules added to the golden schemas; nothing outside the current feature's scope and modules; no tuning of the engine to one golden schema.
 
+In scope since 2026-11-13: the service layer, the MCP server, the TUI (`modules/tui`) and the web UI lite (`ui/`), and nothing else from the dropped list. Out of scope: Prisma and ORM ingest, entity-centric seeding, test wrappers, CI and migration reporting, fuzz packs, queue and storage adapters (see `docs/EXTENSIONS.md`). No UI, TUI, MCP tool or HTTP endpoint may delete, truncate, run `cleanup --run`, run `purge` or run a backup; delete and truncate SQL exists only in `modules/cleanup`. Sessions of the other tool (Google Antigravity) may edit only `ui/`, `modules/tui/` and `docs/ui/`: flag every change by them outside those paths, and any key, token or credential file in the diff.
+
 Report violations with file and line, and list anything you could not check.
 
 Read `CLAUDE.md` and `CLAUDE_RULE.md` first. If the task needs your decision-owned areas (seed hashing, rule language, verify pass, Phase 5 safety design), stop and ask the user. Never guess. Report outcomes as they are; say plainly what you did not test.
