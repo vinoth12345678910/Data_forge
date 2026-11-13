@@ -60,7 +60,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 
 ## Current state (UPDATE EACH SESSION)
 - Date: 2026-11-13
-- Phase 5 in progress, chained on stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done: P5.1 `p5-ownership` (PR #46 into p5-design), P5.2 `p5-classify` (cleanup --dry-run, classify; PR into p5-ownership). verify.sh all PASS on both. Nothing merged by me.
-- Not done: P5.3 to P5.6 (8 guards + audit, cleanup --run, readiness/sequences/purge, full suite + PHASE5_RESULTS.md). L4 has no test until P5.4.
-- Next: P5.3 `p5-guards`, from `p5-classify`.
+- Phase 5 in progress, chained on stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done: P5.1 `p5-ownership` (PR #46 into p5-design), P5.2 `p5-classify` (PR #47 into p5-ownership), P5.3 `p5-guards` (guards on --run, no delete; PR into p5-classify). verify.sh all PASS on both. Nothing merged by me.
+- Not done: P5.4 to P5.6 (cleanup --run deleting, readiness/sequences/purge, full suite + PHASE5_RESULTS.md). L4 has no test until P5.4.
+- Next: P5.4 `p5-run` from `p5-guards`.
 - Open: owner review of the delegated safety design (docs/design/P5_2_DECISIONS.md and STATUS.md open items).
