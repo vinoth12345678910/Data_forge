@@ -60,12 +60,11 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        for (String reserved : List.of("use", "cleanup")) {
-            JsonNode n = root.get(reserved);
-            if (n != null && !n.isNull() && !n.isEmpty()) {
-                throw new ConfigError(reserved + ": reserved for a later phase; it must be empty or absent for now.");
-            }
+        JsonNode use = root.get("use");
+        if (use != null && !use.isNull() && !use.isEmpty()) {
+            throw new ConfigError("use: reserved for a later phase; it must be empty or absent for now.");
         }
+        Config.Cleanup cleanup = cleanup(root.get("cleanup"));
         List<Config.RuleConf> rules = rules(root.get("rules"));
         Conn conn = connection(root.get("connection"));
         String ddl = text(root, "ddl", "");
@@ -81,8 +80,225 @@ public final class ConfigReader {
             Map.Entry<String, JsonNode> e = it.next();
             out.put(e.getKey(), table(e.getValue(), "tables." + e.getKey()));
         }
+        for (Config.Keep k : cleanup.keep()) {
+            TableConf have = out.get(k.table());
+            if (have == null) {
+                out.put(k.table(), new TableConf(null, true, new TreeMap<>()));
+            } else if (!have.keep()) {
+                out.put(k.table(), new TableConf(have.rows(), true, have.columns(), have.correlate()));
+            }
+            if (have != null && have.rows() != null) {
+                throw new ConfigError("tables." + k.table() + ": a table named in cleanup.keep is never generated, so it must not have rows.");
+            }
+        }
         return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE,
-            text(root, "manifest_dir", ""));
+            text(root, "manifest_dir", ""), cleanup);
+    }
+
+    private static Config.Cleanup cleanup(JsonNode n) {
+        if (n == null || n.isNull()) {
+            return Config.Cleanup.NONE;
+        }
+        keys(n, "cleanup", "keep", "allow_triggers", "batch_rows", "max_cycle_rows", "backup_timeout_minutes", "purge", "test_patterns");
+        return new Config.Cleanup(keep(n.get("keep")), allowTriggers(n.get("allow_triggers")),
+            whole(n, "batch_rows", 1, 50_000), whole(n, "max_cycle_rows", 1, Integer.MAX_VALUE), minutes(n.get("backup_timeout_minutes")),
+            purge(n.get("purge")), patterns(n.get("test_patterns")));
+    }
+
+    private static Integer whole(JsonNode n, String key, int lo, int hi) {
+        JsonNode v = n.get(key);
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (!v.isInt() || v.intValue() < lo || v.intValue() > hi) {
+            throw new ConfigError("cleanup." + key + ": a whole number from " + lo + (hi == Integer.MAX_VALUE ? " up" : " to " + hi) + " is required.");
+        }
+        return v.intValue();
+    }
+
+    private static Double minutes(JsonNode v) {
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (!v.isNumber() || v.doubleValue() <= 0) {
+            throw new ConfigError("cleanup.backup_timeout_minutes: a number above 0 is required (0.5 is allowed).");
+        }
+        return v.doubleValue();
+    }
+
+    private static List<String> allowTriggers(JsonNode v) {
+        List<String> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError("cleanup.allow_triggers: a list of table names is required.");
+        }
+        for (int i = 0; i < v.size(); i++) {
+            if (!v.get(i).isTextual()) {
+                throw new ConfigError("cleanup.allow_triggers[" + i + "]: a table name is required.");
+            }
+            out.add(v.get(i).textValue());
+        }
+        return out;
+    }
+
+    private static List<Config.Keep> keep(JsonNode v) {
+        List<Config.Keep> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError("cleanup.keep: a list of {table, ids or ranges} is required.");
+        }
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < v.size(); i++) {
+            String path = "cleanup.keep[" + i + "]";
+            JsonNode e = v.get(i);
+            keys(e, path, "table", "ids", "ranges");
+            String table = text(e, "table", path);
+            if (table == null) {
+                throw new ConfigError(path + ".table: required.");
+            }
+            if (!seen.add(table)) {
+                throw new ConfigError(path + ".table: " + table + " is listed twice; list all its ids and ranges in one entry.");
+            }
+            List<List<Object>> ids = ids(e.get("ids"), path + ".ids");
+            List<long[]> ranges = ranges(e.get("ranges"), path + ".ranges");
+            if (ids.isEmpty() && ranges.isEmpty()) {
+                throw new ConfigError(path + ": ids or ranges is required (a non-empty list).");
+            }
+            overlap(ids, ranges, path);
+            out.add(new Config.Keep(table, ids, ranges));
+        }
+        return out;
+    }
+
+    private static List<List<Object>> ids(JsonNode v, String path) {
+        List<List<Object>> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError(path + ": a list of ids is required.");
+        }
+        Set<List<Object>> seen = new HashSet<>();
+        for (int i = 0; i < v.size(); i++) {
+            JsonNode x = v.get(i);
+            List<Object> id = new ArrayList<>();
+            if (x.isArray()) {
+                if (x.isEmpty()) {
+                    throw new ConfigError(path + "[" + i + "]: a composite id needs at least one value.");
+                }
+                for (JsonNode part : x) {
+                    id.add(idValue(part, path + "[" + i + "]"));
+                }
+            } else {
+                id.add(idValue(x, path + "[" + i + "]"));
+            }
+            if (!seen.add(id)) {
+                throw new ConfigError(path + "[" + i + "]: duplicate id " + id + ".");
+            }
+            out.add(id);
+        }
+        return out;
+    }
+
+    private static Object idValue(JsonNode x, String path) {
+        if (x.isIntegralNumber() && x.canConvertToLong()) {
+            return x.longValue();
+        }
+        if (x.isTextual()) {
+            return x.textValue();
+        }
+        throw new ConfigError(path + ": an id is a whole number or text, got " + x + ".");
+    }
+
+    private static List<long[]> ranges(JsonNode v, String path) {
+        List<long[]> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError(path + ": a list of [lo, hi] pairs is required.");
+        }
+        for (int i = 0; i < v.size(); i++) {
+            JsonNode r = v.get(i);
+            if (!r.isArray() || r.size() != 2 || !r.get(0).isIntegralNumber() || !r.get(1).isIntegralNumber()
+                || !r.get(0).canConvertToLong() || !r.get(1).canConvertToLong()) {
+                throw new ConfigError(path + "[" + i + "]: a pair of whole numbers [lo, hi] is required.");
+            }
+            if (r.get(0).longValue() > r.get(1).longValue()) {
+                throw new ConfigError(path + "[" + i + "]: lo must not be above hi.");
+            }
+            out.add(new long[] {r.get(0).longValue(), r.get(1).longValue()});
+        }
+        return out;
+    }
+
+    /** A whole-number id inside a range, or two ranges that share a value, is a duplicate. */
+    private static void overlap(List<List<Object>> ids, List<long[]> ranges, String path) {
+        for (int i = 0; i < ranges.size(); i++) {
+            for (int j = i + 1; j < ranges.size(); j++) {
+                if (ranges.get(i)[0] <= ranges.get(j)[1] && ranges.get(j)[0] <= ranges.get(i)[1]) {
+                    throw new ConfigError(path + ".ranges[" + j + "]: overlaps ranges[" + i + "].");
+                }
+            }
+            for (int j = 0; j < ids.size(); j++) {
+                if (ids.get(j).size() == 1 && ids.get(j).get(0) instanceof Long x && x >= ranges.get(i)[0] && x <= ranges.get(i)[1]) {
+                    throw new ConfigError(path + ".ids[" + j + "]: " + x + " is also inside ranges[" + i + "].");
+                }
+            }
+        }
+    }
+
+    private static List<Config.Purge> purge(JsonNode v) {
+        List<Config.Purge> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError("cleanup.purge: a list of {name, table, where} is required.");
+        }
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < v.size(); i++) {
+            String path = "cleanup.purge[" + i + "]";
+            keys(v.get(i), path, "name", "table", "where");
+            String name = required(v.get(i), "name", path);
+            if (!RULE_NAME.matcher(name).matches()) {
+                throw new ConfigError(path + ".name: must match [a-z][a-z0-9_]*, got " + name);
+            }
+            if (!seen.add(name)) {
+                throw new ConfigError(path + ".name: duplicate purge name " + name);
+            }
+            out.add(new Config.Purge(name, required(v.get(i), "table", path), required(v.get(i), "where", path)));
+        }
+        return out;
+    }
+
+    private static List<Config.TestPattern> patterns(JsonNode v) {
+        List<Config.TestPattern> out = new ArrayList<>();
+        if (v == null || v.isNull()) {
+            return out;
+        }
+        if (!v.isArray()) {
+            throw new ConfigError("cleanup.test_patterns: a list of {table, column, like} is required.");
+        }
+        for (int i = 0; i < v.size(); i++) {
+            String path = "cleanup.test_patterns[" + i + "]";
+            keys(v.get(i), path, "table", "column", "like");
+            out.add(new Config.TestPattern(required(v.get(i), "table", path), required(v.get(i), "column", path),
+                required(v.get(i), "like", path)));
+        }
+        return out;
+    }
+
+    private static String required(JsonNode n, String key, String path) {
+        String v = text(n, key, path);
+        if (v == null || v.isBlank()) {
+            throw new ConfigError(path + "." + key + ": required.");
+        }
+        return v;
     }
 
     private static Map<String, Config.StateConf> states(JsonNode n) {

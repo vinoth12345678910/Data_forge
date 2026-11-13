@@ -11,13 +11,21 @@ import java.util.Set;
 public record Config(
     int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
     List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run,
-    String manifestDir) {
+    String manifestDir, Cleanup cleanup) {
+
+    /** A config with no cleanup: section. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+        List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run,
+        String manifestDir) {
+        this(version, seed, clock, locale, connection, ddl, tables, rules, states, scenarios, run, manifestDir, Cleanup.NONE);
+    }
 
     /** A config with no manifest_dir. */
     public Config(
         int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
         List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run) {
-        this(version, seed, clock, locale, connection, ddl, tables, rules, states, scenarios, run, null);
+        this(version, seed, clock, locale, connection, ddl, tables, rules, states, scenarios, run, null, Cleanup.NONE);
     }
 
     /** A config without scenarios. */
@@ -36,12 +44,12 @@ public record Config(
 
     /** The same config pointed at another connection. */
     public Config withConnection(Conn c) {
-        return new Config(version, seed, clock, locale, c, ddl, tables, rules, states, scenarios, run, manifestDir);
+        return new Config(version, seed, clock, locale, c, ddl, tables, rules, states, scenarios, run, manifestDir, cleanup);
     }
 
     /** The same config with other table settings. */
     public Config withTables(Map<String, TableConf> t) {
-        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir);
+        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir, cleanup);
     }
 
     /** A config without rules. */
@@ -87,6 +95,38 @@ public record Config(
             this(name, kind, text, description, null);
         }
     }
+
+    /**
+     * The cleanup: section (docs/design/CLEANUP.md, KEEP_TABLES.md). Numbers are null when not set (the cleanup feature
+     * owns the defaults). A table named in keep is also a TableConf with keep true, so every "is it kept" check is one test.
+     */
+    public record Cleanup(
+        List<Keep> keep, List<String> allowTriggers, Integer batchRows, Integer maxCycleRows, Double backupTimeoutMinutes,
+        List<Purge> purge, List<TestPattern> testPatterns) {
+        public static final Cleanup NONE = new Cleanup(List.of(), List.of(), null, null, null, List.of(), List.of());
+
+        /** The keep entry of a table, or null. */
+        public Keep keep(String table) {
+            for (Keep k : keep) {
+                if (k.table().equals(table)) {
+                    return k;
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * The values generated foreign keys may point at. Each id is a list of one value per key column (a Long or a
+     * String); ranges are inclusive {lo, hi} pairs of a single integer key. Both are as written; ConfigCheck sorts them.
+     */
+    public record Keep(String table, List<List<Object>> ids, List<long[]> ranges) {}
+
+    /** A named purge rule: rows of table where the condition holds. */
+    public record Purge(String name, String table, String where) {}
+
+    /** Rows of table whose column is like the pattern are test rows. */
+    public record TestPattern(String table, String column, String like) {}
 
     public static final Set<String> ENVS = Set.of("dev", "test", "staging", "prod");
 

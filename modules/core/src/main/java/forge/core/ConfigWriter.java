@@ -48,12 +48,61 @@ public final class ConfigWriter {
         root.put("rules", List.of());
         root.put("states", Map.of());
         root.put("scenarios", Map.of());
-        root.put("cleanup", Map.of());
+        root.put("cleanup", cleanup(c.cleanup()));
         try {
             return YAML.writeValueAsString(root);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static Map<String, Object> cleanup(Config.Cleanup c) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (!c.keep().isEmpty()) {
+            List<Object> keep = new java.util.ArrayList<>();
+            for (Config.Keep k : c.keep()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("table", k.table());
+                if (!k.ids().isEmpty()) {
+                    m.put("ids", k.ids().stream().map(id -> id.size() == 1 ? id.get(0) : id).toList());
+                }
+                if (!k.ranges().isEmpty()) {
+                    m.put("ranges", k.ranges().stream().map(r -> List.of(r[0], r[1])).toList());
+                }
+                keep.add(m);
+            }
+            out.put("keep", keep);
+        }
+        if (!c.allowTriggers().isEmpty()) {
+            out.put("allow_triggers", c.allowTriggers());
+        }
+        put(out, "batch_rows", c.batchRows());
+        put(out, "max_cycle_rows", c.maxCycleRows());
+        put(out, "backup_timeout_minutes", c.backupTimeoutMinutes());
+        if (!c.purge().isEmpty()) {
+            List<Object> l = new java.util.ArrayList<>();
+            for (Config.Purge p : c.purge()) {
+                l.add(ordered("name", p.name(), "table", p.table(), "where", p.where()));
+            }
+            out.put("purge", l);
+        }
+        if (!c.testPatterns().isEmpty()) {
+            List<Object> l = new java.util.ArrayList<>();
+            for (Config.TestPattern p : c.testPatterns()) {
+                l.add(ordered("table", p.table(), "column", p.column(), "like", p.like()));
+            }
+            out.put("test_patterns", l);
+        }
+        return out;
+    }
+
+    /** Key/value pairs in the order given (Map.of has no stable order). */
+    private static Map<String, Object> ordered(Object... kv) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) {
+            m.put((String) kv[i], kv[i + 1]);
+        }
+        return m;
     }
 
     private static Map<String, Object> table(TableConf t) {
