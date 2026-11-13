@@ -174,6 +174,18 @@ else
   fi
 fi
 
+# h. scale smoke: the one-million-row harness (child JVM, heap limit, time limit, a lowered limit that must fail, determinism
+# hash) at 100,000 rows under a 64 MB heap, about a minute. The full one-million-row shapes take minutes: scripts/perf.sh.
+echo ">> h. scale smoke"
+if ! docker_up; then
+  echo "SKIPPED: Docker is not running"
+  record "SKIPPED" "h. scale smoke (Docker not running)"
+elif ./gradlew :testkit:containerTest --tests '*ScaleSmokeContainerTest'; then
+  record "PASS   " "h. scale smoke (100,000 rows, -Xmx64m)"
+else
+  fail "h. scale smoke"
+fi
+
 # g. script tests: the step e retry rule must retry a network error and never a compile or test failure
 echo ">> g. script tests"
 if bash scripts/test-retry.sh; then

@@ -22,7 +22,7 @@ subprojects {
     // Docker-backed tests carry the "containers" tag. They stay out of `test`
     // (so a clean build works without Docker) and run via `containerTest`.
     tasks.named<Test>("test") {
-        useJUnitPlatform { excludeTags("containers") }
+        useJUnitPlatform { excludeTags("containers", "scale") }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
     }
     val sourceSets = extensions.getByType<SourceSetContainer>()
@@ -33,6 +33,15 @@ subprojects {
         useJUnitPlatform { includeTags("containers") }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         // Docker and golden files are inputs Gradle cannot see: never skip as up-to-date.
+        outputs.upToDateWhen { false }
+    }
+    // The scale tests (one million rows, minutes long) carry the "scale" tag and run via `scaleTest` (verify.sh step h).
+    tasks.register<Test>("scaleTest") {
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform { includeTags("scale") }
+        systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         outputs.upToDateWhen { false }
     }
 }
