@@ -40,13 +40,14 @@ public record Report(List<RuleResult> results) {
                     fail++;
                     b.append("  ").append(r.violations()).append(" of ").append(r.checked()).append(" rows");
                 }
+                case "NOT_APPLICABLE" -> b.append("  not applicable: ").append(r.note());
                 default -> {
                     err++;
                     b.append("  ").append(r.error());
                 }
             }
             b.append('\n');
-            if (r.note() != null) {
+            if (r.note() != null && !r.status().equals("NOT_APPLICABLE")) {
                 b.append("         WARN ").append(r.note()).append('\n');
             }
             if (r.status().equals("FAIL")) {

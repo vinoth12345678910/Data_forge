@@ -6,16 +6,20 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
 @Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
-    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, Forge.Drift.class, Forge.Cleanup.class,
+    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, Forge.Cleanup.class,
         Forge.Readiness.class})
 public final class Forge implements Runnable {
 
     /** Where environment variables are read from. Tests replace it. */
     public static Function<String, String> env = System::getenv;
+
+    @Option(names = "--json", scope = ScopeType.INHERIT, description = "Print one JSON document (forge.output/1) instead of human text")
+    boolean json;
 
     @Spec
     CommandSpec spec;
@@ -45,15 +49,6 @@ public final class Forge implements Runnable {
         return 1;
     }
 
-    @Command(name = "drift", description = "Check the schema against forge.yml (Phase 4).")
-    static final class Drift implements java.util.concurrent.Callable<Integer> {
-        @Spec CommandSpec spec;
-
-        public Integer call() {
-            return notBuilt(spec, 4);
-        }
-    }
-
     @Command(name = "cleanup", description = "Remove generated rows (Phase 5).")
     static final class Cleanup implements java.util.concurrent.Callable<Integer> {
         @Spec CommandSpec spec;
@@ -61,7 +56,7 @@ public final class Forge implements Runnable {
         @Option(names = "--run") boolean run;
 
         public Integer call() {
-            return notBuilt(spec, 5);
+            return new Emit(spec).notBuilt("cleanup", 5);
         }
     }
 
@@ -70,7 +65,7 @@ public final class Forge implements Runnable {
         @Spec CommandSpec spec;
 
         public Integer call() {
-            return notBuilt(spec, 5);
+            return new Emit(spec).notBuilt("readiness", 5);
         }
     }
 }

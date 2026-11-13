@@ -34,8 +34,8 @@ has_tests() { find modules -path '*/src/test/*' -name "$1" 2>/dev/null | grep -q
 # Network timeouts are raised for this container only. The build is retried ONCE, and only when the failure text is a
 # network error and not a compile or test failure. PASS is printed only when the build exited 0.
 GRADLE_VOLUME="${GRADLE_VOLUME:-forge-gradle-cache}"
-NET_ERRORS='Read timed out|Remote host terminated the handshake|Connection reset'
-NOT_NETWORK='error: |Compilation failed|tests completed|There were failing tests'
+# shellcheck source=lib/retry.sh
+source scripts/lib/retry.sh
 
 step_e() {
   echo ">> e. clean-machine build"
@@ -64,7 +64,7 @@ step_e() {
   set +e
   e_build
   rc=$?
-  if [ "$rc" -ne 0 ] && grep -Eq "$NET_ERRORS" "$log" && ! grep -Eq "$NOT_NETWORK" "$log"; then
+  if should_retry "$rc" "$log"; then
     echo "RETRIED: the first container build failed on a network error; running it once more"
     retried=" RETRIED"
     e_build
@@ -172,6 +172,26 @@ else
   else
     fail "f3. cross-database: Postgres"
   fi
+fi
+
+# h. scale smoke: the one-million-row harness (child JVM, heap limit, time limit, a lowered limit that must fail, determinism
+# hash) at 100,000 rows under a 64 MB heap, about a minute. The full one-million-row shapes take minutes: scripts/perf.sh.
+echo ">> h. scale smoke"
+if ! docker_up; then
+  echo "SKIPPED: Docker is not running"
+  record "SKIPPED" "h. scale smoke (Docker not running)"
+elif ./gradlew :testkit:containerTest --tests '*ScaleSmokeContainerTest'; then
+  record "PASS   " "h. scale smoke (100,000 rows, -Xmx64m)"
+else
+  fail "h. scale smoke"
+fi
+
+# g. script tests: the step e retry rule must retry a network error and never a compile or test failure
+echo ">> g. script tests"
+if bash scripts/test-retry.sh; then
+  record "PASS   " "g. script tests (retry rule)"
+else
+  fail "g. script tests (retry rule)"
 fi
 
 # e. clean-machine build (see step_e above)

@@ -35,9 +35,20 @@ final class Live {
     }
 
     Live(Path file, String scenario, boolean edge) throws IOException {
+        this(file, scenario, edge, null, null, null);
+    }
+
+    /** url, user and passwordEnv (each may be null) replace the connection of forge.yml: verify any database. */
+    Live(Path file, String scenario, boolean edge, String url, String user, String passwordEnv) throws IOException {
         this.file = file;
         this.text = Files.readString(file);
-        this.conf = forge.core.Scenarios.apply(ConfigReader.read(text), scenario, edge);
+        Config read = forge.core.Scenarios.apply(ConfigReader.read(text), scenario, edge);
+        if (url != null && read.connection() != null) {
+            Config.Conn o = read.connection();
+            read = read.withConnection(new Config.Conn(url, o.schema(), o.env(), user != null ? user : o.user(),
+                passwordEnv != null ? passwordEnv : o.passwordEnv(), o.backupCmd()));
+        }
+        this.conf = read;
         Config.Conn c = conf.connection();
         if (c == null) {
             throw new ConfigError("forge.yml has no connection. Add connection.url and connection.env (this command works on a live database).");
@@ -47,6 +58,46 @@ final class Live {
             throw new ConfigError("environment variable " + c.passwordEnv() + " is not set.");
         }
         this.db = new Db(InitCmd.jdbc(c.url()), c.user(), password);
+    }
+
+    /** Reads only the schema (drift must work even when the spec no longer fits it). */
+    void openGraph() throws SQLException {
+        graph = read(conf.connection().url());
+    }
+
+    /** The schema of a database at a url, with this spec's user and password. */
+    SchemaGraph read(String url) throws SQLException {
+        Db d = new Db(InitCmd.jdbc(url), conf.connection().user(), db.password());
+        if (url.startsWith("postgres://")) {
+            return PgReader.read(d, conf.connection().schema());
+        }
+        try (java.sql.Connection c = d.open()) {
+            return forge.schema.JdbcReader.read(c);
+        }
+    }
+
+    /** Rules that do not apply to this database (verify any database). */
+    java.util.List<forge.rules.Applies.NotApplicable> notApplicable = new java.util.ArrayList<>();
+
+    /**
+     * For verify: reads the schema through a read-only session and splits the spec into the rules that apply and the
+     * ones that do not (a missing table or column), never failing on the second kind.
+     */
+    void openForVerify() throws SQLException {
+        if (postgres()) {
+            graph = PgReader.read(db, conf.connection().schema());
+        } else {
+            try (java.sql.Connection c = db.openReadOnly()) {
+                graph = forge.schema.JdbcReader.read(c);
+            }
+        }
+        forge.rules.Applies.Split split = forge.rules.Applies.split(conf.rules(), graph);
+        rules = split.rules();
+        notApplicable.addAll(split.notApplicable());
+        verifyRules = new java.util.ArrayList<>(rules);
+        var st = forge.rules.Applies.states(conf, graph);
+        verifyRules.addAll(st.getKey());
+        notApplicable.addAll(st.getValue());
     }
 
     /** Reads the schema and checks the rules against it. */

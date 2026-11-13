@@ -52,6 +52,7 @@ public final class Verifier {
         RuleSql.Sql q = RuleSql.compile(r, g, d);
         String kind = r.kind().name().toLowerCase(java.util.Locale.ROOT);
         try (Statement s = c.createStatement()) {
+            s.setQueryTimeout(timeoutSeconds);
             if (d == forge.core.Dialect.POSTGRES) {
                 s.execute("set local statement_timeout = " + (timeoutSeconds * 1000L));
                 s.execute("set local search_path = " + RuleSql.q(g.schema()));

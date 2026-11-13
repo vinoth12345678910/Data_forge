@@ -101,3 +101,13 @@ D1a, D1c approved as proposed. D1b approved with these changes, which **replace*
 - Option `--fail-on error|warning|info|none` (default `error`); `--fail-on warning` is the strict CI setting (`warn` is accepted as an alias).
 - Exit codes unchanged: 0 no change at the threshold, 1 change at or above it, 2 could not run.
 - Drift never writes `forge.yml`; the only file it may write is `forge.schema.json` with `--accept`, and `--suggest-file` (never the forge.yml path).
+
+## As built in P4.2
+
+- Code: `Drift` (core: graph diff and grading), `SnapshotFile` (schema: `forge.schema.json` write and read), `DriftCmd` and `SpecCheck` (cli), `Live.openGraph()`/`Live.read(url)`. `forge init` writes `forge.schema.json` beside `forge.yml` when absent (`data.snapshot_written`). `forge drift --accept` rewrites it from the live schema and writes nothing else.
+- Flags: `-c`, `--against <url|file.json>`, `--accept`, `--fail-on error|warning|info|none` (`warn` accepted), `--suggest-file` (refused when it is the forge.yml path). Exit 0, 1, or 2 (no baseline, bad flag, cannot connect).
+- Severities as built: a dropped table or column the spec uses is **error**; a table or column added, a type change, a NOT NULL change, a unique, foreign key or check added or dropped, and a dropped unused column are **warning**; NULL now allowed and a default change are **info**. Warnings print even when the exit is 0 and go into the envelope's `warnings[]`; changes at or above `--fail-on` go into `errors[]`.
+- "Spec uses a column" is computed by walking every dotted name in rules and scenario text through the baseline's foreign keys, plus column overrides, `correlate`, state machines (including child `fk`, `status`, `number`, `at`, `latest`) and bursts.
+- **`spec_invalid`:** when no change is already an error, `SpecCheck` builds what `forge generate` builds (config check, rule type-check, state rules, `RowGen.of`) in memory and reports any failure as an error. A table added since the baseline is given a row count so it alone does not fail that check.
+- SQLite: `JdbcReader` now reads unique constraint names from the table's own DDL (`constraint <name> unique (...)`), so the Phase 3 invented names are gone for named constraints; an unnamed `unique` column keeps a synthetic name.
+- **Not built:** `--against` with a DDL file (only a database url or a snapshot `.json`); comparing by anything but structure; a rename detector (a rename shows as a drop plus an add); drift on a baseline from a different database dialect is untested; `--against` and the `--suggest-file` write path have no test (only the refusal does).

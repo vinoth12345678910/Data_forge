@@ -188,3 +188,50 @@
 - Next: Phase 4 only when told (not started). Review in fresh sessions: scope-guard on every PR, determinism-auditor on P3.1 to P3.4, dialect-specialist on P3.5.
 - Decisions: results counts 20 closed / 10 b / 13 c, not the planned 29 / 2 / 12.
 - Open: PR #26 (Phase 2 roll-up) and the stacked Phase 3 PRs are unmerged; the P3 stack targets p2-cli.
+
+## 2026-11-12 P4.1 JSON envelope (branch p4-json, from p4-design)
+- Done: gate first (committed red: `JsonEnvelopeContainerTest` 6 tests, `scripts/test-retry.sh`), then `Envelope` (core), `Emit` and a global `--json` (cli), `docs/schema/forge-output-1.json`; every command prints one envelope (stdout only, nothing on stderr); not-built commands return `not_built` with the phase; failed rules carry rule, table and row; exit equals `envelope.exit`; jq reads it; human summary still says "partial" and "not checked". Step e retry rule moved to `scripts/lib/retry.sh` and tested (new verify.sh step g). Mutations (row dropped, human text leaked to stdout, compile errors retried) each failed the gate and were restored with git checkout.
+- Not done: usage errors are not envelopes; `drift` is still not built (P4.2); `not_checked` is a string; envelope determinism across runs not tested (run ids are time-derived).
+- Next: P4.2 `p4-drift`.
+- Decisions: not-built exit stays 1 (exit 3 was never approved); `forge verify --json` raw output replaced.
+- Open: the hook cannot commit a red FAST test, so gates are container-tagged classes or bash tests.
+
+## 2026-11-12 P4.2 drift (branch p4-drift, from p4-json)
+- Done: gate first (committed red: `DriftContainerTest` 7 tests), then `Drift`, `SnapshotFile`, `DriftCmd`, `SpecCheck`, init writes `forge.schema.json`, SQLite constraint names read from the DDL. On Postgres, MySQL and SQLite: unchanged = 0 changes and exit 0; type change, added table, added foreign key = warning (printed, exit 0; exit 1 with `--fail-on warning`); dropped column the spec uses = error, exit 1; dropped unused column = warning; no baseline and bad flags = exit 2; forge.yml bytes unchanged in every run (hashed); `--accept` writes only the snapshot. Mutations (severity softened, `--accept` rewriting forge.yml, default threshold lowered) each failed the gate and were restored with git checkout.
+- Not done: DDL file for `--against`; rename detection; `--against` and `--suggest-file` writing untested; the old not-built assertions for drift were removed from `CliTest` and `JsonEnvelopeContainerTest` because drift is built.
+- Next: P4.3 `p4-verify-any`.
+- Decisions: new table, new column, type change are warnings (the user's D1b change); `spec_invalid` errors come from building the generation plan in memory.
+- Open: determinism-auditor and dialect-specialist reviews (fresh sessions).
+
+## 2026-11-12 P4.3 verify on any database (branch p4-verify-any, from p4-drift)
+- Done: gate first (committed red: `VerifyAnyContainerTest` 5 tests and three hand-written load scripts), then `Db.openReadOnly`/`Db.recorder`, `ReadOnly` (statement guard), `Applies` (NOT_APPLICABLE), `forge verify --url --user --password-env --allow-prod --strict-na`. On Postgres, MySQL and SQLite loaded by script (not Data Forge): in-scope rules PASS with rows checked; a missing column or table is NOT_APPLICABLE with the reason and its own count; one broken row flips exactly its rule; the recorded statements are all reads, the guard refuses delete/insert/update/drop/multi-statement, and the read-only session refuses an insert; prod needs `--allow-prod`. Four mutations (guard open, Postgres session not read only, N/A reported as PASS, prod check removed) each failed the gate and were restored with git checkout.
+- Not done: SQLite statement timeout not asserted; verify-any not tried on a large foreign database; test-script fix after the red commit (MySQL ignores inline REFERENCES).
+- Next: P4.4 `p4-outputs`.
+- Decisions: not-applicable never fails the default exit (D3b); `--allow-prod` plus timeouts (D3c as changed).
+- Open: the P4.2 push-hook verify failed once on a Gradle user-home lock caused by my own concurrent Gradle runs (not code); retried unchanged and said so; the dialect-specialist review of P4.2 to P4.4 is for a fresh session.
+
+## 2026-11-12 P4.4 output files (branch p4-outputs, from p4-verify-any)
+- Done: gate first (committed red: `OutputsContainerTest` 6 tests), then `OutFiles` and `forge generate --out sql|csv|json --out-dir`. The SQL loads into an empty Postgres, MySQL and SQLite database and verify passes; CSV and JSON parse back (test-side parsers) to exactly the rows the generator makes, with the awkward text override (empty string, backslash, newline, quotes, comma, Unicode); same seed gives byte-identical files and manifest, another seed differs; every edge kind (unicode, injection, 255-character, leap day, DST instants) is one exact value in all three formats on three dialects (case-only duplicate on non-MySQL); the manifest matches the files (bytes, sha256, rows, columns) and has no time field; a failed run leaves no output or temp directory, a used directory is refused. 12 mutations (CSV quoting, JSON bigint, SQL quote and MySQL backslash, empty-vs-NULL, manifest timestamp, temp directory, used directory, four edge values) each failed the gate and were restored with git checkout; two first attempts were invalid (a patch that did not apply, and one that hit unrelated lines) and were redone.
+- Not done: edge assertions for the NULL kind (nulls occur naturally; NULL fidelity is tested instead); leap day not mutated separately; speed and memory of writing not measured (P4.6); `--dialect` against a real database of another type untested.
+- Next: P4.5 `p4-junit`.
+- Decisions: file manifest has `output_id`, no run id or time; one `removeTemp` for the writer's own temp directory (scope-guard to review).
+- Open: determinism-auditor and dialect-specialist reviews in a fresh session.
+
+## 2026-11-12 P4.4 follow-up: a flaky property found by the clean-machine step
+- The first push of `p4-outputs` failed in step e (clean container) on `NullThenUpdatePropertyTest` (the P3.6 jqwik property): `GenError: registration_before_event ... no value left`. Reproduced at jqwik 400 tries: seed 50, orders 28. Cause: a time rule with a gap (`by 1h..30d`) has no room when its parent's time is within the gap of the earliest time the generator can make; generation fails by design. It is not an outputs bug and it passed in step a by luck of the random draw.
+- Fix (test only, disclosed): the property builds its config without the `by`-gap time rules (it tests cycle fills, not time rules); 400 tries pass. `.jqwik-database` (failure seeds) was tracked in git and is now untracked and ignored.
+- **Open, for the user (generator design):** should a `before`/`after` rule with a gap fall back to ordering only when the gap leaves no room, instead of `GenError`? Today it fails with "no value left" (documented in `TEMPORAL_RULES.md`). Not changed.
+
+## 2026-11-12 P4.5 JUnit extension (branch p4-junit, from p4-outputs)
+- Done: gate first (committed red, with an API skeleton that has no behaviour because a test cannot compile without its annotation: `ForgeJunitContainerTest` 4 tests, sample classes A, B, C), then `@ForgeDb`, `ForgeExtension`, `ForgeDatabases`, `RowLoader`. Own-container mode runs no delete SQL (recorded) and stops the container after the last class; shared-container mode drops only a recorded `forge_<uuid>` database, leaves a sibling database untouched, and refuses any other name; two classes run in parallel in separate databases (barrier proves overlap); same seed gives the same data, another seed other data. Six distinct mutations (delete SQL in own mode, container never stopped, no recorded-name check, no drop in shared mode, seed ignored, sibling dropped) each failed the gate and were restored; the first "container never stopped" mutation survived and exposed a hollow assertion, which was fixed and re-proven.
+- Not done: MySQL/SQLite hook; sequences not advanced; method-level annotation; zero-config `config`. **Safety-reviewer must run on this diff in a fresh session** (D4a).
+- Next: P4.6 `p4-scale`.
+- Decisions: `DROP DATABASE` exists only in shared mode and only for recorded names.
+- Open: the `NoNetworkTest` source scan covers module `junit` (it walks `modules/*/src/main`).
+
+## 2026-11-12 P4.6 scale (branch p4-scale, from p4-junit)
+- Done: gate first (committed red: `ScaleContainerTest` 7 tests, S3 out of memory at -Xmx256m, `PerfDocTest` without docs/PERF.md), then a memory-bounded row cache in `RowGen` (output unchanged: same SHA-256 before and after), `scripts/perf.sh` and `docs/PERF.md`, a fast `ScaleSmokeContainerTest` (verify.sh step h). On Postgres under -Xmx256m with live heap at most 85%: S1 1M rows 2.8 s, S2 1M parents + 3M children 19.4 s (Phase 2: 25 s), S3 events-merch rules + states at 1M orders (4,019,699 rows) 177 s of 300 s, S4 tied composite keys with 1M-row parents (3,010,000 rows) 31.6 s; S1 on MySQL 12.1 s and SQLite 4.4 s; a lowered heap limit fails the same run; same seed, same SHA-256 at a million rows.
+- Tied composite foreign key memory: measured (live 105 to 112 MB generating at 1M parent rows; 132 to 210 MB in the full load), bounded at 1M, NOT proven bounded beyond; the index was not compacted.
+- Not done: ecommerce tied keys at scale; MySQL/SQLite beyond S1; one machine only; a streaming rule path (not needed).
+- Decisions: limits not loosened; the metric changed from summed pool peaks to a forced-GC live sampler (disclosed); the S3 slowness I first blamed on the cache was my own quadratic check query.
+- Open: perf-profiler review in a fresh session; the `ROW_CACHE_BYTES` bound should be reviewed by determinism-auditor (it changes no value but touches `RowGen`).
