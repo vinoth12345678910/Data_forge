@@ -59,12 +59,22 @@ class BackupTest {
         long pid = Long.parseLong(Files.readString(pidFile).trim());
         boolean alive = true;
         for (int i = 0; i < 30 && alive; i++) {
-            alive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+            alive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false) && !zombie(pid);
             if (alive) {
                 Thread.sleep(100);
             }
         }
         assertFalse(alive, "grandchild " + pid + " survived the timeout");
+    }
+
+    /** A killed process nobody reaps (no init in a container) stays a zombie: Java calls it alive, Linux marks it Z. */
+    private static boolean zombie(long pid) {
+        try {
+            String stat = Files.readString(java.nio.file.Path.of("/proc/" + pid + "/stat"));
+            return stat.substring(stat.lastIndexOf(')') + 2).startsWith("Z");
+        } catch (java.io.IOException | RuntimeException e) {
+            return false;
+        }
     }
 
     @Test
