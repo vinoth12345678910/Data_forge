@@ -28,7 +28,7 @@ data-forge/
 │   ├── rules/                 # ANTLR grammar, rule compiler, verify pass, state machines
 │   ├── load/                  # postgres, mysql, sqlite, file outputs
 │   ├── cleanup/               # manifest, cleanup, classify, readiness, guards
-│   ├── cli/                   # Picocli commands
+│   ├── cli/                   # Picocli commands (incl. `forge mcp`, a stdio adapter: Mcp.java, McpCmd.java)
 │   ├── service/               # shared service layer (planned): one API used by CLI, MCP, TUI and HTTP
 │   ├── server/                # Javalin JSON API (127.0.0.1, token), polling, serves ui/dist (planned)
 │   ├── mcp/                   # MCP server over the service layer (planned)

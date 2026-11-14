@@ -112,6 +112,9 @@ Gate (USER writes these tests, Claude only runs and reports):
 
 User owns: the whole safety design. Tag: `phase-5`
 
+## Extra: `forge mcp` (branch `p6-mcp`, owner-approved)
+A stdio MCP adapter in `modules/cli` so other AI tools can call forge. Six tools: `forge_verify`, `forge_drift`, `forge_classify`, `forge_readiness`, `forge_cleanup_dry_run`, `forge_purge_dry_run`. No deleting tool, no connection arguments, config path must stay under the start directory, prod always refused. Gate: `McpTest`. Not included: HTTP transport, generate-to-DB, `--run`, `purge --run`, `--drop-metadata`, `init`.
+
 ## Phase 6: Web UI lite (replaces the full Phase 6)
 Features:
 - The Java server (Javalin, `127.0.0.1` only, session token, Host and Origin checks) serves the JSON API of `docs/design/UI_API.md` and `ui/dist` as static files. Polling for progress.
