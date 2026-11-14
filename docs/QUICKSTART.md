@@ -48,6 +48,8 @@ Note: this data is partial. Structure (types, keys, NOT NULL, unique, check, for
 
 $ forge verify
 forge verify  env dev
+forge verify: 0 rules on postgres://localhost:5432/app
+result: 0 FAIL, 0 ERROR   (exit code 0)
 (exit 0)
 
 $ forge drift

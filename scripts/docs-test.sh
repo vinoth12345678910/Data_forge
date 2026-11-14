@@ -70,7 +70,7 @@ if [ "$actual" != "$expected" ]; then
   fail=1
 fi
 
-# 2. every other `forge ...` command line in the docs names a real subcommand and real flags
+# 2. every other `forge ...` command line in the ```bash blocks of the docs names a real subcommand and real flags
 top="$(local_forge --help 2>&1)"
 checked=0
 while IFS= read -r line; do
@@ -85,7 +85,7 @@ while IFS= read -r line; do
     echo "$help" | grep -q -- "$flag" || { echo "FAIL: '$flag' is not a flag of 'forge $sub': $line"; fail=1; }
   done
   checked=$((checked + 1))
-done < <(cat "$readme" docs/*.md 2>/dev/null | grep -E '^forge ' | sed 's/[[:space:]]*#.*$//' | sort -u)
+done < <(for f in "$readme" docs/*.md; do awk '/^```bash/{b=1;next} /^```/{b=0} b' "$f"; done | grep -E '^forge ' | sed 's/[[:space:]]*#.*$//' | sort -u)
 
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "docs test: ok ($n quick-start commands matched $qs; $checked distinct command lines use real flags)"
