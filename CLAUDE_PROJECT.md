@@ -60,7 +60,7 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 
 ## Current state (UPDATE EACH SESSION)
 - Date: 2026-11-13
-- Phase 5 in progress, chained on stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done: P5.1 `p5-ownership` (PR #46 into p5-design), P5.2 `p5-classify` (PR #47 into p5-ownership), P5.3 `p5-guards` (guards on --run, no delete; PR into p5-classify). verify.sh all PASS on both. Nothing merged by me.
-- Not done: P5.4 to P5.6 (cleanup --run deleting, readiness/sequences/purge, full suite + PHASE5_RESULTS.md). L4 has no test until P5.4.
-- Next: P5.4 `p5-run` from `p5-guards`.
-- Open: owner review of the delegated safety design (docs/design/P5_2_DECISIONS.md and STATUS.md open items).
+- Phase 5 in progress, stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done through P5.5: P5.1–P5.4 (ownership, classify/dry-run, guards, cleanup --run deletes), P5.5 (Seq, Readiness, DropMeta, Purge, PurgeCmd) on branch `p5-purge`. 289 safety tests pass. verify.sh all PASS. Nothing merged by me.
+- Not done: P5.6 `p5-results` (PHASE5_RESULTS.md, L4 test, full suite). L4 (SQLite FK read-back) still missing. safety-reviewer round 4 passed all 8 guards for purge (no blocker).
+- Next: PR for p5-purge against p5-run (user merges); then P5.6.
+- Open: owner review of delegated safety design; L4 test owed; Backup secret-masking incomplete; five known purge gaps in docs/STATUS.md (where text not bound to dry run, edit check not in transaction, audit gaps, pk/key order unverified, no sequence reset on purge).

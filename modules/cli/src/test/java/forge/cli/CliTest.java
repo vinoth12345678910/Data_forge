@@ -9,19 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
 /** The command line without a database: stubs, the prod refusal, bad arguments. */
 class CliTest {
 
-    @ParameterizedTest
-    @CsvSource({"readiness,5"})
-    void commandsNotBuiltYetSaySoAndFail(String name, int phase) {
-        Run r = Run.of(name);
-        assertNotEquals(0, r.code());
-        assertTrue(r.err().contains("not built yet (Phase " + phase + ")"), r.err());
-    }
+    // All commands are now built (P5.5): no "not built yet" stubs remain.
+    // This test slot is intentionally left empty until a future phase adds a new stub.
 
     @Test
     void cleanupDryRunAndClassifyAreBuiltAndExitTwoWithoutAConfig() {
@@ -34,7 +27,9 @@ class CliTest {
 
     @Test
     void stubsAcceptTheirFutureOptions() {
-        assertTrue(Run.of("cleanup", "--drop-metadata").err().contains("not built yet (Phase 5)"));
+        // cleanup --drop-metadata is now built (P5.5): exits 2 without a config, not "not built yet"
+        Run dm = Run.of("cleanup", "--drop-metadata", "-c", "/nonexistent/forge.yml");
+        assertFalse(dm.err().contains("not built yet"), dm.err());
         // generate -s is real since P3.4: with no forge.yml it fails on the missing file, not with "not built yet"
         String err = Run.of("generate", "-s", "event-day-rush", "-c", "/nonexistent/forge.yml").err();
         assertTrue(!err.contains("not built yet") && err.contains("forge generate"), err);

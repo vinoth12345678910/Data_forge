@@ -36,8 +36,8 @@ final class Audit implements AutoCloseable {
         }
     }
 
-    /** The dry_runs row of a finished dry run. */
-    record DryRow(String dryId, String madeAt, String digest, boolean blocked, String counts) {}
+    /** The dry_runs row of a finished dry run. kind is "cleanup" for the cleanup dry run, "purge:NAME" for a purge dry run. */
+    record DryRow(String kind, String dryId, String madeAt, String digest, boolean blocked, String counts) {}
 
     private static final ObjectMapper OM = new ObjectMapper();
 
@@ -184,7 +184,7 @@ final class Audit implements AutoCloseable {
             + ", ?, ?, ?)")) {
             ps.setString(1, d.dryId());
             ps.setString(2, runId);
-            ps.setString(3, "cleanup");
+            ps.setString(3, d.kind());
             ps.setString(4, x.d() == Dialect.MYSQL ? d.madeAt().replace('T', ' ').replace("Z", "") : d.madeAt());
             ps.setString(5, d.digest());
             if (x.d() == Dialect.SQLITE) {

@@ -656,12 +656,79 @@ final class Delete {
                 throw new Stop("self_reference_stuck", t.name() + " refers to itself and its rows cannot be deleted leaf first ("
                     + left.size() + " left). The transaction was rolled back.");
             }
-            n += remove(t, plan, level);
+            List<String[]> plain = new ArrayList<>();
+            for (String[] k : level) {
+                if (x.d() == Dialect.MYSQL && Keys.norm(k).equals(parent.get(Keys.norm(k)))) {
+                    n += removeSelfRoot(t, tbl, self, plan, k);
+                } else {
+                    plain.add(k);
+                }
+            }
+            n += remove(t, plan, plain);
             for (String[] k : level) {
                 left.remove(Keys.norm(k));
             }
         }
         return n;
+    }
+
+    /**
+     * MySQL only: InnoDB refuses to delete a row whose NOT NULL foreign key points at the row itself. Foreign key checks go off for
+     * this one single-row delete, and only when nothing else points at the row (checked first, in this transaction). The checks are
+     * switched on again in finally on the same connection, so they never leak.
+     */
+    private long removeSelfRoot(Manifest.Tbl t, Table tbl, Fk self, Own.Plan plan, String[] k) throws SQLException {
+        if (!self.refColumns().equals(t.key())) {
+            throw new Stop("self_reference_stuck", t.name() + " refers to itself through columns other than its key. Nothing more was deleted.");
+        }
+        for (Table child : x.g().tables()) {
+            for (Fk f : child.fks()) {
+                if (!f.refTable().equals(t.name())) continue;
+                if (!f.refColumns().equals(t.key())) {
+                    throw new Stop("self_reference_stuck", child.name() + " refers to " + t.name() + " through columns other than its key. Nothing more was deleted.");
+                }
+                List<String> conds = new ArrayList<>();
+                for (String c : f.columns()) {
+                    conds.add(x.d().q(c) + " = ?");
+                }
+                String sql = "select count(*) from " + x.tbl(child.name()) + " where " + String.join(" and ", conds);
+                if (child.name().equals(t.name())) {
+                    sql += " and not (" + String.join(" and ", plan.keyQuoted.stream().map(c -> c + " = ?").toList()) + ")";
+                }
+                try (PreparedStatement ps = w.prepareStatement(sql + " for update")) {
+                    int p = 1;
+                    for (int j = 0; j < f.columns().size(); j++) {
+                        Keys.bind(ps, p++, x.d(), child.column(f.columns().get(j)), k[j]);
+                    }
+                    if (child.name().equals(t.name())) {
+                        for (int j = 0; j < k.length; j++) {
+                            Keys.bind(ps, p++, x.d(), tbl.column(t.key().get(j)), k[j]);
+                        }
+                    }
+                    try (ResultSet r = ps.executeQuery()) {
+                        r.next();
+                        if (r.getLong(1) > 0) {
+                            throw new Stop("self_reference_stuck", "Another row still refers to " + t.name() + " row " + Keys.show(k)
+                                + ". The transaction was rolled back.");
+                        }
+                    }
+                }
+            }
+        }
+        long affected;
+        try (Statement s = w.createStatement()) {
+            s.execute("set foreign_key_checks = 0");
+            try (PreparedStatement ps = w.prepareStatement("delete from " + x.tbl(t.name()) + " where " + Keys.in(plan.keyQuoted, 1))) {
+                bindKeys(ps, 1, plan, java.util.Collections.singletonList(k));
+                affected = ps.executeUpdate();
+            } finally {
+                s.execute("set foreign_key_checks = 1");
+            }
+        }
+        if (affected != 1) {
+            throw new Stop("cascade_overreach", "A delete on " + t.name() + " removed " + affected + " rows where 1 was expected. The transaction was rolled back.");
+        }
+        return affected;
     }
 
     // ------------------------------------------------------------------ truncate (Postgres only, GUARDS.md G7)
@@ -702,13 +769,13 @@ final class Delete {
                 ls.execute("set local lock_timeout = '30s'");
                 ls.execute("lock table " + x.tbl(t.name()) + " in access exclusive mode");
             }
-            List<Unit> units = new ArrayList<>();
+            // One chunk of keys at a time: a million-row table must not be held in memory just to be counted.
             Map<Integer, byte[]> stored = stored(t);
             int[] chunk = {0};
-            Keys.chunks(t, ks -> units.add(new Unit(new ArrayList<>(ks), stored.get(chunk[0]++), 0)));
-            List<String[]> present = verify(t, plan, units);
+            long[] present = {0};
+            Keys.chunks(t, ks -> present[0] += verify(t, plan, List.of(new Unit(ks, stored.get(chunk[0]++), 0))).size());
             long live = Sql.count(w, "select count(*) from " + x.tbl(t.name()));
-            if (present.size() != t.rows() || live != t.rows()) {
+            if (present[0] != t.rows() || live != t.rows()) {
                 throw new Stop("row_count_mismatch", t.name() + " holds " + live + " rows, the manifest " + t.rows()
                     + ". It was not truncated.");
             }
@@ -763,5 +830,36 @@ final class Delete {
             s.execute("PRAGMA foreign_keys = ON");
         }
         return Sql.one(w, "PRAGMA foreign_keys");
+    }
+
+    /**
+     * Deletes specific rows by primary key (used by purge). FK checks are always on. Each row is a separate statement. The caller counts, then commits or rolls back.
+     * keyCol is the PK column list; keys is the list of PK values per row (each String[] = one row's key values).
+     * Returns the count of deleted rows.
+     */
+    static long deleteByKeys(Connection w, Dialect d, String tbl, List<String> keyCol, List<String[]> keys)
+        throws SQLException {
+        if (keys.isEmpty()) return 0;
+        List<String> conds = new ArrayList<>();
+        for (String c : keyCol) {
+            conds.add(d.q(c) + " = ?");
+        }
+        String sql = "delete from " + tbl + " where " + String.join(" and ", conds);
+        long deleted = 0;
+        try (PreparedStatement ps = w.prepareStatement(sql)) {
+            for (String[] k : keys) {
+                for (int i = 0; i < k.length; i++) {
+                    bindKey(ps, i + 1, d, k[i]);
+                }
+                deleted += ps.executeUpdate();
+            }
+        }
+        return deleted;
+    }
+
+    /** Binds a key value read as text. Postgres gets an untyped parameter so it infers bigint, uuid and so on. */
+    static void bindKey(PreparedStatement ps, int i, Dialect d, String v) throws SQLException {
+        if (d == Dialect.POSTGRES) ps.setObject(i, v, java.sql.Types.OTHER);
+        else ps.setString(i, v);
     }
 }
