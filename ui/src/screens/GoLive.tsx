@@ -65,10 +65,12 @@ export function GoLive() {
             <h3>Readiness</h3>
             <Facts env={g.readiness} />
           </div>
-          <div data-testid="golive-checklist">
-            <h3>Manual checklist</h3>
-            <ul>{g.checklist.map((c, i) => <li key={i}>{typeof c === 'string' ? c : JSON.stringify(c)}</li>)}</ul>
-          </div>
+          {g.checklist.length > 0 ? (
+            <div data-testid="golive-checklist">
+              <h3>Manual checklist</h3>
+              <ul>{g.checklist.map((c, i) => <li key={i}>{typeof c === 'string' ? c : JSON.stringify(c)}</li>)}</ul>
+            </div>
+          ) : null}
           <div>
             <h3>The command a person types</h3>
             <CopyText text={g.command} />

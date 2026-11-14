@@ -24,7 +24,7 @@ export function Verify() {
       </button>
       {run.isError ? <p className="errors" role="alert">{run.error.message}</p> : null}
       <Errors entries={otherEntries} />
-      {env ? (
+      {env && rules.length > 0 ? (
         <div className="verify-lists">
           <div data-testid="verify-passed" className="list passed">
             <h3>Passed ({passed.length})</h3>

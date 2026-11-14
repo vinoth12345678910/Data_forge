@@ -35,7 +35,7 @@ public final class Server {
             if (ui != null) {
                 cfg.staticFiles.add(f -> {
                     f.hostedPath = "/";
-                    f.directory = ui.toAbsolutePath().toString();
+                    f.directory = real(ui);
                     f.location = Location.EXTERNAL;
                 });
             }
@@ -64,6 +64,15 @@ public final class Server {
         }
     }
 
+    /** The directory with symlinks resolved: Jetty refuses to serve files reached through a symlinked path. */
+    private static String real(Path ui) {
+        try {
+            return ui.toRealPath().toString();
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("cannot read the --ui directory " + ui, e);
+        }
+    }
+
     private boolean okAuthority(String a) {
         return a.equals("127.0.0.1:" + app.port()) || a.equals("localhost:" + app.port());
     }
@@ -80,6 +89,9 @@ public final class Server {
 
     /** Same, and also serves the files of ui (the built web UI) at / . The /api routes are the same. */
     public static Server start(Path scratch, int port, Path ui) {
+        if (ui != null && !java.nio.file.Files.isRegularFile(ui.resolve("index.html"))) {
+            throw new IllegalArgumentException("--ui must be a built web UI (a directory with index.html), got " + ui);
+        }
         return new Server(scratch, port, ui);
     }
 

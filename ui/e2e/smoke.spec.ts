@@ -72,19 +72,17 @@ test('connect, schema, run, verify, go-live, prod refused', async ({ page }) => 
   await expect(page.getByTestId('run-state')).toContainText(/done|failed/, { timeout: 120_000 });
   await expect(page.getByTestId('run-summary')).toContainText('This data is partial');
 
-  // Verify: passed, failed and not-checked are three separate lists
+  // Verify on a SQLite fixture has no rules: an error is shown and no empty "Failed (0)" list that could read as clean
   await page.keyboard.press('4');
   await page.getByRole('button', { name: 'Run verify' }).click();
-  await expect(page.getByTestId('verify-passed')).toBeVisible();
-  await expect(page.getByTestId('verify-failed')).toBeVisible();
-  await expect(page.getByTestId('verify-notchecked')).toBeVisible();
+  await expect(page.getByRole('alert').first()).toBeVisible();
+  await expect(page.getByTestId('verify-failed')).toHaveCount(0);
 
-  // Go-live: dry run, readiness, checklist and a copyable command; nothing on the page runs it
+  // Go-live: dry run, readiness and a copyable command; nothing on the page runs it
   await page.keyboard.press('5');
   await page.getByRole('button', { name: 'Run dry run and readiness' }).click();
   await expect(page.getByTestId('golive-dry')).toBeVisible();
   await expect(page.getByTestId('golive-ready')).toBeVisible();
-  await expect(page.getByTestId('golive-checklist')).toBeVisible();
   await expect(page.getByTestId('command')).toContainText('forge cleanup --run');
   await expect(page.getByRole('button', { name: /run cleanup|purge|backup|delete/i })).toHaveCount(0);
 
@@ -95,4 +93,38 @@ test('connect, schema, run, verify, go-live, prod refused', async ({ page }) => 
   await page.getByLabel('Database URL').fill(dbUrl); // the form was reset when the screen was left
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByText('env_refused')).toBeVisible();
+});
+
+test('verify keeps passed, failed and not-checked in three separate lists (mocked answer)', async ({ page }) => {
+  await page.route('**/api/verify', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: false,
+        envelope: {
+          schema: 'forge.output/1', command: 'verify', ok: false, exit: 1, warnings: [],
+          data: { rules: [
+            { name: 'r_pass', status: 'PASS' },
+            { name: 'r_fail', status: 'FAIL' },
+            { name: 'r_skip', status: 'NOT_CHECKED' },
+            { name: 'r_db', status: 'ENFORCED_BY_DB' },
+          ] },
+          errors: [{ code: 'rule_failed', message: 'orders.total is 500, the rule gives 800', rule: 'r_fail', table: 'orders', row: { id: 7 } }],
+        },
+      }),
+    }),
+  );
+  await page.goto(openUrl);
+  await connect(page, 'dev');
+  await expect(page.getByRole('heading', { name: 'Schema graph' })).toBeVisible();
+  await page.keyboard.press('4');
+  await page.getByRole('button', { name: 'Run verify' }).click();
+  await expect(page.getByTestId('verify-passed')).toContainText('r_pass');
+  await expect(page.getByTestId('verify-passed')).not.toContainText('r_skip');
+  await expect(page.getByTestId('verify-passed')).not.toContainText('r_db');
+  await expect(page.getByTestId('verify-failed')).toContainText('r_fail');
+  await expect(page.getByTestId('verify-failed')).toContainText('orders');
+  await expect(page.getByTestId('verify-notchecked')).toContainText('r_skip');
+  await expect(page.getByTestId('verify-notchecked')).toContainText('r_db');
+  await expect(page.getByTestId('verify-notchecked')).not.toContainText('r_pass');
 });

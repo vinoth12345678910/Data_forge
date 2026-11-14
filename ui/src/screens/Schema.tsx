@@ -30,6 +30,17 @@ export function Schema() {
               <Controls showInteractive={false} />
             </ReactFlow>
           </div>
+          <details>
+            <summary>Tables as text</summary>
+            <ul data-testid="schema-text">
+              {q.data?.tables.map((t) => (
+                <li key={t.name}>
+                  <strong>{t.name}</strong> ({t.columns.length} columns)
+                  {t.fks.length > 0 ? `: ${t.fks.map((f) => `${f.columns.join(', ')} → ${f.refTable}`).join('; ')}` : ''}
+                </li>
+              ))}
+            </ul>
+          </details>
           {view.cycles.length > 0 ? (
             <div data-testid="cycles">
               <h3>Foreign-key cycles</h3>

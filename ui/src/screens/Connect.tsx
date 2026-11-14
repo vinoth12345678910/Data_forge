@@ -26,6 +26,7 @@ export function Connect({ onDone }: { onDone: () => void }) {
       setErrors(r.envelope.errors ?? []);
       if (r.ok) onDone();
     } catch (err) {
+      setPassword('');
       setConnected(false);
       setErrors([{ code: 'request_failed', message: err instanceof Error ? err.message : 'request failed' }]);
     } finally {
@@ -37,6 +38,10 @@ export function Connect({ onDone }: { onDone: () => void }) {
     <section aria-labelledby="h-connect">
       <h2 id="h-connect">Connect</h2>
       <p className="muted">Reads the schema only. A prod label is refused.</p>
+      <p className="muted">
+        With MySQL or SQLite only the schema graph works for now; Run, Verify and Go-live need a Postgres connection, because the rules come
+        from the Postgres schema reader.
+      </p>
       <form onSubmit={(e) => void submit(e)} className="form">
         <label>
           Database URL

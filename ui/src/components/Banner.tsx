@@ -6,7 +6,7 @@ export function Banner() {
   if (env !== 'prod') return null;
   return (
     <div className="banner-prod" role="alert">
-      PROD: this label is refused. Data Forge will not connect to a production database from this screen.
+      PROD label selected. Data Forge refuses to connect with it and will not work on a production database from this screen.
     </div>
   );
 }

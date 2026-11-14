@@ -2,6 +2,7 @@ package forge.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -173,6 +174,38 @@ class ServerTest {
         JsonNode g = M.readTree(api("GET", "/api/golive", null).body());
         assertTrue(g.has("dry_run") && g.has("readiness") && g.get("checklist").isArray(), g.toString());
         assertTrue(g.get("command").asText().startsWith("forge cleanup --run"), "a copyable text only: " + g.get("command"));
+    }
+
+    private String raw(int port, String path) throws Exception {
+        try (Socket sock = new Socket("127.0.0.1", port)) {
+            String req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nConnection: close\r\n\r\n";
+            sock.getOutputStream().write(req.getBytes(StandardCharsets.US_ASCII));
+            return new String(sock.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    @Test
+    void staticFilesServeOnlyTheUiDirectoryAndOnlyABuiltUi() throws Exception {
+        Path ui = dir.resolve("ui");
+        java.nio.file.Files.createDirectories(ui);
+        java.nio.file.Files.writeString(ui.resolve("index.html"), "<html>forge-ui-marker</html>");
+        java.nio.file.Files.writeString(dir.resolve("secret.txt"), "top-secret-value");
+        assertThrows(IllegalArgumentException.class, () -> Server.start(dir.resolve("s0"), 0, dir), "a directory without index.html is refused");
+        Server s = Server.start(dir.resolve("s1"), 0, ui);
+        try {
+            String ok = raw(s.port(), "/index.html");
+            assertTrue(ok.startsWith("HTTP/1.1 200") && ok.contains("forge-ui-marker"), ok);
+            for (String path : new String[] {"/../secret.txt", "/%2e%2e/secret.txt", "/..%2fsecret.txt", "/.git/config", "/secret.txt"}) {
+                String r = raw(s.port(), path);
+                assertFalse(r.contains("top-secret-value"), path + " -> " + r);
+                assertFalse(r.startsWith("HTTP/1.1 200"), path + " -> " + r);
+            }
+            assertEquals(401, java.net.http.HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + s.port() + "/api/schema")).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode(), "the api still needs the token");
+        } finally {
+            s.stop();
+        }
     }
 
     @Test
