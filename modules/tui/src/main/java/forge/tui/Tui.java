@@ -1,6 +1,7 @@
 package forge.tui;
 
-import forge.server.Server;
+import forge.cli.Forge;
+import forge.server.Session;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,8 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * A terminal UI for Data Forge: a numbered menu over the local API of docs/design/UI_API.md. It starts that API in this
- * process (127.0.0.1 only) and calls it with the session token, so it can do exactly what the web UI can: no cleanup run,
+ * A terminal UI for Data Forge: a numbered menu over the same six calls as the web UI's API (docs/design/UI_API.md). It
+ * calls the server's Session in this process: no socket, no HTTP, no network at all, and nothing that runs a cleanup,
  * purge, truncate, delete or backup.
  */
 public final class Tui {
@@ -49,7 +50,9 @@ public final class Tui {
     }
 
     int run(boolean color) throws IOException {
-        Server server = Server.start(scratch);
+        Session session = new Session(scratch);
+        java.util.function.Function<String, String> savedEnv = Forge.env;
+        Forge.env = n -> Session.PW_VAR.equals(n) ? session.password() : savedEnv.apply(n);
         try {
             BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
             java.util.function.Supplier<String> line = () -> {
@@ -68,8 +71,8 @@ public final class Tui {
                 String s = line.get();
                 return s == null ? "" : s;
             };
-            Screens screens = new Screens(new Api(server.port(), server.token()), out, line, secret, color, console != null);
-            out.println("Data Forge (terminal). Local API on 127.0.0.1:" + server.port() + ". Nothing here deletes data.");
+            Screens screens = new Screens(new Api(session), out, line, secret, color, console != null);
+            out.println("Data Forge (terminal). Nothing here deletes data.");
             while (true) {
                 out.print("\n1 Connect  2 Schema  3 Run  4 Verify  5 Go-live  q Quit > ");
                 out.flush();
@@ -88,7 +91,8 @@ public final class Tui {
                 }
             }
         } finally {
-            server.stop();
+            Forge.env = savedEnv;
+            session.close();
         }
     }
 }

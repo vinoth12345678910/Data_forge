@@ -101,12 +101,14 @@ class TuiTest {
     }
 
     @Test
-    void onlyTheSixRoutesOfTheApiContractAreReachable() {
-        assertEquals(List.of("POST /api/connect", "GET /api/schema", "POST /api/generate", "GET /api/progress",
-            "POST /api/verify", "GET /api/golive"), Api.ROUTES);
-        for (String r : Api.ROUTES) {
-            assertFalse(r.matches("(?i).*(cleanup|purge|delete|truncate|backup|drop|resume).*"), r);
-            assertTrue(r.startsWith("GET ") || r.startsWith("POST "), r);
+    void onlyTheSixCallsOfTheApiContractExist() {
+        assertEquals(List.of("connect", "generate", "golive", "progress", "schema", "verify"),
+            java.util.Arrays.stream(Api.class.getDeclaredMethods()).filter(m -> !m.isSynthetic())
+                .filter(m -> !java.lang.reflect.Modifier.isPrivate(m.getModifiers())).map(java.lang.reflect.Method::getName)
+                .sorted().toList(), "any new call fails here until the owner reviews it");
+        assertEquals(List.of("connect", "schema", "generate", "progress", "verify", "golive"), Api.CALLS);
+        for (String c : Api.CALLS) {
+            assertFalse(c.matches("(?i).*(cleanup|purge|delete|truncate|backup|drop|resume).*"), c);
         }
     }
 }

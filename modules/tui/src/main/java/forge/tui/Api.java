@@ -3,71 +3,78 @@ package forge.tui;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import forge.server.Session;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.sql.SQLException;
 
-/** The local API of docs/design/UI_API.md, called over HTTP with the session token. These six routes are all there is. */
+/**
+ * The six things the web UI's API offers (docs/design/UI_API.md), called in this process on the server's Session. No
+ * socket and no HTTP: the TUI makes no network call at all. These six methods are all there is; ApiTest-style checks in
+ * TuiTest fail if another one appears.
+ */
 final class Api {
 
-    static final java.util.List<String> ROUTES = java.util.List.of("POST /api/connect", "GET /api/schema", "POST /api/generate",
-        "GET /api/progress", "POST /api/verify", "GET /api/golive");
+    /** The six calls. TuiTest compares this with the methods of this class. */
+    static final java.util.List<String> CALLS = java.util.List.of("connect", "schema", "generate", "progress", "verify", "golive");
 
     record Reply(int status, JsonNode body) {}
 
     private static final ObjectMapper M = new ObjectMapper();
-    private final HttpClient http = HttpClient.newHttpClient();
-    private final String base;
-    private final String token;
+    private final Session session;
 
-    Api(int port, String token) {
-        this.base = "http://127.0.0.1:" + port;
-        this.token = token;
+    Api(Session session) {
+        this.session = session;
+    }
+
+    private static Reply error(int status, String message) {
+        return new Reply(status, M.createObjectNode().put("error", message));
+    }
+
+    private Reply needConnection() {
+        return session.connected() ? null : error(409, "not connected: connect first");
     }
 
     Reply connect(String url, String env, String user, String password) throws IOException {
-        ObjectNode b = M.createObjectNode().put("url", url).put("env", env).put("user", user).put("password", password);
-        return call("POST", "/api/connect", b.toString());
+        if (url.isBlank() || env.isBlank()) return error(400, "url and env are required");
+        Session.Result r = session.connect(url, env, user, password);
+        ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
+        o.set("envelope", r.envelope());
+        return new Reply(r.code() == 0 ? 200 : 422, o);
     }
 
-    Reply schema() throws IOException {
-        return call("GET", "/api/schema", null);
-    }
-
-    Reply generate() throws IOException {
-        return call("POST", "/api/generate", "{}");
-    }
-
-    Reply progress() throws IOException {
-        return call("GET", "/api/progress", null);
-    }
-
-    Reply verify() throws IOException {
-        return call("POST", "/api/verify", "{}");
-    }
-
-    Reply golive() throws IOException {
-        return call("GET", "/api/golive", null);
-    }
-
-    private Reply call(String method, String path, String body) throws IOException {
-        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).header("X-Forge-Token", token)
-            .header("Content-Type", "application/json")
-            .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
+    Reply schema() {
+        Reply no = needConnection();
+        if (no != null) return no;
         try {
-            HttpResponse<String> r = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
-            JsonNode json;
-            try {
-                json = r.body().isBlank() ? M.createObjectNode() : M.readTree(r.body());
-            } catch (IOException e) {
-                json = M.createObjectNode().put("error", r.body());
-            }
-            return new Reply(r.statusCode(), json);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("interrupted", e);
+            return new Reply(200, session.schema());
+        } catch (SQLException | RuntimeException e) {
+            return error(500, "cannot read the schema");
         }
+    }
+
+    Reply generate() {
+        Reply no = needConnection();
+        if (no != null) return no;
+        if (!session.generate()) return error(409, "a generate is already running");
+        return new Reply(202, M.createObjectNode().put("state", "running"));
+    }
+
+    Reply progress() {
+        return new Reply(200, session.progress());
+    }
+
+    Reply verify() {
+        Reply no = needConnection();
+        if (no != null) return no;
+        Session.Result r = session.verify();
+        ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
+        o.set("envelope", r.envelope());
+        return new Reply(200, o);
+    }
+
+    Reply golive() {
+        Reply no = needConnection();
+        if (no != null) return no;
+        return new Reply(200, session.golive());
     }
 }

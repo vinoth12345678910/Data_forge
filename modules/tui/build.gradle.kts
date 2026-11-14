@@ -4,6 +4,7 @@ val libs = rootProject.extensions.getByType<VersionCatalogsExtension>().named("l
 
 dependencies {
     "implementation"(project(":server"))
+    "implementation"(project(":cli"))
     "implementation"(libs.findLibrary("jackson-yaml").get())
 }
 

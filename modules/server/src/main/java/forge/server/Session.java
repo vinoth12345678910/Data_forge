@@ -27,9 +27,9 @@ import java.util.concurrent.Executors;
  * forge commands through Forge.env, never written to a file, a log or a response. Every action runs an existing
  * forge command in this JVM with --json and returns its envelope.
  */
-final class Session {
+public final class Session {
 
-    static final String PW_VAR = "FORGE_UI_PASSWORD";
+    public static final String PW_VAR = "FORGE_UI_PASSWORD";
     private static final ObjectMapper M = new ObjectMapper();
 
     private final Path scratch;
@@ -45,19 +45,19 @@ final class Session {
     private String state = "idle";
     private JsonNode last;
 
-    Session(Path scratch) {
+    public Session(Path scratch) {
         this.scratch = scratch;
     }
 
     /** The value of the password variable; null for any other name. */
-    synchronized String password() {
+    public synchronized String password() {
         return password;
     }
 
-    record Result(int code, JsonNode envelope) {}
+    public record Result(int code, JsonNode envelope) {}
 
     /** Draft forge.yml with forge init (read only on the database; init refuses a prod label). */
-    synchronized Result connect(String url, String env, String user, String password) throws IOException {
+    public synchronized Result connect(String url, String env, String user, String password) throws IOException {
         Files.createDirectories(scratch);
         Path cfg = scratch.resolve("forge.yml");
         this.url = null;
@@ -156,12 +156,12 @@ final class Session {
         return new Result(1, o);
     }
 
-    synchronized boolean connected() {
+    public synchronized boolean connected() {
         return config != null;
     }
 
     /** Tables, columns, keys and foreign keys of the connected database (a self reference has refTable equal to the table). */
-    synchronized ObjectNode schema() throws SQLException {
+    public synchronized ObjectNode schema() throws SQLException {
         Db db = new Db(jdbc(url), user, password);
         SchemaGraph g;
         if (url.startsWith("postgres://")) {
@@ -195,7 +195,7 @@ final class Session {
     }
 
     /** Starts forge generate in the background; false if one is already running. */
-    synchronized boolean generate() {
+    public synchronized boolean generate() {
         if (state.equals("running")) {
             return false;
         }
@@ -212,19 +212,19 @@ final class Session {
         return true;
     }
 
-    synchronized ObjectNode progress() {
+    public synchronized ObjectNode progress() {
         ObjectNode o = M.createObjectNode();
         o.put("state", state);
         o.set("envelope", last);
         return o;
     }
 
-    Result verify() {
+    public Result verify() {
         return run(List.of("--json", "verify", "-c", configPath()));
     }
 
     /** The go-live screen: a cleanup dry run, readiness and the manual checklist, plus the command a human types. */
-    ObjectNode golive() {
+    public ObjectNode golive() {
         String cfg = configPath();
         Result dry = run(List.of("--json", "cleanup", "--dry-run", "-c", cfg));
         Result ready = run(List.of("--json", "readiness", "-c", cfg));
@@ -271,7 +271,7 @@ final class Session {
         throw new IllegalArgumentException("url must look like postgres://, mysql:// or sqlite:");
     }
 
-    void close() {
+    public void close() {
         worker.shutdownNow();
     }
 }
