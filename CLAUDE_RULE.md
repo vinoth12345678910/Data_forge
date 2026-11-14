@@ -12,7 +12,7 @@ Applies to every session, every agent. Short on purpose. Context lives in `CLAUD
 7. End every session: 5-line `docs/STATUS.md` (done, not done, next, decisions, open questions) and update the "Current state" block in `CLAUDE_PROJECT.md`.
 
 ## Product (out-of-scope list, checked by `scope-guard`)
-- No network calls. No AI dependency. Anywhere.
+- No network calls. No AI dependency. Anywhere. (One owner-approved exception in kind: `forge mcp` is an optional local stdio adapter so other AI tools can call forge. The engine never calls an AI or the network; the adapter has no tool that deletes, takes no connection arguments, and never passes `--allow-prod`.)
 - Never delete rows outside the manifest.
 - Generation code: no `HashMap` iteration order, no parallel-stream ordering, no unseeded `Random`, no wall-clock or locale dependence. Same seed => byte-identical output.
 - Verify pass never trusts the generator (rules compile to SQL and run in the DB).

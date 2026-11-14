@@ -18,11 +18,14 @@ import picocli.CommandLine.Spec;
 /** The forge command. Only init is real; the others say which phase builds them. */
 @Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
     subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, CleanupCmd.class,
-        ClassifyCmd.class, PurgeCmd.class, Forge.Readiness.class})
+        ClassifyCmd.class, PurgeCmd.class, Forge.Readiness.class, McpCmd.class})
 public final class Forge implements Runnable {
 
     /** Where environment variables are read from. Tests replace it. */
     public static Function<String, String> env = System::getenv;
+
+    /** Where forge mcp reads requests from. Tests replace it. */
+    public static java.io.InputStream in = System.in;
 
     @Option(names = "--json", scope = ScopeType.INHERIT, description = "Print one JSON document (forge.output/1) instead of human text")
     boolean json;
