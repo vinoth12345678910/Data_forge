@@ -226,6 +226,23 @@ else
   fail "g. script tests (retry rule)"
 fi
 
+# j. web UI (Phase 6): the build, no external URL, no delete call. The browser smoke test (step k) needs a Chromium.
+echo ">> j. web UI"
+if ! command -v node >/dev/null 2>&1 || [ ! -d ui/node_modules ]; then
+  record "SKIPPED" "j. web UI (node or ui/node_modules missing: run npm ci in ui/)"
+elif (cd ui && npm run build && npm run check); then
+  record "PASS   " "j. web UI (build, no external URLs, no delete calls)"
+else
+  fail "j. web UI"
+fi
+if [ "${FORGE_E2E:-0}" != "1" ]; then
+  record "SKIPPED" "k. UI smoke test (set FORGE_E2E=1; needs Playwright's Chromium or FORGE_E2E_BROWSER)"
+elif (cd ui && npx playwright test); then
+  record "PASS   " "k. UI smoke test (Playwright, real local server)"
+else
+  fail "k. UI smoke test"
+fi
+
 # e. clean-machine build (see step_e above)
 step_e
 
