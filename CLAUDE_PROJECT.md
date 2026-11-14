@@ -62,5 +62,6 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Date: 2026-11-13
 - Phase 5 in progress, stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done through P5.5: P5.1–P5.4 (ownership, classify/dry-run, guards, cleanup --run deletes), P5.5 (Seq, Readiness, DropMeta, Purge, PurgeCmd) on branch `p5-purge`. 289 safety tests pass. verify.sh all PASS. Nothing merged by me.
 - Not done: P5.6 `p5-results` (PHASE5_RESULTS.md, L4 test, full suite). L4 (SQLite FK read-back) still missing. safety-reviewer round 4 passed all 8 guards for purge (no blocker).
-- Next: PR for p5-purge against p5-run (user merges); then P5.6.
+- P5.5 PR #51 merged into p5-run. P5.6 `p5-results` (docs only) is on its own branch; L4 is covered by `forge.guards.SqliteForeignKeysTest`.
+- Next: user merges the P5.6 PR and tags `phase-5`; then Phase 6.
 - Open: owner review of delegated safety design; L4 test owed; Backup secret-masking incomplete; five known purge gaps in docs/STATUS.md (where text not bound to dry run, edit check not in transaction, audit gaps, pk/key order unverified, no sequence reset on purge).

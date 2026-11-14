@@ -8,8 +8,8 @@ Written for P5.6 (branch `p5-results`). Numbers marked **pending** are filled by
 |---|---|---|
 | `./gradlew clean build` (fast tests) | PASS | owner's machine, after the P5.5 review-round-1 fixes |
 | `./gradlew :testkit:safetyTest` (`forge.safety.*`, PG + MySQL 8.4 + SQLite) | PASS, 289 tests, 1 skipped (`ResumeAndScopeTest.l4_*`, `@Disabled` by design) | owner's machine, after round 1 fixes |
-| `scripts/verify.sh` | **pending** (run on the final P5.6 commit) | |
-| `containerTest` | **pending** (run on the final P5.6 commit) | |
+| `scripts/verify.sh` | PASS, all steps a to i (safety suite re-frozen at `7668062`, owner-approved `SequencesTest` J1 edit) | owner's machine, commit `7668062` plus the re-freeze commit; also run by the pre-push hook |
+| `containerTest` | PASS (step c of verify.sh) | same run |
 
 
 
@@ -26,7 +26,7 @@ Written for P5.6 (branch `p5-results`). Numbers marked **pending** are filled by
 
 ## Safety review
 
-Round 1 failed guards 3, 4, 5 and 8 for `forge purge`; round 2 failed guards 4 and 8 on smaller holes. Fixed: backup gate on purge, FK-children scan on every purge (joined on the referenced columns), all edited rows (not the first 50), re-check after the backup, count before commit with rollback, SQLite read-back, audited refusals and a result entry for every started purge, `drop-metadata` refuses while another run is not cleaned. Round 3 findings fixed: purge now locks its target rows and re-checks for real child rows inside the delete transaction (F1), refuses a table with a delete trigger unless `cleanup.allow_triggers` lists it (F2), records `include_unmanifested` in the audit (F3), refuses `--include-unmanifested` on prod, and its help text no longer says "write nothing". Round 4: **pending** (fresh session).
+Round 1 failed guards 3, 4, 5 and 8 for `forge purge`; round 2 failed guards 4 and 8 on smaller holes. Fixed: backup gate on purge, FK-children scan on every purge (joined on the referenced columns), all edited rows (not the first 50), re-check after the backup, count before commit with rollback, SQLite read-back, audited refusals and a result entry for every started purge, `drop-metadata` refuses while another run is not cleaned. Round 3 findings fixed: purge now locks its target rows and re-checks for real child rows inside the delete transaction (F1), refuses a table with a delete trigger unless `cleanup.allow_triggers` lists it (F2), records `include_unmanifested` in the audit (F3), refuses `--include-unmanifested` on prod, and its help text no longer says "write nothing". Round 4 (fresh session): guards 1 to 8 PASS for purge, no blocker. The reviewer did not run containerTest or verify.sh itself (verify.sh passed separately). Key order checked by reading: the manifest key is `t.pk()` when a primary key exists (`KeyChoice.choose`), and purge matches on `tbl.pk()`, so `mt.key()` and `tbl.pk()` are the same list; a table with no primary key matches nothing (fail safe). No composite-key purge test was added.
 
 Documented exceptions (owner-approved): `--include-unmanifested` (frozen K2b needs it; behind the backup gate, FK scan, lock and count rollback; refused on prod); foreign key checks off on MySQL in `Delete.removeSelfRoot` (one proven self-root row, re-enabled in `finally`) and in `DropMeta` (metadata only), which is a carve-out to CLEANUP.md D2 "never off"; `Seq` and `DropMeta` run update/alter/drop SQL on metadata and sequences outside `Delete` (carve-out to the "delete SQL only in Delete" rule: they never touch user rows).
 
@@ -50,6 +50,13 @@ Measured on the owner's MacBook Air (three runs of S1 and one of S2 in `build/pe
 Not run in P5.6. The frozen suite's own non-vacuity controls ran as part of the 289 tests.
 
 ## Open items
+
+Known purge gaps from review round 4, accepted by the owner and not fixed:
+- The dry-run record binds the rule name, not the `where` text: an edited rule runs a different set (typed row count and the other guards still apply).
+- The edit-fingerprint check is not repeated inside the delete transaction (the "app stopped" window).
+- `dryRun` does not close its `Audit` and writes no result if it throws; `DropMeta` writes no result if the drop throws.
+- `purge` does not reset sequences.
+- `--include-unmanifested` still conflicts with the literal CLAUDE_RULE.md wording (owner-approved K2b).
 
 - `purge` and `cleanup` take no running-state lock against each other on the same table.
 - `purge --include-unmanifested` re-checks the rule right before the delete but not inside the delete transaction under a lock (a small race window remains).
