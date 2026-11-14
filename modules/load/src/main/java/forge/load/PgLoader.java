@@ -58,8 +58,13 @@ public final class PgLoader {
                     + "Empty it, load into a fresh database, or mark the table keep in forge.yml.");
             }
         }
+        KeepCheck.verify(c, g, conf);
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
-        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, Sequences.before(c, g));
+        Map<String, Long> pre = new TreeMap<>();
+        for (Table t : g.tables()) {
+            pre.put(t.name(), existing(c, g, t.name()));
+        }
+        Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, Sequences.before(c, g), pre);
         ManifestFile.Staged staged = ManifestFile.stage(manifestDir, m);
         boolean auto = c.getAutoCommit();
         Map<String, Long> loaded = new LinkedHashMap<>();

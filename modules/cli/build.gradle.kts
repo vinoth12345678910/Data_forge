@@ -7,6 +7,7 @@ dependencies {
     "implementation"(project(":schema"))
     "implementation"(project(":gen"))
     "implementation"(project(":load"))
+    "implementation"(project(":cleanup"))
     "implementation"(project(":rules"))
     "runtimeOnly"(libs.findLibrary("postgres-driver").get())
     "runtimeOnly"(libs.findLibrary("sqlite-driver").get())

@@ -28,13 +28,16 @@ data-forge/
 │   ├── rules/                 # ANTLR grammar, rule compiler, verify pass, state machines
 │   ├── load/                  # postgres, mysql, sqlite, file outputs
 │   ├── cleanup/               # manifest, cleanup, classify, readiness, guards
-│   ├── cli/                   # Picocli commands
-│   ├── server/                # Javalin REST + SSE, serves ui/dist
+│   ├── cli/                   # Picocli commands (incl. `forge mcp`, a stdio adapter: Mcp.java, McpCmd.java)
+│   ├── service/               # shared service layer (planned): one API used by CLI, MCP, TUI and HTTP
+│   ├── server/                # Javalin JSON API (127.0.0.1, token), polling, serves ui/dist (planned)
+│   ├── mcp/                   # MCP server over the service layer (planned)
+│   ├── tui/                   # thin terminal UI (planned; built by Antigravity)
 │   ├── junit/                 # JUnit 5 + Testcontainers extension
 │   └── testkit/               # golden schemas, test base classes, assertions
 ├── packs/                     # generic, ecommerce, events, saas, banking (yaml)
 ├── golden/                    # events-merch, ecommerce, saas-multitenant (DDL + expected)
-├── ui/                        # React + Vite + TS
+├── ui/                        # React + Vite + TS, web UI lite (5 screens; built by Antigravity)
 │   ├── src/{screens,components,api,state,styles}
 │   ├── e2e/                   # Playwright
 │   └── design/                # tokens, brief, reference screenshots
@@ -42,7 +45,7 @@ data-forge/
 ```
 
 Why:
-- Ten backend modules, not more. Each maps to a phase; a session touches one or two.
+- Ten backend modules until Phase 5 ends; then `service`, `mcp` and `tui` are added (planned) and nothing else. `modules/tui` and `ui/` are the only paths the Antigravity sessions may edit (plus `docs/ui/`). Each maps to a phase; a session touches one or two.
 - `cleanup` is its own module so the safety reviewer can audit deletion code alone.
 - `golden/` and `packs/` at the root because tests, CLI and UI all read them.
 
@@ -58,7 +61,7 @@ Why:
 | `safety-reviewer` | Audits cleanup code against all 8 guards. Independent from the builder | Read-only |
 | `scope-guard` | Checks every diff against the out-of-scope list: no network, no AI, no deleting outside manifest | Read-only |
 | `perf-profiler` | JFR, 1M-row run, peak heap, rows per second, memory growth | Run and read |
-| `ui-builder` | Builds React screens from the design brief | Read and write (`ui/` only) |
+| `ui-builder` | Builds React screens from the design brief. The web UI lite and the TUI are built by another tool (Antigravity, see `AGENTS.md`); this agent stays for small fixes | Read and write (`ui/` only) |
 | `ui-reviewer` | Playwright screenshots of each screen, judges against the brief and banned-patterns list | Run and read |
 
 Rule: reviewers (`determinism-auditor`, `safety-reviewer`, `scope-guard`, `ui-reviewer`) never share a session with the builder.

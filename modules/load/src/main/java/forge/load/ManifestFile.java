@@ -15,6 +15,8 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.HexFormat;
 
 /** The local copy: <run_id>.json and, when a table lists keys, <run_id>.keys. Written as .part, renamed after commit. */
@@ -23,7 +25,7 @@ public final class ManifestFile {
     private ManifestFile() {}
 
     /** Files written under .part names; publish renames them, discard deletes them. */
-    public record Staged(Path dir, String runId, String sha256, boolean hasKeys) {
+    public record Staged(Path dir, String runId, String sha256, boolean hasKeys, boolean hasFps) {
         public void publish() throws IOException {
             Files.move(dir.resolve(runId + ".json.part"), dir.resolve(runId + ".json"),
                 StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
@@ -31,11 +33,16 @@ public final class ManifestFile {
                 Files.move(dir.resolve(runId + ".keys.part"), dir.resolve(runId + ".keys"),
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             }
+            if (hasFps) {
+                Files.move(dir.resolve(runId + ".fps.part"), dir.resolve(runId + ".fps"),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            }
         }
 
         public void discard() throws IOException {
             Files.deleteIfExists(dir.resolve(runId + ".json.part"));
             Files.deleteIfExists(dir.resolve(runId + ".keys.part"));
+            Files.deleteIfExists(dir.resolve(runId + ".fps.part"));
         }
     }
 
@@ -43,7 +50,7 @@ public final class ManifestFile {
         Files.createDirectories(dir);
         ObjectMapper om = new ObjectMapper();
         ObjectNode root = om.createObjectNode();
-        root.put("format", 1);
+        root.put("format", m.format());
         root.put("run_id", m.runId());
         root.put("seed", m.seed());
         root.put("env", m.env());
@@ -52,10 +59,23 @@ public final class ManifestFile {
         root.put("schema_sha256", m.schemaSha());
         root.put("clock", m.clock());
         root.put("loaded_at", m.loadedAt());
+        if (m.format() >= 2) {
+            ArrayNode keep = root.putArray("keep");
+            for (Manifest.Keep k : m.keep()) {
+                keep.add(om.readTree(k.spec()));
+            }
+            ObjectNode pre = root.putObject("pre");
+            for (Map.Entry<String, Long> e : new TreeMap<>(m.pre()).entrySet()) {
+                pre.put(e.getKey(), e.getValue());
+            }
+        }
+        boolean hasFps = m.format() >= 2;
+        Path fpsPart = dir.resolve(m.runId() + ".fps.part");
         boolean hasKeys = m.tables().stream().anyMatch(t -> t.form().equals("list"));
         Path keysPart = dir.resolve(m.runId() + ".keys.part");
         ArrayNode tables = root.putArray("tables");
-        try (BufferedWriter kw = hasKeys ? Files.newBufferedWriter(keysPart, StandardCharsets.UTF_8) : null) {
+        try (BufferedWriter kw = hasKeys ? Files.newBufferedWriter(keysPart, StandardCharsets.UTF_8) : null;
+            BufferedWriter fw = hasFps ? Files.newBufferedWriter(fpsPart, StandardCharsets.UTF_8) : null) {
             for (Manifest.Tbl t : m.tables()) {
                 ObjectNode n = tables.addObject();
                 n.put("name", t.name());
@@ -75,6 +95,16 @@ public final class ManifestFile {
                     t.keys().each(k -> {
                         try {
                             kw.write(t.name() + "\t" + k + "\n");
+                        } catch (IOException e) {
+                            throw new java.io.UncheckedIOException(e);
+                        }
+                    });
+                }
+                if (hasFps) {
+                    n.put("fp_chunks", t.fpChunks());
+                    t.fps().each((chunk, rows, fps) -> {
+                        try {
+                            fw.write(t.name() + "\t" + chunk + "\t" + rows + "\t" + HexFormat.of().formatHex(fps) + "\n");
                         } catch (IOException e) {
                             throw new java.io.UncheckedIOException(e);
                         }
@@ -109,7 +139,10 @@ public final class ManifestFile {
         } else {
             Files.deleteIfExists(keysPart);
         }
-        return new Staged(dir, m.runId(), HexFormat.of().formatHex(d.digest()), hasKeys);
+        if (hasFps) {
+            feed(d, fpsPart);
+        }
+        return new Staged(dir, m.runId(), HexFormat.of().formatHex(d.digest()), hasKeys, hasFps);
     }
 
     private static void feed(MessageDigest d, Path f) throws IOException {

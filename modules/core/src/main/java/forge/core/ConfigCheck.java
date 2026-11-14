@@ -10,6 +10,9 @@ public final class ConfigCheck {
     private ConfigCheck() {}
 
     public static void check(Config c, SchemaGraph g) {
+        for (int i = 0; i < c.cleanup().keep().size(); i++) {
+            KeepSet.of(g, c.cleanup().keep().get(i), i);
+        }
         for (Map.Entry<String, Config.TableConf> te : c.tables().entrySet()) {
             Table t = g.table(te.getKey());
             String path = "tables." + te.getKey();

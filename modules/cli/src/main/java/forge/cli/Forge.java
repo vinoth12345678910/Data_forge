@@ -1,6 +1,12 @@
 package forge.cli;
 
+import forge.cleanup.Cleanup;
+import forge.cleanup.Outcome;
+import forge.cleanup.Request;
 import java.io.PrintWriter;
+import java.nio.file.Path;
+import java.sql.SQLException;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -11,12 +17,15 @@ import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
 @Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
-    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, Forge.Cleanup.class,
-        Forge.Readiness.class})
+    subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, CleanupCmd.class,
+        ClassifyCmd.class, PurgeCmd.class, Forge.Readiness.class, McpCmd.class})
 public final class Forge implements Runnable {
 
     /** Where environment variables are read from. Tests replace it. */
     public static Function<String, String> env = System::getenv;
+
+    /** Where forge mcp reads requests from. Tests replace it. */
+    public static java.io.InputStream in = System.in;
 
     @Option(names = "--json", scope = ScopeType.INHERIT, description = "Print one JSON document (forge.output/1) instead of human text")
     boolean json;
@@ -49,23 +58,26 @@ public final class Forge implements Runnable {
         return 1;
     }
 
-    @Command(name = "cleanup", description = "Remove generated rows (Phase 5).")
-    static final class Cleanup implements java.util.concurrent.Callable<Integer> {
+    @Command(name = "readiness", description = "Go-live readiness check: six automated checks plus a manual checklist.")
+    static final class Readiness implements Callable<Integer> {
         @Spec CommandSpec spec;
-        @Option(names = "--dry-run") boolean dryRun;
-        @Option(names = "--run") boolean run;
+        @Option(names = {"-c", "--config"}, defaultValue = "forge.yml", description = "forge.yml to use") Path config;
+        @Option(names = "--run-id", description = "The run to check (default: the latest)") String runId;
+        @Option(names = "--allow-prod", description = "Allow a connection labelled prod") boolean allowProd;
 
         public Integer call() {
-            return new Emit(spec).notBuilt("cleanup", 5);
-        }
-    }
-
-    @Command(name = "readiness", description = "Go-live readiness check (Phase 5).")
-    static final class Readiness implements java.util.concurrent.Callable<Integer> {
-        @Spec CommandSpec spec;
-
-        public Integer call() {
-            return new Emit(spec).notBuilt("readiness", 5);
+            Emit e = new Emit(spec);
+            try {
+                Live live = new Live(config);
+                live.openGraph();
+                Request q = new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+                    live.manifestDir(null), allowProd, runId, null, null, false, null, false, false);
+                Outcome o = Cleanup.readiness(q);
+                return CleanupCmd.finish(e, "readiness", o);
+            } catch (SQLException | java.io.IOException | RuntimeException ex) {
+                e.fail("readiness", ex);
+                return e.done("readiness", 2);
+            }
         }
     }
 }

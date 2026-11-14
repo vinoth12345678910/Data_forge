@@ -2,8 +2,5 @@
 # One Gradle --tests pattern per line. A feature adds the patterns it makes green; the last Phase 5 feature
 # replaces the list with the single line  forge.safety.*  (the whole suite). Anything not listed is NOT required
 # on this branch and verify.sh says so. Removing a line to make a failing run pass weakens the gate: do not.
-forge.safety.HarnessSelfTest
-forge.safety.GroupsHToLSelfTest
-forge.safety.TruncateTest.e4_*
-forge.safety.GuardsTest.b1_*
-forge.safety.ResumeAndScopeTest.l3_*
+# P5.6: the whole frozen suite is green (289 tests, 1 skipped: l4, see docs/PHASE5_RESULTS.md), so the list is the single pattern.
+forge.safety.*

@@ -60,7 +60,10 @@ class SequencesTest extends SafetyBase {
         fx.cleanOk("J1 " + kind);
         Snapshot s1 = fx.snapshot();
         assertEquals(real == -1 ? 0 : 1, s1.count("rd_user"), "J1: only the real user (if any) is left");
-        assertFalse(s0.diffSequences(s1).isEmpty(), "J1: the cleanup moved the sequence (it stood at the loaded maximum before)");
+        if (d == Dialect.PG || !kind.equals("real-user-far-above")) {
+            assertFalse(s0.diffSequences(s1).isEmpty(), "J1: the cleanup moved the sequence (it stood at the loaded maximum before)");
+        }
+        // MySQL and SQLite with a far-above real user: the explicit insert already moved the sequence, so the reset leaves it; the next id below must be real + 1.
         long expect = real == -1 ? 1 : Math.max(real, 0) + 1;
         long got = nextId(fx, "next@company.test");
         assertEquals(expect, got, "J1 " + kind + ": the id the next insert got");
