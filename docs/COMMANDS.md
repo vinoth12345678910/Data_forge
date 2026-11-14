@@ -1,6 +1,6 @@
 # Commands
 
-Every command prints human text by default and one JSON document (`forge.output/1`) with the global `--json` flag. This page is the real `--help` output of `1.0.0-rc1`, so it matches the tool. Exit codes (all commands): `0` success, `1` the command ran and found a problem (a failed rule, drift at the threshold, a refused or blocked cleanup), `2` the command could not run (bad config, cannot connect, bad flags). `cleanup --run` and `purge --run` can also exit `3` when the audit log could not be written after a delete.
+Every command prints human text by default and one JSON document (`forge.output/1`) with the global `--json` flag. This page is the real `--help` output of `1.0.0-rc1`, so it matches the tool. Exit codes (all commands): `0` success, `1` the command ran and found a problem (a failed rule, drift at the threshold, a refused or blocked cleanup), `2` the command could not run (bad config, cannot connect, bad flags). `3` means: `cleanup --run` stopped part way after at least one batch committed (state `partial`: run a fresh dry run and `--resume`), or the audit log could not be written after a delete; for `purge --run` only the audit case.
 
 Notes the help text does not say:
 

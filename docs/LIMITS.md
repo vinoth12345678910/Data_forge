@@ -11,16 +11,16 @@ Everything here is a known limit of `1.0.0-rc1`, collected from the status notes
 
 ## Databases
 - **Postgres 16** is the full target (golden schemas and the Pagila holdout). 17 was run for information only.
-- **MySQL 8.4 and SQLite** run translated golden schemas only; not every Postgres type is covered. `forge init` reads Postgres or a DDL file, not MySQL or SQLite, so you write the table settings yourself there. The `generate` and `verify` help text still says "(Postgres)".
+- **MySQL 8.4 and SQLite** run translated golden schemas only; not every Postgres type is covered. `forge init` is tested on Postgres and DDL files only (its help says Postgres), so write the table settings yourself for MySQL or SQLite. The `generate` and `verify` help text still says "(Postgres)".
 - MariaDB is refused with a message.
 - **CSV output** is for inspection and Postgres `COPY`, not for loading into MySQL or SQLite.
 - **Supabase, Neon, other Postgres hosts and Prisma:** not tested ([SUPABASE_AND_PRISMA.md](SUPABASE_AND_PRISMA.md)).
 - Time on 1,000,000 rows: Postgres 4.4 s, SQLite 6.0 s, MySQL 12.6 s ([PERF.md](PERF.md)).
 
 ## Cleanup and purge
-- MySQL: cleanup handles one proven self-referencing case and refuses other NOT NULL self-referencing tables.
-- Cleanup and purge take no lock against the application or each other. Stop the application first.
-- Purge gaps, accepted for this candidate: the dry run is matched by rule name and not by the rule's `where` text; the edit-fingerprint check is not repeated inside the delete transaction; some read-only paths (the purge dry run, `--drop-metadata`) write no audit result if they throw; `purge` does not reset sequences. `purge --include-unmanifested` can delete rows that were never loaded by Data Forge (non-prod only).
+- MySQL: cleanup handles one proven self-referencing case (one statement with foreign key checks off, then on again) and refuses other NOT NULL self-referencing tables during the run, after the backup; the dry run warns only above `max_cycle_rows`.
+- Cleanup and purge take no lock against the application or against each other (a second cleanup of the same run is refused). Stop the application first.
+- Purge gaps, accepted for this candidate: the dry run is matched by rule name and not by the rule's `where` text; purge does not repeat the edit-fingerprint check inside its delete transaction (cleanup does); some read-only paths (the purge dry run, `--drop-metadata`) write no audit result if they throw; `purge` does not reset sequences. `purge --include-unmanifested` can delete rows that were never loaded by Data Forge (non-prod only).
 - The backup command's output is masked for secrets incompletely; do not put secrets on the command line.
 - `forge cleanup --run` on Postgres can lower a sequence so the next id is 1 on an emptied table; a failed sequence reset is a warning, and `forge readiness` reports it.
 - Data Forge cannot clean uploaded files, payment gateway test orders, sent emails, logs or caches.
@@ -29,7 +29,7 @@ Everything here is a known limit of `1.0.0-rc1`, collected from the status notes
 - The web UI and terminal UI are not in the packages; with MySQL or SQLite they show the schema only; a prod label is refused at connect ([UI_AND_TUI.md](UI_AND_TUI.md)).
 - MCP has been tested with scripted requests only, not with an AI client ([MCP.md](MCP.md)).
 - The command line follows picocli's default of reading `@file` arguments, so an argument starting with `@` is read as a file of arguments.
-- The JUnit 5 extension (`modules/junit`) exists but has only a smoke test and is not documented as a feature.
+- The JUnit 5 extension (`modules/junit`) has container tests in the testkit but is not documented or supported as a feature.
 
 ## Packaging
 - The jlink bundle is macOS on Apple silicon only; other systems build it on that system. The jar package needs Java 21 and a bash launcher. Windows and Linux are untried ([RELEASE.md](RELEASE.md)).

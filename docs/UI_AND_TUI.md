@@ -31,6 +31,6 @@ cd ui && npm ci && npm run build && cd ..
 
 ## Limits
 
-- With **MySQL or SQLite** only Connect and Schema work. `forge init` reads Postgres only, so there is no table configuration for the other screens; they show the engine's error.
+- With **MySQL or SQLite** only Connect and Schema work. `forge init` is tested on Postgres only, so there is no table configuration for the other screens; they show the engine's error.
 - A **prod** label is refused at connect, so the red prod banner appears only while the prod label is selected.
-- Tested: `ServerTest` (10 cases), `TuiTest` (6), a browser smoke test on SQLite (Playwright; run with `FORGE_E2E=1`), a reviewed run at desktop and phone widths. **Not tested:** Run, Verify and Go-live against Postgres with real data; light theme; screen readers; Windows.
+- Tested: `ServerTest` (10 cases), `TuiTest` (6), a browser smoke test on SQLite (Playwright; run with `FORGE_E2E=1`), a manual review at desktop and phone widths (not an automated test). **Not tested:** Run, Verify and Go-live against Postgres with real data; light theme; screen readers; Windows.

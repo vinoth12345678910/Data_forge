@@ -75,7 +75,7 @@ flowchart LR
 
 ### Reads a schema
 
-`forge init` reads a live Postgres database, or a DDL file that it applies to a scratch Postgres. Composite keys, self-references, many-to-many tables, deferrable constraints and foreign key cycles are handled. `init` and `generate` ran with zero config on the Pagila sample (a holdout schema that was not used to shape the engine).
+`forge init` reads a live Postgres database, or a DDL file that it applies to a scratch Postgres (it is tested on those two only). Composite keys, self-references, many-to-many tables, deferrable constraints and foreign key cycles are handled. `init` and `generate` run with zero config on the Pagila sample (a test).
 
 ![Schema reading and planning](docs/img/schema.gif)
 
@@ -105,7 +105,7 @@ Rule kinds: `derive` (a calculated column), `check` (a condition every row must 
 
 ### Realistic shape
 
-State machines (`pending` to `paid` to `refunded`) with the child rows each state needs. Time rules (a registration before the event it is for). Skewed (Zipf and Pareto) distributions, correlated columns, and seasonality. Locale-aware values that pass independent checkers: Indian phone numbers, pincodes and GSTIN, and IBANs.
+State machines (`pending` to `paid` to `refunded`) with the child rows each state needs. Time rules (a registration before the event it is for). Skewed (Zipf and Pareto) distributions, correlated columns, and seasonality. Locale-aware values that pass independent checkers: Indian phone numbers, pincodes and GSTIN, and IBANs for DE, ES, GB and NL.
 
 ![State machines and time rules](docs/img/realism.gif)
 
@@ -130,7 +130,7 @@ Every rule ends in one of these states. `forge verify` never shows a rule it cou
 | failed | The rule, the table and the row that broke it |
 | not checked | Data Forge cannot check this rule (not applicable, or enforced by the database itself). Listed, never counted as passed |
 
-`forge verify --url <database>` also verifies a database Data Forge did not create, such as staging. The session is read-only there.
+`forge verify --url <database>` also verifies a database Data Forge did not create, such as staging. The session is read-only there. A prod label needs `--allow-prod`, even for verify.
 
 ![Verify: passed, failed and not checked](docs/img/verify.gif)
 
@@ -157,7 +157,8 @@ Cleanup is the only thing in Data Forge that deletes, so it refuses by default.
 ```bash
 forge cleanup --dry-run     # counts per table. Changes nothing
 forge classify              # report rows that are not in the manifest. Never deletes
-forge cleanup --run         # needs a fresh dry run, a backup, and a typed confirmation
+forge cleanup --run --confirm-db app --confirm-rows 1101        # a fresh dry run, a backup, and the typed name and count
+forge cleanup --drop-metadata --confirm-db app --confirm-rows 1101   # removes _dataforge (needs the same two values)
 forge readiness             # pass or fail: is the database clean for go-live? Prints the manual checklist
 ```
 
@@ -169,11 +170,11 @@ More in [docs/SAFETY.md](docs/SAFETY.md).
 
 ## Safety model
 
-Cleanup removes a row only if its key is in the manifest and its fingerprint still matches what was recorded at load time. A row someone edited is not deleted.
+Cleanup removes a row only if its key is in the manifest and its fingerprint still matches what was recorded at load time. A manifest row edited after load, or deleted by someone else, makes cleanup refuse and delete nothing; edits to columns the fingerprint does not cover are not detected. The one exception to "only manifest rows" is `purge --include-unmanifested` (non-prod only, see [docs/SAFETY.md](docs/SAFETY.md)).
 
 | Guard | What it does |
 |---|---|
-| Environment label | Each connection is `dev`, `test`, `staging` or `prod`. Generation into prod is always refused. Cleanup on prod needs `--allow-prod` |
+| Environment label | Each connection is `dev`, `test`, `staging` or `prod`. Generation into prod is always refused. Cleanup, classify, readiness, drop-metadata, purge and verify on prod need `--allow-prod` |
 | Dry run first | A run is refused without a dry run of the same manifest from the last 24 hours |
 | Typed confirmation | You type the database name and the total row count. It is never filled in for you |
 | Backup gate | Your `backup_cmd` runs first. If it fails, nothing is deleted |
@@ -195,7 +196,7 @@ All of them call the same engine. The command line and MCP read `forge.yml`; the
 The commands above. Every command has `--json` output with a versioned envelope (`forge.output/1`), so you can pipe it into `jq` or CI.
 
 ### Terminal UI
-A numbered menu: connect, schema, run (generate), verify, and go-live (a cleanup dry run, readiness and the manual checklist). It cannot run a cleanup. It makes no network calls.
+A numbered menu: connect, schema, run (generate), verify, and go-live (a cleanup dry run, readiness and the manual checklist). It cannot run a cleanup. Its code contains no network calls (a source scan checks this).
 
 ![Terminal UI](docs/img/tui.gif)
 
@@ -218,8 +219,8 @@ Setup and what was tried: [docs/MCP.md](docs/MCP.md). Terminal and web UI detail
 | Database | Status |
 |---|---|
 | PostgreSQL 16 | Full target. All golden schemas and the Pagila holdout. Also run on 17 for information |
-| MySQL 8.4 | Works on translated golden schemas. Not every Postgres type is covered. `init` does not read MySQL |
-| SQLite | Works on translated golden schemas. `init` does not read SQLite |
+| MySQL 8.4 | Works on translated golden schemas. Not every Postgres type is covered. `init` is not tested on MySQL |
+| SQLite | Works on translated golden schemas. `init` is not tested on SQLite |
 | Supabase, Neon and other Postgres hosts | Expected to work. Not tested. See [docs/SUPABASE_AND_PRISMA.md](docs/SUPABASE_AND_PRISMA.md) |
 | Prisma apps | Point Data Forge at the database Prisma creates. Not tested |
 
@@ -227,14 +228,14 @@ Setup and what was tried: [docs/MCP.md](docs/MCP.md). Terminal and web UI detail
 
 ## Speed
 
-Measured on an Apple M4 MacBook Air with 16 GB, Java 21, Postgres 16 in Docker, with a 256 MB heap. Source and dates: [docs/PERF.md](docs/PERF.md).
+Measured on an Apple M4 MacBook Air with 16 GB, Java 21, Postgres 16 in Docker, with a 256 MB heap. These are the p5.1 runs of 2026-11-13 in [docs/PERF.md](docs/PERF.md) (they include the per-row fingerprints the manifest records; the earlier, faster p4 runs did not).
 
 | Shape | Rows | Time |
 |---|---|---|
 | One table | 1,000,000 | 4.4 s |
-| 1M parents and 3M children | 4,000,000 | 19.4 s |
-| Events schema with rules and state machines | 4,019,699 | 177.0 s |
-| Tied composite keys | 3,010,000 | 31.6 s |
+| 1M parents and 3M children | 4,000,000 | 23.2 s |
+| Events schema with rules and state machines | 4,019,699 | 272.8 s (the gate limit is 300 s) |
+| Tied composite keys | 3,010,000 | 36.8 s |
 
 On the same machine, one table of 1,000,000 rows takes 12.6 s on MySQL and 6.0 s on SQLite.
 
@@ -245,11 +246,11 @@ On the same machine, one table of 1,000,000 rows takes 12.6 s on MySQL and 6.0 s
 Honest limits, in full in [docs/LIMITS.md](docs/LIMITS.md):
 
 - **A drafted `forge.yml` has no business rules.** You write them. Some rules cannot be written yet; `forge verify` lists what it did not check and never counts it as passed.
-- **MySQL and SQLite** run translated golden schemas only, and `forge init` reads Postgres or a DDL file. MySQL cleanup handles one kind of self-referencing table and refuses the rest.
+- **MySQL and SQLite** run translated golden schemas only, and `forge init` is tested on Postgres and DDL files only. MySQL cleanup handles one kind of self-referencing table and refuses the rest during the run.
 - **CSV output** is for inspection and Postgres `COPY`, not for loading into MySQL or SQLite.
 - **A time-gap rule** can fail when a parent's time leaves no room for the gap. The error says so.
 - **The web UI and terminal UI** start with Gradle from the source tree, not from the packages. With MySQL or SQLite they show the schema only. A prod label is refused at connect.
-- **The JUnit 5 extension** exists in the source tree but has only a smoke test. It is not documented as a feature in this release.
+- **The JUnit 5 extension** exists in the source tree and has container tests, but it is not documented or supported as a feature in this release.
 - **Not tested:** Windows and Linux, Supabase, Neon, Prisma, an AI client connected to MCP.
 - **Outside the database:** payment gateways, files, queues, email and caches are not simulated or cleaned.
 
