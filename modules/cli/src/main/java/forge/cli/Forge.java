@@ -16,7 +16,7 @@ import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 
 /** The forge command. Only init is real; the others say which phase builds them. */
-@Command(name = "forge", mixinStandardHelpOptions = true, description = "Generate valid, realistic test data. Offline.",
+@Command(name = "forge", mixinStandardHelpOptions = true, version = "forge " + forge.load.ManifestBuilder.TOOL_VERSION, description = "Generate valid, realistic test data. Offline.",
     subcommands = {InitCmd.class, GenerateCmd.class, VerifyCmd.class, DriftCmd.class, CleanupCmd.class,
         ClassifyCmd.class, PurgeCmd.class, Forge.Readiness.class, McpCmd.class})
 public final class Forge implements Runnable {
@@ -49,7 +49,11 @@ public final class Forge implements Runnable {
     public static void main(String[] args) {
         PrintWriter out = new PrintWriter(System.out, true);
         PrintWriter err = new PrintWriter(System.err, true);
-        System.exit(run(out, err, args));
+        int code = run(out, err, args);
+        // print() (unlike println) does not flush: without this the last report, such as forge verify's, is lost at exit
+        out.flush();
+        err.flush();
+        System.exit(code);
     }
 
     /** Prints the "not built yet" line and fails. */

@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 /** Builds the manifest of what a RowGen will load. Reads no database rows. */
 public final class ManifestBuilder {
 
-    public static final String TOOL_VERSION = "0.2.0";
+    public static final String TOOL_VERSION = "1.0.0-rc1";
 
     private ManifestBuilder() {}
 

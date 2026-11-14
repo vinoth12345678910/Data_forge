@@ -31,6 +31,8 @@ public final class Tui {
     }
 
     public static void main(String[] args) throws IOException {
+        // the libraries behind the server code log through SLF4J; with no logger bound it prints three warning lines on first use
+        System.setProperty("slf4j.internal.verbosity", "ERROR");
         boolean color = System.console() != null && System.getenv("NO_COLOR") == null;
         PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
         Path scratch = Files.createTempDirectory("forge-tui");

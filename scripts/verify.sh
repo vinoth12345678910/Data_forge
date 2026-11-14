@@ -243,6 +243,27 @@ else
   fail "k. UI smoke test"
 fi
 
+# l. package: the fat jar builds, the launcher runs it, the version is right, all three JDBC drivers are registered.
+echo ">> l. package"
+if bash scripts/test-package.sh; then
+  record "PASS   " "l. package (fat jar, launcher, version, JDBC drivers)"
+else
+  fail "l. package"
+fi
+
+# m. docs test: the README quick-start commands run word for word in a clean container against Postgres 16, and their
+# output must match docs/QUICKSTART.md; every other forge command line in the docs must use real flags.
+echo ">> m. docs test"
+bash scripts/docs-test.sh
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  record "PASS   " "m. docs test (README quick start in a clean container)"
+elif [ "$rc" -eq 77 ]; then
+  record "SKIPPED" "m. docs test (Docker not running)"
+else
+  fail "m. docs test"
+fi
+
 # e. clean-machine build (see step_e above)
 step_e
 

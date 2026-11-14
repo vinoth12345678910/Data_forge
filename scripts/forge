@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# forge launcher: runs the Data Forge jar with Java 21. FORGE_JAR overrides the jar (the package test uses it).
+# Layouts it finds: lib/forge.jar beside the launcher, ../lib/forge.jar (bin/forge), or forge-*.jar beside it; and a
+# bundled runtime in ../runtime (the jlink bundle). Otherwise it uses `java` from JAVA_HOME or the PATH.
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -h "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ $src != /* ]] && src="$dir/$src"
+done
+here="$(cd -P "$(dirname "$src")" && pwd)"
+jar="${FORGE_JAR:-}"
+if [ -z "$jar" ]; then
+  for c in "$here/lib/forge.jar" "$here/../lib/forge.jar" "$here"/forge-*.jar; do
+    if [ -f "$c" ]; then jar="$c"; break; fi
+  done
+fi
+[ -n "$jar" ] || { echo "forge: cannot find forge.jar next to the launcher" >&2; exit 1; }
+if [ -x "$here/../runtime/bin/java" ]; then
+  java_bin="$here/../runtime/bin/java"
+else
+  java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+fi
+exec "$java_bin" -jar "$jar" "$@"

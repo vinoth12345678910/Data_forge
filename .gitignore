@@ -10,3 +10,4 @@ ui/test-results/
 .claude/state/
 .claude/settings.local.json
 **/.jqwik-database
+dist/

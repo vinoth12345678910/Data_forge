@@ -26,6 +26,8 @@ Works on all three databases: drift compares two `SchemaGraph` objects, which `P
 
 The rule that makes this useful: **a change is an error only if the spec stops working.** Everything else is graded so CI can choose.
 
+> **Superseded.** This first-draft table is replaced by "As built in P4.2" below: in the tool as built, a new table and every added column are warnings (`table_added`, `column_added`), and only a column that becomes nullable or gets a default is info.
+
 | Change | Error when | Warn when | Info when |
 |---|---|---|---|
 | **table added** | always: `forge generate` stops with "No row count for table X" | never | never |
