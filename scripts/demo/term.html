@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;background:#0d1117}
+  #t{box-sizing:border-box;width:940px;height:590px;padding:14px 18px;overflow:hidden;
+     font:15px/20px Menlo,"DejaVu Sans Mono",Consolas,monospace;color:#c9d1d9;white-space:pre}
+  .p{color:#3fb950}.c{color:#e6edf3}.dim{color:#8b949e}.ok{color:#3fb950}.bad{color:#f85149}.warn{color:#d29922}
+  .cur{display:inline-block;width:9px;height:16px;background:#c9d1d9;vertical-align:-3px}
+</style>
+<div id="t"></div>
+<script>
+const COLS = 100, ROWS = 28;
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function colour(line) {
+  const l = esc(line);
+  if (/^\s*(PASS|OK)\b/.test(line) || /\b0 FAIL\b/.test(line)) return '<span class="ok">' + l + '</span>';
+  if (/^\s*(FAIL|ERROR)\b/.test(line) || /refus|blocked|not allowed/i.test(line)) return '<span class="bad">' + l + '</span>';
+  if (/NOT_CHECKED|not checked|NOT_APPLICABLE|ENFORCED_BY_DB|partial/i.test(line)) return '<span class="warn">' + l + '</span>';
+  return l;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function play(steps, opt) {
+  const t = document.getElementById('t');
+  const lines = [];            // rendered html lines
+  let typing = null;
+  const draw = () => {
+    const shown = lines.slice(-(ROWS - 1));
+    t.innerHTML = shown.join('\n') + (typing !== null ? '\n' + typing : '') + '<span class="cur"></span>';
+  };
+  const prompt = '<span class="p">$</span> ';
+  await sleep(opt.lead);
+  for (const s of steps) {
+    typing = prompt;
+    for (const ch of s.show) { typing += '<span class="c">' + esc(ch) + '</span>'; draw(); await sleep(opt.type); }
+    await sleep(opt.afterType);
+    lines.push(typing); typing = null; draw();
+    const out = s.out.replace(/\s+$/, '').split('\n').filter((x, i, a) => !(a.length === 1 && x === ''));
+    const gap = out.length > 14 ? opt.line / 2 : opt.line;
+    for (const raw of out) {
+      const line = raw.length > COLS ? raw.slice(0, COLS - 1) + '…' : raw;
+      lines.push(colour(line)); draw(); await sleep(gap);
+    }
+    await sleep(s.hold || opt.afterOut);
+  }
+  typing = prompt; draw();
+  await sleep(opt.tail);
+  window.__done = true;
+}
+
+// Builds the whole animation as a list of {t (ms), html} snapshots on a virtual clock (no real waiting).
+function timeline(steps, opt) {
+  const frames = [];
+  const lines = [];
+  let typing = null, now = 0;
+  const snap = () => {
+    const shown = lines.slice(-(ROWS - 1));
+    frames.push({ t: now, html: shown.join('\n') + (typing !== null ? '\n' + typing : '') + '<span class="cur"></span>' });
+  };
+  const prompt = '<span class="p">$</span> ';
+  typing = prompt; snap(); now += opt.lead;
+  for (const s of steps) {
+    typing = prompt;
+    for (const ch of s.show) { typing += '<span class="c">' + esc(ch) + '</span>'; snap(); now += opt.type; }
+    now += opt.afterType;
+    lines.push(typing); typing = null; snap();
+    const out = s.out.replace(/\s+$/, '').split('\n').filter((x, i, a) => !(a.length === 1 && x === ''));
+    const gap = out.length > 14 ? opt.line / 2 : opt.line;
+    for (const raw of out) {
+      const line = raw.length > COLS ? raw.slice(0, COLS - 1) + '…' : raw;
+      lines.push(colour(line)); snap(); now += gap;
+    }
+    now += s.hold || opt.afterOut;
+  }
+  typing = prompt; snap(); now += opt.tail;
+  frames.push({ t: now, html: frames[frames.length - 1].html });
+  return frames;
+}
+</script>

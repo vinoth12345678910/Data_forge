@@ -351,3 +351,10 @@
 - Decisions: the quick start uses `--network container:` so `localhost:5432` in the README is run verbatim; the security contact in SECURITY.md is left for the owner (not invented).
 - Open (owner): licence review list in THIRD_PARTY_NOTICES (MySQL connector GPL-2.0 with FOSS exception, JNA LGPL/Apache dual, Jetty EPL/Apache dual, one annotations jar with no licence in its POM); project name and licence are still the owner's decisions; the CLI help for `generate` and `verify` still says "(Postgres)".
 
+## 2026-11-14 demo GIFs (branch rel-gifs, from rel-readme; release lite round 1, branch 3 of 3)
+- Done: `scripts/demo/` (recorder: real commands in a clean sandbox against a throwaway Postgres 16, captured output rendered as frames in a terminal page and assembled with ffmpeg; the web UI GIF is a real browser; a pty driver for the terminal UI; a scripted MCP client) and 15 GIFs in `docs/img/` (11 to 25 s each, largest 1.6 MB, 2.8 MB in total); `docs/DEMO_GIFS.md` says what each shows. The recorder fails if captured text holds a home path, user name or host name. Bug found while recording and fixed in branch 1: `forge verify`'s human report was lost at exit (see the package entry). Also: the TUI printed three SLF4J warning lines on connect (silenced in `Tui.main`).
+- Not recorded (and said so in DEMO_GIFS.md): `junit.gif` (no real test of the extension), a schema graph printout, a Verify screen with three states in the web UI, an AI agent using MCP. The `cleanup` GIF uses a stand-in `backup_cmd`; the `mcp` GIF is a scripted client, not an agent.
+- Playwright 1.49.1's own video recorder needs an ffmpeg build that is not installed, so the recorder uses screenshots and the system ffmpeg instead (deterministic). It runs the browser through `FORGE_E2E_BROWSER`.
+- Next: one push of the three branches (the hook runs verify.sh once), three PRs, no merge.
+- Open: GIF frames were looked at for 5 of 15 (hero, ui, tui, mcp and cleanup partly); the rest were checked by their captured text only. The checksums in RELEASE.md are not final yet.
+
