@@ -64,7 +64,13 @@ final class Session {
         this.config = null;
         this.password = password;
         this.user = user;
-        Result r;
+        Result r = refuse(url, env, user);
+        if (r != null) {
+            this.password = "";
+            state = "idle";
+            last = null;
+            return r;
+        }
         if (url.startsWith("postgres://")) {
             List<String> args = new ArrayList<>(List.of("--json", "init", "--url", url, "--env", env, "--out", cfg.toString(), "--force"));
             if (!user.isEmpty()) {
@@ -90,6 +96,19 @@ final class Session {
         return r;
     }
 
+    /** A message result when a value could be taken for an option or a file argument, or the label is not dev, test or staging; else null. */
+    private static Result refuse(String url, String env, String user) {
+        if (!List.of("dev", "test", "staging").contains(env)) {
+            return fail("connect", "env_refused", "connection.env must be dev, test or staging (prod is refused), got " + env);
+        }
+        for (String v : List.of(url, user)) {
+            if (v.startsWith("@") || v.startsWith("-") || v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0 || v.indexOf('\0') >= 0) {
+                return fail("connect", "config_error", "url and user must not start with @ or -, or contain a line break");
+            }
+        }
+        return null;
+    }
+
     /** MySQL and SQLite: forge init reads Postgres only, so write a connection-only forge.yml and check it by reading the schema. */
     private Result minimal(Path cfg, String url, String env) throws IOException {
         if (!List.of("dev", "test", "staging").contains(env)) {
@@ -112,7 +131,7 @@ final class Session {
             schema();
         } catch (SQLException | RuntimeException e) {
             this.url = null;
-            return fail("connect", "sql_error", String.valueOf(e.getMessage()));
+            return fail("connect", "sql_error", "cannot connect or read the schema: check the url, user and password");
         }
         return new Result(0, M.createObjectNode().put("schema", "forge.output/1").put("command", "connect").put("ok", true));
     }

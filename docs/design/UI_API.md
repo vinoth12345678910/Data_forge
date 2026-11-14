@@ -20,3 +20,5 @@ No route runs a cleanup, a purge, a truncate, a delete, a backup or `--drop-meta
 - Errors show what the envelope says (rule, table, row), not raw driver text.
 - `generate` writes into the connected database; the server never accepts a prod label, so it cannot generate into prod.
 - One connection per server process.
+- `url` is chosen by the user and can point at any database the machine can reach (that is what a connect screen is for). `env`, `user` and `url` are checked before any command runs: `env` must be dev, test or staging, and `url` and `user` must not start with `@` or `-` or contain a line break (picocli would read them as options or `@file` arguments).
+- A failed connect says "cannot connect or read the schema", not the driver text.

@@ -45,7 +45,13 @@ public final class Server {
             }
         });
         api.mount(app);
-        app.start("127.0.0.1", port);
+        try {
+            app.start("127.0.0.1", port);
+        } catch (RuntimeException e) {
+            Forge.env = savedEnv;
+            session.close();
+            throw e;
+        }
     }
 
     private boolean okAuthority(String a) {

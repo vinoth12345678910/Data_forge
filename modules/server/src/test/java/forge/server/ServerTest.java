@@ -133,6 +133,22 @@ class ServerTest {
     }
 
     @Test
+    void valuesThatCouldBeOptionsOrFileArgumentsAreRefusedBeforeAnyCommandRuns() throws Exception {
+        String pg = "postgres://127.0.0.1:1/x";
+        for (String body : new String[] {
+            "{\"url\":\"" + pg + "\",\"env\":\"@/etc/hosts\"}",
+            "{\"url\":\"" + pg + "\",\"env\":\"dev\",\"user\":\"@/etc/hosts\"}",
+            "{\"url\":\"" + pg + "\",\"env\":\"dev\",\"user\":\"-x\"}",
+            "{\"url\":\"@/etc/hosts\",\"env\":\"dev\"}",
+            "{\"url\":\"" + pg + "\",\"env\":\"dev\",\"user\":\"a\\nb\"}"}) {
+            HttpResponse<String> r = api("POST", "/api/connect", body);
+            assertEquals(422, r.statusCode(), body + " -> " + r.body());
+            String code = M.readTree(r.body()).at("/envelope/errors/0/code").asText();
+            assertTrue(code.equals("env_refused") || code.equals("config_error"), body + " -> " + r.body());
+        }
+    }
+
+    @Test
     void generateRunsInTheBackgroundAndProgressReportsTheEnvelope() throws Exception {
         api("POST", "/api/connect", connectBody(fixture(), "dev", ""));
         HttpResponse<String> g = api("POST", "/api/generate", "{}");
