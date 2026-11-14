@@ -13,7 +13,7 @@ import picocli.CommandLine.Spec;
 
 /**
  * forge cleanup. --dry-run (the default) reads, deletes nothing, and writes only audit entries and a dry_runs row. --run runs
- * the guards, then deletes (P5.4); --resume continues a partial run; --drop-metadata says it is not built (P5.5). Exit 0 clean, 1 refused or blocked,
+ * the guards, then deletes; --resume continues a partial run; --drop-metadata removes the _dataforge metadata. Exit 0 clean, 1 refused or blocked,
  * 2 could not run (bad config, database unreachable, audit log unwritable).
  */
 @Command(name = "cleanup", description = "Go-live cleanup: --dry-run reads and reports; --run deletes only after every guard passes; --resume continues a partial run.")
@@ -23,7 +23,7 @@ final class CleanupCmd implements Callable<Integer> {
     @Option(names = {"-c", "--config"}, defaultValue = "forge.yml", description = "forge.yml to use") Path config;
     @Option(names = "--dry-run", description = "Report what a cleanup would remove (the default mode)") boolean dryRun;
     @Option(names = "--run", description = "Check every guard, then remove the run's rows") boolean run;
-    @Option(names = "--drop-metadata", description = "Remove the _dataforge metadata (not built yet: P5.5)") boolean dropMetadata;
+    @Option(names = "--drop-metadata", description = "Remove the _dataforge metadata (requires state=cleaned)") boolean dropMetadata;
     @Option(names = "--resume", description = "Continue a run in state partial after a fresh dry run (implies --run); a run marked running is refused") boolean resume;
     @Option(names = "--run-id", description = "The run to work on (default: the only run not yet cleaned)") String runId;
     @Option(names = "--allow-prod", description = "Allow a connection labelled prod") boolean allowProd;
@@ -34,7 +34,17 @@ final class CleanupCmd implements Callable<Integer> {
     public Integer call() {
         Emit e = new Emit(spec);
         if (dropMetadata) {
-            return e.notBuilt("cleanup", 5);
+            try {
+                Live live = new Live(config);
+                live.openGraph();
+                Request q = new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+                    live.manifestDir(null), allowProd, runId, confirmDb, confirmRows, false);
+                Outcome o = Cleanup.dropMetadata(q);
+                return finish(e, "cleanup", o);
+            } catch (java.sql.SQLException | java.io.IOException | RuntimeException ex) {
+                e.fail("cleanup", ex);
+                return e.done("cleanup", 2);
+            }
         }
         try {
             Live live = new Live(config);

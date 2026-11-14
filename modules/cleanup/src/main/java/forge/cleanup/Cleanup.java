@@ -3,17 +3,17 @@ package forge.cleanup;
 import java.io.IOException;
 import java.sql.SQLException;
 
-/** The cleanup-family commands that only read: the dry run and classify. Neither deletes anything. */
+/** Entry points for all cleanup-family commands. */
 public final class Cleanup {
 
     private Cleanup() {}
 
-    /** forge cleanup --dry-run. Writes only audit entries and one dry_runs row. SQLException and IOException mean it could not run (exit 2). */
+    /** forge cleanup --dry-run. Writes only audit entries and one dry_runs row. */
     public static Outcome dry(Request q) throws SQLException, IOException {
         return Dry.run(q);
     }
 
-    /** forge cleanup --run in P5.3: the guards only. Never deletes; a run that passes every guard ends in run_not_built. */
+    /** forge cleanup --run. Runs guards then deletes. */
     public static Outcome run(Request q) throws SQLException, IOException {
         return Guards.run(q);
     }
@@ -21,5 +21,20 @@ public final class Cleanup {
     /** forge classify. Writes nothing at all. */
     public static Outcome classify(Request q) throws SQLException, IOException {
         return Classify.run(q);
+    }
+
+    /** forge readiness. Read-only checklist; never writes. */
+    public static Outcome readiness(Request q) throws SQLException, IOException {
+        return Readiness.run(q);
+    }
+
+    /** forge purge. Dry-run or run a named purge rule. */
+    public static Outcome purge(Request q) throws SQLException, IOException {
+        return Purge.run(q);
+    }
+
+    /** forge cleanup --drop-metadata. Drops _dataforge schema/tables; audit file survives. */
+    public static Outcome dropMetadata(Request q) throws SQLException, IOException {
+        return DropMeta.run(q);
     }
 }

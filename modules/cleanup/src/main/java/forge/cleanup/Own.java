@@ -105,6 +105,11 @@ final class Own {
     record Slice(List<String[]> present, List<String[]> edited, List<String[]> missing) {}
 
     static Result scan(Ctx x, Manifest.Tbl t) throws SQLException {
+        return scan(x, t, SHOWN);
+    }
+
+    /** Like scan, but the key lists hold up to cap keys (purge needs every edited key, not the first SHOWN). */
+    static Result scan(Ctx x, Manifest.Tbl t, int cap) throws SQLException {
         Plan plan = new Plan(x, t);
         Map<Integer, byte[]> stored = new TreeMap<>();
         t.fps().each((chunk, n, fps) -> stored.put(chunk, fps));
@@ -118,18 +123,18 @@ final class Own {
             n[1] += s.edited().size();
             n[2] += s.missing().size();
             for (String[] k : s.edited()) {
-                keep(edited, k);
+                keep(edited, k, cap);
             }
             for (String[] k : s.missing()) {
-                keep(missing, k);
+                keep(missing, k, cap);
             }
             chunk[0]++;
         });
         return new Result(t.name(), t.rows(), n[0], n[1], n[2], edited, missing);
     }
 
-    private static void keep(List<String> into, String[] key) {
-        if (into.size() < SHOWN) {
+    private static void keep(List<String> into, String[] key, int cap) {
+        if (into.size() < cap) {
             into.add(Keys.show(key));
         }
     }

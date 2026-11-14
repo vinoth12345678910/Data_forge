@@ -58,7 +58,7 @@ Then update `scripts/safety-green.txt` with the newly green frozen tests (proced
 - **End-of-phase reviews (once)**: run determinism-auditor, scope-guard, dialect-specialist and perf-profiler on the full Phase 5 diff (`git diff main...HEAD` or per branch), show findings, fix real bugs test-first, note the rest in STATUS.md.
 - Then the final report to the owner plus the list of reviews for fresh sessions.
 
-## Known-impossible frozen tests (do not edit them; they are written up in STATUS.md)
+## Known-impossible frozen tests (SUPERSEDED in P5.6: the MySQL self-reference cases are handled by `Delete.removeSelfRoot`, see docs/PHASE5_RESULTS.md) (do not edit them; they are written up in STATUS.md)
 - `DeleteOrderTest.g2_selfReferencingTable` MySQL `nodes:parent_id` and `BlockersTest.c3b` MySQL `org:boss_id`: MySQL InnoDB cannot delete a row that references itself (NOT NULL self FK) while FK checks are on, and Data Forge never turns them off (proved in a MySQL 8.4 container: error 1451 even for the last row).
 - `ResumeAndScopeTest.l4_*` is `@Disabled` in the frozen set; the rule is covered by `forge.guards.SqliteForeignKeysTest` (a wrapping JDBC driver ignoring `PRAGMA foreign_keys = ON`).
 Because of the MySQL cases the final `safety-green.txt` cannot be the single line `forge.safety.*`; keep the explicit method list and say why in PHASE5_RESULTS.md.

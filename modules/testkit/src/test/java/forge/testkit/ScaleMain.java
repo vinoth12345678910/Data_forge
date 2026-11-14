@@ -1,5 +1,8 @@
 package forge.testkit;
 
+import forge.cleanup.Cleanup;
+import forge.cleanup.Outcome;
+import forge.cleanup.Request;
 import forge.core.Config;
 import forge.core.Rule;
 import forge.core.RuleKind;
@@ -23,7 +26,8 @@ import java.util.List;
 
 /**
  * Run in a child JVM with a heap limit by ScaleContainerTest. Arguments: mode (load|hash) dialect shape scale seed
- * jdbc-url user password work-dir golden-dir. load: generate and load through the product loader. hash: stream every
+ * jdbc-url user password work-dir golden-dir. load: generate and load through the product loader. cleanup: load, then run
+ * cleanup --dry-run and cleanup --run (backup_cmd true) in the same JVM and report each time. hash: stream every
  * generated cell through SHA-256 without holding the output (determinism at scale). Prints one line: OK or HASH, with
  * rows, milliseconds and the peak heap in MB.
  */
@@ -76,8 +80,38 @@ public final class ScaleMain {
                 rows += n;
             }
         }
-        System.out.println("OK rows=" + rows + " ms=" + (System.nanoTime() - t0) / 1_000_000 + " peakHeapMB=" + peak()
+        long loadMs = (System.nanoTime() - t0) / 1_000_000;
+        if (mode.equals("cleanup")) {
+            cleanup(a, db, g, conf, rows, loadMs, live);
+            return;
+        }
+        System.out.println("OK rows=" + rows + " ms=" + loadMs + " peakHeapMB=" + peak()
             + " liveMB=" + live.finish() + " maxHeapMB=" + Runtime.getRuntime().maxMemory() / (1024 * 1024));
+    }
+
+    /** cleanup --dry-run then cleanup --run on what was just loaded. Prints CLEAN with the load, dry and run times. */
+    private static void cleanup(String[] a, Db db, SchemaGraph g, Config conf, long rows, long loadMs, Live live) throws Exception {
+        Path dir = Path.of(a[8]);
+        Config.Conn conn = new Config.Conn(a[5], a[1].equals("postgres") ? "public" : null, "test", a[6].isEmpty() ? null : a[6], null, "true");
+        Config cc = new Config(conf.version(), conf.seed(), conf.clock(), conf.locale(), conn, conf.ddl(), conf.tables(), conf.rules(),
+            conf.states(), conf.scenarios(), conf.run(), dir.toString(), Config.Cleanup.NONE);
+        long t1 = System.nanoTime();
+        Outcome dry = Cleanup.dry(new Request(db, g, cc, dir, dir, false, null));
+        long dryMs = (System.nanoTime() - t1) / 1_000_000;
+        if (dry.exit() != 0) {
+            throw new IllegalStateException("cleanup --dry-run exit " + dry.exit() + " " + dry.errors());
+        }
+        String dbName = String.valueOf(dry.data().get("db"));
+        String total = String.valueOf(dry.data().get("total_rows"));
+        long t2 = System.nanoTime();
+        Outcome run = Cleanup.run(new Request(db, g, cc, dir, dir, false, null, dbName, total));
+        long runMs = (System.nanoTime() - t2) / 1_000_000;
+        if (run.exit() != 0) {
+            throw new IllegalStateException("cleanup --run exit " + run.exit() + " " + run.errors());
+        }
+        System.out.println("CLEAN rows=" + rows + " ms=" + runMs + " loadMs=" + loadMs + " dryMs=" + dryMs + " runMs=" + runMs
+            + " deleted=" + run.data().get("deleted") + " peakHeapMB=" + peak() + " liveMB=" + live.finish()
+            + " maxHeapMB=" + Runtime.getRuntime().maxMemory() / (1024 * 1024));
     }
 
     /**

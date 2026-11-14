@@ -181,7 +181,7 @@ final class Dry {
         counts.put("planned", planned);
         counts.put("deleted", 0);
         audit.result(blocked ? "blocked" : "done", Audit.guards(g), counts,
-            new Audit.DryRow(dryId, madeAt, digest, blocked, countsJson(planned)));
+            new Audit.DryRow("cleanup", dryId, madeAt, digest, blocked, countsJson(planned)));
 
         List<String> text = new ArrayList<>();
         text.add("forge cleanup --dry-run  run " + runId + "  env " + x.env() + "  db " + db);

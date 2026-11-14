@@ -186,17 +186,7 @@ class JsonEnvelopeContainerTest {
         }
     }
 
-    @Test
-    void notBuiltCommandsReturnAJsonErrorNamingThePhase() throws Exception {
-        // cleanup --drop-metadata stays unbuilt (P5.5); a bare cleanup is the dry run since P5.2, --run is the guards since P5.3
-        for (String[] c : new String[][] {{"cleanup", "5", "--drop-metadata"}, {"readiness", "5"}}) {
-            JsonNode doc = c.length > 2 ? envelope(forge(c[0], c[2], "--json"), c[0]) : envelope(forge(c[0], "--json"), c[0]);
-            assertFalse(doc.get("ok").asBoolean());
-            JsonNode e = doc.get("errors").get(0);
-            assertEquals("not_built", e.get("code").asText());
-            assertEquals(Integer.parseInt(c[1]), e.get("phase").asInt(), c[0] + " is built in phase " + c[1]);
-        }
-    }
+    // notBuiltCommandsReturnAJsonErrorNamingThePhase removed: all Phase 1–5 commands are built as of P5.5.
 
     @Test
     void aFailingRuleCarriesItsRuleAndRow(@TempDir Path dir) throws Exception {

@@ -14,10 +14,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * forge cleanup --run in P5.3 (GUARDS.md, P5_3_DECISIONS.md): the guards, and no delete. Order: the run, the audit intent, the
- * prod label (G1), the typed confirmation (G1), manifest integrity, the dry run record (G2), the re-scan (G4, G6), the backup
- * command is configured. A run that passes all of it ends in run_not_built. Nothing is deleted and the backup is not run.
- * Reads through a read-only connection; writes only audit entries.
+ * forge cleanup --run (GUARDS.md): the guards, then the delete. Order: the run, the audit intent, the prod label (G1), the typed
+ * confirmation (G1), manifest integrity, the dry run record (G2), the re-scan (G4, G6), the backup command is configured and run
+ * (G3), the batches (Delete), the final check, the sequence reset. Guards read through a read-only connection.
  */
 final class Guards {
 
@@ -239,6 +238,17 @@ final class Guards {
             }
             passed.put("g5", "pass");
             passed.put("g7", "pass");
+            List<String> seqsReset;
+            String seqError = null;
+            try {
+                seqsReset = Seq.reset(w, x, m.tables());
+                if (d == forge.core.Dialect.SQLITE) {
+                    w.commit();
+                }
+            } catch (SQLException ex) {
+                seqsReset = List.of();
+                seqError = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage().replace('\n', ' ');
+            }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("mode", "run");
             data.put("run_id", run);
@@ -250,6 +260,14 @@ final class Guards {
             data.put("batches", del.batches());
             data.put("by_table", byTable(done.byTable(), done.truncated()));
             data.put("truncated", done.truncated());
+            data.put("sequences_reset", seqsReset);
+            List<Entry> warns = new ArrayList<>();
+            if (seqError != null) {
+                data.put("sequence_reset_error", seqError);
+                warns.add(Entry.of("sequence_reset_failed", "The rows are deleted but the sequences could not be reset: " + seqError
+                    + ". Run forge readiness; it reports sequence_not_reset."));
+                text.add("Warning: the sequence reset failed (" + seqError + ").");
+            }
             data.put("backup", backup(true, log, 0));
             data.put("backup_log", log.toString());
             text.add("Cleaned: " + done.deleted() + " rows deleted. State cleaned.");
@@ -260,9 +278,9 @@ final class Guards {
                 audit.result("done", Audit.guards(passed), counts, null);
             } catch (Audit.Unwritable u) {
                 // The rows are gone and the state says cleaned: say so, and say the log could not be completed.
-                return new Outcome(3, data, List.of(Entry.of("audit_unwritable", AFTER_DELETE)), List.of(), text);
+                return new Outcome(3, data, List.of(Entry.of("audit_unwritable", AFTER_DELETE)), warns, text);
             }
-            return new Outcome(0, data, List.of(), List.of(), text);
+            return new Outcome(0, data, List.of(), warns, text);
         }
     }
 
