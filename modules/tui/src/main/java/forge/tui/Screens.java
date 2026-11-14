@@ -13,14 +13,16 @@ final class Screens {
     private final Supplier<String> line;
     private final Supplier<String> secret;
     private final boolean color;
+    private final boolean hidden;
     private boolean connected;
 
-    Screens(Api api, PrintStream out, Supplier<String> line, Supplier<String> secret, boolean color) {
+    Screens(Api api, PrintStream out, Supplier<String> line, Supplier<String> secret, boolean color, boolean hidden) {
         this.api = api;
         this.out = out;
         this.line = line;
         this.secret = secret;
         this.color = color;
+        this.hidden = hidden;
     }
 
     private String ask(String prompt) {
@@ -45,7 +47,7 @@ final class Screens {
         String url = ask("Database URL: ");
         String env = ask("Environment label (dev, test, staging): ");
         String user = ask("User (optional): ");
-        out.print("Password (not shown, never stored): ");
+        out.print(hidden ? "Password (not shown, never stored): " : "Password (this terminal cannot hide it, so it will show as you type; it is never stored): ");
         out.flush();
         String password = secret.get();
         if (env.equals("prod")) say("\u001b[1;37;41m", "PROD label selected. Data Forge refuses to connect with it and will not work on a production database from here.");

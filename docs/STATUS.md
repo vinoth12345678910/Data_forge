@@ -329,6 +329,7 @@
 
 ## 2026-11-14 terminal UI (branch p6-tui, from main; step 3 of UI + TUI)
 - Done: `modules/tui` (plain Java, no new dependency): `Tui` (numbered menu, starts the local API in-process on 127.0.0.1 and calls it with the session token), `Api` (the six routes only), `Screens`, `Render` (pure text functions: schema with self references and cycles, Verify in three separate lists, no lists when no rules came back, go-live with the command as text it never runs). Gate test `TuiTest` (6 cases) was RED (cannot find symbol), now green. A scripted run against a SQLite demo file shows the schema and the known SQLite error on Run and Go-live. `gradlew :tui:run` needed `standardInput` set or the menu quit at once (fixed in `modules/tui/build.gradle.kts`).
+- Review: scope-guard (fresh session) found no violation. Its two low findings are fixed: the password prompt now says so when the terminal cannot hide the password (no console, for example under `gradlew :tui:run`), and the temp directory is deleted on exit.
 - Not done: `verify.sh` full run (the pre-push hook runs it); no Postgres run (needs Docker); real terminal colours and widths not looked at; Windows not tried; no `forge tui` command.
 - Next: owner merges; then the release-lite task.
 - Decisions: the TUI starts its own server in-process instead of needing a separate one; plain line-based menu (no raw keys, no JLine); `:tui:run` passes stdin through.

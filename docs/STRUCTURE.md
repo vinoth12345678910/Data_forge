@@ -30,9 +30,9 @@ data-forge/
 │   ├── cleanup/               # manifest, cleanup, classify, readiness, guards
 │   ├── cli/                   # Picocli commands (incl. `forge mcp`, a stdio adapter: Mcp.java, McpCmd.java)
 │   ├── service/               # shared service layer (planned): one API used by CLI, MCP, TUI and HTTP
-│   ├── server/                # Javalin JSON API (127.0.0.1, token), polling, serves ui/dist (planned)
+│   ├── server/                # Javalin JSON API (127.0.0.1, token), polling, serves ui/dist
 │   ├── mcp/                   # MCP server over the service layer (planned)
-│   ├── tui/                   # thin terminal UI (planned; built by Antigravity)
+│   ├── tui/                   # terminal UI: a numbered menu over the local API (forge.tui.Tui)
 │   ├── junit/                 # JUnit 5 + Testcontainers extension
 │   └── testkit/               # golden schemas, test base classes, assertions
 ├── packs/                     # generic, ecommerce, events, saas, banking (yaml)

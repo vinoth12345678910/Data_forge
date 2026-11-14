@@ -32,7 +32,15 @@ public final class Tui {
     public static void main(String[] args) throws IOException {
         boolean color = System.console() != null && System.getenv("NO_COLOR") == null;
         PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
-        int code = new Tui(System.in, out, Files.createTempDirectory("forge-tui"), true).run(color);
+        Path scratch = Files.createTempDirectory("forge-tui");
+        int code;
+        try {
+            code = new Tui(System.in, out, scratch, true).run(color);
+        } finally {
+            try (java.util.stream.Stream<Path> files = Files.walk(scratch)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(f -> f.toFile().delete());
+            }
+        }
         System.exit(code);
     }
 
@@ -60,7 +68,7 @@ public final class Tui {
                 String s = line.get();
                 return s == null ? "" : s;
             };
-            Screens screens = new Screens(new Api(server.port(), server.token()), out, line, secret, color);
+            Screens screens = new Screens(new Api(server.port(), server.token()), out, line, secret, color, console != null);
             out.println("Data Forge (terminal). Local API on 127.0.0.1:" + server.port() + ". Nothing here deletes data.");
             while (true) {
                 out.print("\n1 Connect  2 Schema  3 Run  4 Verify  5 Go-live  q Quit > ");
