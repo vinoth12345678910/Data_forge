@@ -22,4 +22,20 @@ svc="$(unzip -p "$jar" META-INF/services/java.sql.Driver)"
 for d in org.postgresql.Driver com.mysql.cj.jdbc.Driver org.sqlite.JDBC; do
   echo "$svc" | grep -qx "$d" || fail "JDBC driver $d is not registered in the jar"
 done
+# A real run through the launcher on SQLite: generate, then verify must print its report (a missing flush once lost it).
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+python3 - "$root" "$work" <<'PY'
+import sqlite3, sys
+root, work = sys.argv[1], sys.argv[2]
+c = sqlite3.connect(work + "/app.db")
+c.executescript(open(root + "/golden/events-merch/schema.sqlite.sql").read())
+c.commit()
+t = open(root + "/golden/events-merch/phase3.forge.yml").read()
+open(work + "/forge.yml", "w").write(t.replace("ddl: schema.sql\n", "connection:\n  url: sqlite:" + work + "/app.db\n  env: test\n"))
+PY
+( cd "$work" && FORGE_JAR="$root/$jar" "$root/scripts/forge" generate >/dev/null ) || fail "forge generate on SQLite failed"
+report="$(cd "$work" && FORGE_JAR="$root/$jar" "$root/scripts/forge" verify)" || fail "forge verify on SQLite exited non-zero"
+echo "$report" | grep -q "forge verify: .* rules on" || fail "forge verify printed no report (output lost?): $report"
+echo "$report" | grep -q "PASS" || fail "forge verify report has no PASS line: $report"
 echo "package test: ok ($jar)"

@@ -49,7 +49,11 @@ public final class Forge implements Runnable {
     public static void main(String[] args) {
         PrintWriter out = new PrintWriter(System.out, true);
         PrintWriter err = new PrintWriter(System.err, true);
-        System.exit(run(out, err, args));
+        int code = run(out, err, args);
+        // print() (unlike println) does not flush: without this the last report, such as forge verify's, is lost at exit
+        out.flush();
+        err.flush();
+        System.exit(code);
     }
 
     /** Prints the "not built yet" line and fails. */
