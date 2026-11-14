@@ -8,6 +8,7 @@ jackson = "2.18.2"
 jqwik = "1.9.2"
 picocli = "4.7.6"
 antlr = "4.13.2"
+javalin = "6.3.0"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -24,3 +25,4 @@ jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
 antlr-tool = { module = "org.antlr:antlr4", version.ref = "antlr" }
 antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
 picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
+javalin = { module = "io.javalin:javalin", version.ref = "javalin" }
