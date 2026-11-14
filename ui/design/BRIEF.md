@@ -17,7 +17,10 @@ Owner-supplied visual identity is **not set yet**. Do not invent a style.
 ## The five screens
 Connect, Schema graph, Run, Verify, Go-live (dry run and readiness only). See `docs/PLAN.md`, Phase 6.
 
-## REFERENCE TOOLS: TODO, supplied by the owner
+## Decided (owner, 2026-11-14): plain neutral dark
+No reference tools were supplied. The owner chose a plain neutral dark style: system fonts, plain CSS custom properties, no ornament. Restyle later by changing `ui/src/styles/app.css`.
+
+## REFERENCE TOOLS: TODO, supplied by the owner (not needed for v1)
 <!-- The owner lists 2 or 3 reference tools and what they like about the look of each. Until this block is filled, the visual style is undecided: stop and ask. -->
 - Tool 1: TODO
 - Tool 2: TODO

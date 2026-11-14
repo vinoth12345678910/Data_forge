@@ -5,6 +5,7 @@ build/
 .DS_Store
 node_modules/
 ui/dist/
+ui/test-results/
 
 .claude/state/
 .claude/settings.local.json

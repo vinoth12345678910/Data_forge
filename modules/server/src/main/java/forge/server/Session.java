@@ -81,7 +81,7 @@ final class Session {
                 args.add("--password-env");
                 args.add(PW_VAR);
             }
-            r = run(args);
+            r = scrub(run(args));
         } else {
             r = minimal(cfg, url, env);
         }
@@ -134,6 +134,20 @@ final class Session {
             return fail("connect", "sql_error", "cannot connect or read the schema: check the url, user and password");
         }
         return new Result(0, M.createObjectNode().put("schema", "forge.output/1").put("command", "connect").put("ok", true));
+    }
+
+    /** Connection and SQL errors from forge init carry the driver's own words: replace them with a fixed message. */
+    private static Result scrub(Result r) {
+        JsonNode errs = r.envelope().path("errors");
+        if (errs.isArray()) {
+            for (JsonNode e : errs) {
+                String code = e.path("code").asText();
+                if (e instanceof ObjectNode o && (code.equals("io_error") || code.equals("sql_error"))) {
+                    o.put("message", "cannot connect or read the schema: check the url, user and password");
+                }
+            }
+        }
+        return r;
     }
 
     private static Result fail(String command, String code, String message) {

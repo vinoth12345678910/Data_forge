@@ -59,9 +59,9 @@ Phase 5: add "I wrote the safety tests myself. Run them, report, do not edit." P
 environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts); real-data blocker; count check with rollback; keep list; truncate only at 100% coverage; audit log. Plus sequence reset and manual checklist.
 
 ## Current state (UPDATE EACH SESSION)
-- Date: 2026-11-13
-- Phase 5 in progress, stacked branches (see memory phase5-chain-and-l4 and docs/STATUS.md). Done through P5.5: P5.1–P5.4 (ownership, classify/dry-run, guards, cleanup --run deletes), P5.5 (Seq, Readiness, DropMeta, Purge, PurgeCmd) on branch `p5-purge`. 289 safety tests pass. verify.sh all PASS. Nothing merged by me.
-- Not done: P5.6 `p5-results` (PHASE5_RESULTS.md, L4 test, full suite). L4 (SQLite FK read-back) still missing. safety-reviewer round 4 passed all 8 guards for purge (no blocker).
-- P5.5 PR #51 merged into p5-run. P5.6 `p5-results` (docs only) is on its own branch; L4 is covered by `forge.guards.SqliteForeignKeysTest`.
-- Next: user merges the P5.6 PR and tags `phase-5`; then Phase 6.
-- Open: owner review of delegated safety design; L4 test owed; Backup secret-masking incomplete; five known purge gaps in docs/STATUS.md (where text not bound to dry run, edit check not in transaction, audit gaps, pk/key order unverified, no sequence reset on purge).
+- Date: 2026-11-14
+- Done and merged to `main`: Phase 5 (cleanup, guards, readiness, purge, drop-metadata; PR #54), `forge mcp` (stdio adapter, six tools, no delete), the local HTTP API in `modules/server` (PR #55, contract `docs/design/UI_API.md`). The `phase-5` tag is the owner's (not confirmed done).
+- In progress: `p6-ui` (web UI lite in `ui/`: five screens, plain neutral dark, Playwright smoke test passes locally; `modules/server` now also serves `ui/dist` via `Main --ui`). Reviews (ui-reviewer, scope-guard) and the PR are the next steps.
+- Not done: `p6-tui` (`modules/tui`); the Docker version of the UI smoke test; Phase 7 (packs, release).
+- Next: finish and merge `p6-ui`; then plan `p6-tui`.
+- Open: owner review of delegated safety design; Backup secret-masking incomplete; five known purge gaps and the picocli `@file` setting in docs/STATUS.md; the UI smoke test needs a Chromium (verify.sh step k runs only with `FORGE_E2E=1`).
