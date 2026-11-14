@@ -4,7 +4,7 @@ subprojects {
     apply(plugin = "java-library")
 
     group = "dev.forge"
-    version = "0.1.0-SNAPSHOT"
+    version = "1.0.0-rc1"
 
     extensions.configure<JavaPluginExtension> {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))

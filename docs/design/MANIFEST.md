@@ -78,7 +78,7 @@ Key forms:
   "run_id": "6f1c...",
   "seed": 42,
   "env": "test",
-  "tool_version": "0.2.0",
+  "tool_version": "1.0.0-rc1",
   "config_sha256": "...", "schema_sha256": "...",
   "clock": "2026-06-01T00:00:00Z", "loaded_at": "2026-11-11T10:00:00Z",
   "tables": [

@@ -243,6 +243,14 @@ else
   fail "k. UI smoke test"
 fi
 
+# l. package: the fat jar builds, the launcher runs it, the version is right, all three JDBC drivers are registered.
+echo ">> l. package"
+if bash scripts/test-package.sh; then
+  record "PASS   " "l. package (fat jar, launcher, version, JDBC drivers)"
+else
+  fail "l. package"
+fi
+
 # e. clean-machine build (see step_e above)
 step_e
 

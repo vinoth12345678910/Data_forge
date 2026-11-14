@@ -336,3 +336,10 @@
 - Decisions: the TUI runs the server's session code in this process instead of needing a separate server; plain line-based menu (no raw keys, no JLine); `:tui:run` passes stdin through.
 - Open: the web UI's "This data is partial" line still shows after a failed run (the TUI does not do this).
 
+## 2026-11-14 package (branch rel-package, from main; release lite round 1, branch 1 of 3)
+- Done: version `1.0.0-rc1` (`build.gradle.kts`, `ManifestBuilder.TOOL_VERSION`, `forge --version`); fat jar (`:cli:fatJar`, merged `META-INF/services` so all three JDBC drivers stay registered); `scripts/forge` launcher; `scripts/package.sh` (jar package + jlink bundle for macOS arm64, `dist/` not committed); `docs/RELEASE.md` (commands, measured sizes, start time 0.12 s and 0.14 s). Gate test `scripts/test-package.sh` was RED (no `fatJar` task), now green; wired as `verify.sh` step l. From a clean folder both packages print the version, `forge mcp` lists its six tools, and the jlink bundle ran `generate` and `verify` on the golden events schema on SQLite (0 FAIL).
+- Not done: checksums are final only after the last branch (the archives carry file times); no Postgres or MySQL run from the packages; Windows and Linux not tried; the web UI and TUI are not in the packages (they start with Gradle).
+- Next: branch 2 `rel-readme` (README, docs set, docs test), branch 3 `rel-gifs`; one push of all three, three PRs, no merge.
+- Decisions: no shadow plugin (a plain `Jar` task and a service-file merge instead); the jar package keeps a bash launcher.
+- Open: THIRD_PARTY_NOTICES and licences are branch 2.
+
