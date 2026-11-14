@@ -272,6 +272,7 @@
 - Not done: scope-guard review (fresh session); `scripts/verify.sh` (the pre-push hook runs it); a manual run with a real MCP client; tool calls against a live database (only the missing-config error path is tested).
 - Next: scope-guard, push, PR. Then the user merges p5-run into main (not in main yet) and this PR after it.
 - Decisions: hand-written JSON-RPC, no MCP SDK dependency; `CLAUDE_RULE.md` got one line allowing the adapter; no `init`, no `generate`, no `--run` tools.
+- Review: scope-guard (fresh session) found no violation. Low notes: the config path is confined but the contents of that forge.yml (DB URL, paths, purge rules) are trusted, so "no connection arguments" rests on the forge.yml in the start directory; a dangling symlink inside the start directory passes the path check; stdout cleanliness was checked in code only (no JDBC driver output tested).
 - Open: the dry-run tools write metadata, so they are not strictly read-only; symlink/relative config paths are checked by real path only when the file exists.
 
 ## 2026-11-14 P5.6 Phase 5 results (branch p5-results, from p5-purge; docs only)

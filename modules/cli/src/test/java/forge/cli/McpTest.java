@@ -95,6 +95,20 @@ class McpTest {
     }
 
     @Test
+    void aValueThatLooksLikeAnOptionStaysOneValue() throws Exception {
+        List<JsonNode> r = talk(
+            call(1, "forge_cleanup_dry_run", "{\"config\":\"--run\"}"),
+            call(2, "forge_classify", "{\"config\":\"forge.yml\",\"run_id\":\"--run\"}"));
+        for (JsonNode x : r) {
+            assertTrue(x.at("/result/isError").asBoolean(), x.toString());
+        }
+        // --config=--run: picocli refuses an option-like value as a usage error, so the command never starts
+        assertTrue(r.get(0).at("/result/content/0/text").asText().contains("Expected parameter"), r.get(0).toString());
+        // --run-id=--run: taken as one plain value; the command then fails on the missing forge.yml (an envelope), not a run
+        assertTrue(r.get(1).at("/result/content/0/text").asText().contains("\"command\":\"classify\""), r.get(1).toString());
+    }
+
+    @Test
     void anUnknownMethodIsAnError() throws Exception {
         List<JsonNode> r = talk("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"resources/list\"}");
         assertEquals(-32601, r.get(0).at("/error/code").asInt());
