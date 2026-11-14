@@ -60,8 +60,8 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 
 ## Current state (UPDATE EACH SESSION)
 - Date: 2026-11-14
-- Done and merged to `main`: Phase 5 (cleanup, guards, readiness, purge, drop-metadata; PR #54), `forge mcp` (stdio adapter, six tools, no delete), the local HTTP API in `modules/server` (PR #55, contract `docs/design/UI_API.md`). The `phase-5` tag is the owner's (not confirmed done).
-- In progress: `p6-ui` (web UI lite in `ui/`: five screens, plain neutral dark, Playwright smoke test passes locally; `modules/server` now also serves `ui/dist` via `Main --ui`). Reviews (ui-reviewer, scope-guard) and the PR are the next steps.
-- Not done: `p6-tui` (`modules/tui`); the Docker version of the UI smoke test; Phase 7 (packs, release).
-- Next: finish and merge `p6-ui`; then plan `p6-tui`.
-- Open: owner review of delegated safety design; Backup secret-masking incomplete; five known purge gaps and the picocli `@file` setting in docs/STATUS.md; the UI smoke test needs a Chromium (verify.sh step k runs only with `FORGE_E2E=1`).
+- Done and merged to `main`: Phase 5 (cleanup, guards, readiness, purge, drop-metadata), `forge mcp` (stdio, six tools, no delete), the local HTTP API (`modules/server`, contract `docs/design/UI_API.md`), the web UI lite (`ui/`, PR #56). The `phase-5` tag is the owner's (not confirmed).
+- In progress: `p6-tui` (`modules/tui`, a terminal menu over the local API; 6 tests pass; PR open, not merged).
+- Not done: README and release work (README reconcile, docs set, no-network test, events pack, packaging, hygiene scan, version 1.0.0-rc1); the Docker version of the UI smoke test; Run, Verify and Go-live have not been exercised with real data (SQLite and MySQL get no table settings from the UI connect; Postgres needs Docker).
+- Next: owner merges `p6-tui`; then `verify.sh` once on `main`; then the release-lite task (stacked branches, never merge, no tag).
+- Open: owner review of delegated safety design; Backup secret-masking incomplete; five known purge gaps and the picocli `@file` setting in docs/STATUS.md; `npm audit` reports 4 vulnerabilities in the UI dev tooling (not looked at); the web UI shows "This data is partial" even after a failed run.

@@ -327,3 +327,10 @@
 - Decisions: Tailwind, shadcn, Monaco, Recharts, TanStack Table left out (not needed for five screens); the dist allowlist in the URL check covers three library strings (w3.org, reactjs.org, reactflow.dev: text and an attribution link we hide, never requested); the smoke test takes an optional `FORGE_E2E_BROWSER` binary (Playwright 1.49.1 wants Chromium 1148; a newer one was installed); Playwright and Vite are pinned to exact versions.
 - Open: `anti-slop-checklist` and the reference tools in `ui/design/BRIEF.md` are still TODO from the owner; prod is refused at connect, so the red banner shows only while the prod label is selected.
 
+## 2026-11-14 terminal UI (branch p6-tui, from main; step 3 of UI + TUI)
+- Done: `modules/tui` (plain Java, no new dependency): `Tui` (numbered menu, starts the local API in-process on 127.0.0.1 and calls it with the session token), `Api` (the six routes only), `Screens`, `Render` (pure text functions: schema with self references and cycles, Verify in three separate lists, no lists when no rules came back, go-live with the command as text it never runs). Gate test `TuiTest` (6 cases) was RED (cannot find symbol), now green. A scripted run against a SQLite demo file shows the schema and the known SQLite error on Run and Go-live. `gradlew :tui:run` needed `standardInput` set or the menu quit at once (fixed in `modules/tui/build.gradle.kts`).
+- Not done: `verify.sh` full run (the pre-push hook runs it); no Postgres run (needs Docker); real terminal colours and widths not looked at; Windows not tried; no `forge tui` command.
+- Next: owner merges; then the release-lite task.
+- Decisions: the TUI starts its own server in-process instead of needing a separate one; plain line-based menu (no raw keys, no JLine); `:tui:run` passes stdin through.
+- Open: the web UI's "This data is partial" line still shows after a failed run (the TUI does not do this).
+
