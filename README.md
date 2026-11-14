@@ -41,7 +41,7 @@ forge cleanup --dry-run
 
 `init` reads the schema and drafts `forge.yml` and `forge.schema.json`. `generate` loads rows and records a manifest of what it created. `verify` runs the rules of `forge.yml` in the database. `drift` compares the live schema with the saved snapshot. `cleanup --dry-run` lists what a cleanup would remove and changes nothing.
 
-A freshly drafted `forge.yml` has **no business rules**, so `generate` prints "No rules in forge.yml: nothing to verify". The data is structurally valid (types, keys, NOT NULL, unique, check, foreign keys). Add rules (see [Business rules](#business-rules)) to make `verify` mean something. The output of these five commands, as run in a clean container against Postgres 16, is in [docs/QUICKSTART.md](docs/QUICKSTART.md) and is checked by `scripts/docs-test.sh`.
+A freshly drafted `forge.yml` has **no business rules** (it contains `rules: []`), so `generate` prints "No rules in forge.yml: nothing to verify". The data is structurally valid (types, keys, NOT NULL, unique, check, foreign keys). Replace `rules: []` with your rules (see [Business rules](#business-rules)) to make `verify` mean something. The output of these five commands, as run in a clean container against Postgres 16, is in [docs/QUICKSTART.md](docs/QUICKSTART.md) and is checked by `scripts/docs-test.sh`.
 
 ![Quick start](docs/img/quickstart.gif)
 
@@ -111,10 +111,10 @@ State machines (`pending` to `paid` to `refunded`) with the child rows each stat
 
 ### Scenarios and edge cases
 
-Scenarios named in `forge.yml` change the mix on demand. The events example defines `default`, `event-day-rush` and `refund-heavy`. Edge-case mode adds NULLs, maximum lengths, Unicode, case-only duplicates, daylight-saving times, leap days and injection-like strings.
+Scenarios named in `forge.yml` change the row counts and the mix on demand. The events example (`golden/events-merch/phase3.forge.yml`) defines `default` and `sale_rush` (twice the orders and a different status mix). Edge-case mode (`--edge`) adds unusual values; the CLI lists NULLs, maximum lengths, Unicode, case-only duplicates, leap days, daylight-saving times and injection-like strings as its aims. A run on the events example produced a Unicode event name and case-only duplicate emails; the others have not been checked here.
 
 ```bash
-forge generate -s event-day-rush
+forge generate -s sale_rush
 forge generate --edge
 ```
 
@@ -136,7 +136,7 @@ Every rule ends in one of these states. `forge verify` never shows a rule it cou
 
 ### Drift check for CI
 
-Compares the live schema with the saved snapshot `forge.schema.json`, and the spec with the live schema. Each change is graded error, warning or info by one test: an error means `forge generate` would fail or lie right now. A new table is always an error. Exit code 0 means no drift at the threshold (`--fail-on`, default `error`), 1 means drift at or above it, 2 means the check could not run. `forge.yml` is never rewritten; the only file `drift` writes is the snapshot, and only with `--accept`.
+Compares the live schema with the saved snapshot `forge.schema.json`, and the spec with the live schema. Each change is graded error, warning or info by one test: an error means `forge generate` would fail or lie right now. In a run here, a new nullable column and a new table were both warnings (exit 0), and `--fail-on warning` made the same drift exit 1. Exit code 0 means no drift at the threshold (`--fail-on`, default `error`), 1 means drift at or above it, 2 means the check could not run. `forge.yml` is never rewritten; the only file `drift` writes is the snapshot, and only with `--accept`.
 
 ![Drift check](docs/img/drift.gif)
 
