@@ -18,16 +18,23 @@ bash scripts/test-package.sh   # the gate test: jar builds, launcher runs, versi
 
 | What | Value |
 |---|---|
-| `lib/forge.jar` | 40,102,914 bytes |
-| `forge-1.0.0-rc1.tar.gz` | 38,322,923 bytes |
-| `forge-1.0.0-rc1-macos-arm64.tar.gz` | 70,916,854 bytes (the `runtime/` folder is 49 MB unpacked) |
+| `lib/forge.jar` | 40,102,951 bytes |
+| `forge-1.0.0-rc1.tar.gz` | 38,327,447 bytes |
+| `forge-1.0.0-rc1-macos-arm64.tar.gz` | 70,922,153 bytes (the `runtime/` folder is 49 MB unpacked) |
 | `forge --help` start time | 0.12 s (jar package), 0.14 s (jlink bundle); median of 5 runs |
 
 Tried from a clean folder: `forge --version` prints `forge 1.0.0-rc1` from both packages; `forge mcp` answers `initialize` and lists its six tools; from the jlink bundle, `forge generate` and `forge verify` ran on the golden events schema in a SQLite database (`result: 0 FAIL, 0 ERROR`, exit 0). Not tried: Postgres or MySQL from the packages (the test suite covers both from the source tree), Windows, Linux.
 
 ## Checksums
 
-Recorded on the final build of this round (see the last pull request); `dist/SHA256SUMS` is written by `package.sh`. A different build of the same source gives different checksums (the archives carry file times), so always compare against the `SHA256SUMS` that comes with the files you upload.
+SHA-256 of the two files built from the tip of this round (the same lines are in `dist/SHA256SUMS`, which `package.sh` writes next to the files):
+
+```
+a2f85196356bfecf8bea115c74b3d0a0beb513a7b301cd22a4db4025c849eb98  forge-1.0.0-rc1.tar.gz
+e1d7b5d3049e59b6499fc8a619321b3defa944c0efb3980e2ab1708866b80a38  forge-1.0.0-rc1-macos-arm64.tar.gz
+```
+
+Check a download with `shasum -a 256 -c SHA256SUMS`. A different build of the same source gives different checksums (the archives carry file times), so these are valid only for the exact files built here. If you rebuild, publish the new `SHA256SUMS` with the new files. The archives contain the README without its `docs/img` pictures.
 
 ## Version
 

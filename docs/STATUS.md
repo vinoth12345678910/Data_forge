@@ -356,5 +356,5 @@
 - Not recorded (and said so in DEMO_GIFS.md): `junit.gif` (no real test of the extension), a schema graph printout, a Verify screen with three states in the web UI, an AI agent using MCP. The `cleanup` GIF uses a stand-in `backup_cmd`; the `mcp` GIF is a scripted client, not an agent.
 - Playwright 1.49.1's own video recorder needs an ffmpeg build that is not installed, so the recorder uses screenshots and the system ffmpeg instead (deterministic). It runs the browser through `FORGE_E2E_BROWSER`.
 - Next: one push of the three branches (the hook runs verify.sh once), three PRs, no merge.
-- Open: GIF frames were looked at for 5 of 15 (hero, ui, tui, mcp and cleanup partly); the rest were checked by their captured text only. The checksums in RELEASE.md are not final yet.
+- Open: GIF frames were looked at for 5 of 15 (hero, ui, tui, mcp and cleanup partly); the rest were checked by their captured text only. The checksums in RELEASE.md are for the final build of this round (rebuild after any further change).
 
