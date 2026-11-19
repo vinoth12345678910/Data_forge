@@ -33,7 +33,10 @@ test.beforeAll(async () => {
         resolve(m[1]);
       }
     });
-    server.on('exit', () => reject(new Error('server exited early: ' + buf)));
+    server.stderr?.on('data', (d: Buffer) => {
+      buf += d.toString();
+    });
+    server.on('exit', (code) => reject(new Error(`server exited early (code ${code}): ` + buf)));
   });
 });
 

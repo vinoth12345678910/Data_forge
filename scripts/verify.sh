@@ -247,9 +247,23 @@ elif (cd ui && npm run build && npm run check); then
 else
   fail "j. web UI"
 fi
-if [ "${FORGE_E2E:-0}" != "1" ]; then
-  record "SKIPPED" "k. UI smoke test (set FORGE_E2E=1; needs Playwright's Chromium or FORGE_E2E_BROWSER)"
-elif (cd ui && npx playwright test); then
+# Step k runs by itself when the browser that matches the pinned Playwright is installed (or FORGE_E2E_BROWSER points at one).
+# Otherwise it is SKIPPED, and a skip is never PASS: the UI gate is not proven.
+e2e_ok=0
+if [ -d ui/node_modules ] && command -v node >/dev/null 2>&1; then
+  # Probe by launching the very browser the smoke test launches (same executable rule as ui/playwright.config.ts). A file
+  # that exists but cannot start (a half-finished download) counts as not installed.
+  if (cd ui && node -e "
+    const { chromium } = require('@playwright/test');
+    const exe = process.env.FORGE_E2E_BROWSER || undefined;
+    chromium.launch({ headless: true, executablePath: exe }).then((b) => b.close()).then(() => process.exit(0), () => process.exit(1));
+  " >/dev/null 2>&1); then e2e_ok=1; fi
+fi
+if [ "${FORGE_E2E:-}" = "0" ]; then
+  record "SKIPPED" "k. UI smoke test: SKIPPED: UI gate not proven (FORGE_E2E=0)"
+elif [ "$e2e_ok" != "1" ]; then
+  record "SKIPPED" "k. UI smoke test: SKIPPED: UI gate not proven (the Chromium that matches the pinned Playwright is missing or will not launch: run 'cd ui && npx playwright install chromium', or set FORGE_E2E_BROWSER)"
+elif (cd ui && FORGE_E2E=1 npx playwright test); then
   record "PASS   " "k. UI smoke test (Playwright, real local server)"
 else
   fail "k. UI smoke test"
