@@ -371,11 +371,14 @@ final class RuleCheck {
         for (RuleExpr a : f.args()) {
             args.add(walk(a, c));
         }
+        if (f.name().equals("round")) {
+            return round(f, args);
+        }
         int min = switch (f.name()) {
             case "coalesce" -> 1;
             case "least", "greatest" -> 2;
             case "abs" -> 1;
-            default -> throw new Problem(f.pos(), "unknown function " + f.name() + " (known: abs, coalesce, greatest, least)");
+            default -> throw new Problem(f.pos(), "unknown function " + f.name() + " (known: abs, coalesce, greatest, least, round)");
         };
         if (args.size() < min || (f.name().equals("abs") && args.size() != 1)) {
             throw new Problem(f.pos(), f.name() + " needs " + (f.name().equals("abs") ? "one value" : "at least " + min + " values"));
@@ -389,6 +392,28 @@ final class RuleCheck {
             es.add(a.e());
         }
         return new R(new RuleExpr.Fn(f.pos(), f.name(), es), t);
+    }
+
+    /**
+     * round(expr, n): half away from zero, n a literal 0 to 30 (30 is the most places MySQL DECIMAL holds), the value a number.
+     * A float column is refused: Postgres and MySQL round a float differently, and only exact numbers round the same everywhere.
+     */
+    private R round(RuleExpr.Fn f, List<R> args) {
+        if (args.size() != 2) {
+            throw new Problem(f.pos(), "round needs two values: round(expr, n)");
+        }
+        R v = args.get(0);
+        if (!(args.get(1).e() instanceof RuleExpr.Num n)) {
+            throw new Problem(pos(args.get(1).e()), "round needs a whole-number literal for the decimal places, for example round(x, 2); a column or a calculation is not allowed");
+        }
+        if (n.v() < 0 || n.v() > 30) {
+            throw new Problem(pos(n), "round to " + n.v() + " decimal places is not allowed: n must be 0 to 30");
+        }
+        if (v.t() == null || !isNum(v.t())) {
+            Column col = v.e() instanceof RuleExpr.Ref r ? g.table(r.table()).column(r.column()) : null;
+            throw new Problem(pos(v.e()), "round needs a number; " + describe(v.e()) + " is " + (v.t() == null ? "null" : typeName(v.t(), col)));
+        }
+        return new R(new RuleExpr.Fn(f.pos(), f.name(), List.of(v.e(), n)), T.NUM);
     }
 
     private R agg(RuleExpr.Agg a, Ctx c) {

@@ -156,7 +156,8 @@ final class Ruled {
             case RuleExpr.Bin x -> hasDec(x.l()) || hasDec(x.r());
             case RuleExpr.Not x -> hasDec(x.e());
             case RuleExpr.Case x -> x.thens().stream().anyMatch(Ruled::hasDec) || hasDec(x.other());
-            case RuleExpr.Fn x -> x.args().stream().anyMatch(Ruled::hasDec);
+            // round always gives an exact decimal, even from a whole number: its scale is the n the rule wrote
+            case RuleExpr.Fn x -> x.name().equals("round") || x.args().stream().anyMatch(Ruled::hasDec);
             case RuleExpr.Agg x -> hasDec(x.arg());
             default -> false;
         };
@@ -190,6 +191,10 @@ final class Ruled {
                 yield m;
             }
             case RuleExpr.Fn x -> {
+                if (x.name().equals("round")) {
+                    scaleOf(x.args().get(0), r);   // still refuses a numeric column with no scale
+                    yield (int) ((RuleExpr.Num) x.args().get(1)).v();
+                }
                 if (hasDec(x) && !x.name().equals("abs") && !x.name().equals("coalesce")) {
                     throw new GenError((r == null ? "A rule" : "Rule " + r.name()) + ": " + x.name() + " on a decimal is not supported yet.");
                 }
@@ -859,7 +864,14 @@ final class Ruled {
                 }
                 return args.get(0) == null ? null : (Object) Math.abs((Long) args.get(0));
             }
-            default -> {
+            case "round" -> {
+                // Half away from zero (HALF_UP on BigDecimal is that for negatives too), exact, never implicit. n is a literal 0 to 30.
+                if (args.get(0) == null) {
+                    return null;
+                }
+                return dec(args.get(0)).setScale((int) (long) (Long) args.get(1), RoundingMode.HALF_UP);
+            }
+            case "least", "greatest" -> {
                 Long best = null;
                 for (Object a : args) {
                     if (a == null) {
@@ -870,6 +882,7 @@ final class Ruled {
                 }
                 return best;
             }
+            default -> throw new GenError("A rule calls " + f.name() + ", which generation does not know.");
         }
     }
 

@@ -394,3 +394,10 @@
 - Not done: Chinook and the Supabase run (owner), clustering in the UI, a grouped-join rewrite of verify (owner's verify design), 50M and 100M row runs, verify.sh for this wave (see the final report).
 - Next: owner answers the open list (round(expr, n), grouped-join verify, README limits, Wave 3 start, Chinook file, Supabase variable, browser for step k).
 - Open: step k (UI smoke) still SKIPPED on this machine.
+
+## 2026-11-19 A3 follow-up: round(expr, n) (branch a3-round; stacked on w2-housekeeping)
+- Done: explicit `round(expr, n)`, half away from zero, `n` a literal 0 to 30, never implicit; checker, SQL per dialect (Postgres casts to numeric), generator (`Ruled`), SQLite and float refused. Edge-value table measured on Postgres 16.15 and MySQL 8.4.3: every row agrees with BigDecimal HALF_UP (only difference: MySQL does not pad when n is above the scale). Gates: `RoundRuleTest`, `DecimalRulesTest`, `RoundEdgeContainerTest` (7 tests: table, every x with every n as rules, 2,000 generated rows per database with a mutation caught). `./gradlew test` and the full `containerTest` pass; determinism-auditor and scope-guard (fresh agents) found nothing.
+- Not done: negative `n`, decimal `/` and `%` (so `round(a * b / c, n)` is still not writable), decimal literals (G6), round in SQL check constraints. verify.sh not run on this tip yet.
+- Next: feature 2, grouped-join verify (branch a4-grouped-verify).
+- Decisions: `n` limited to 0 to 30 (MySQL DECIMAL limit); a float argument is refused because Postgres and MySQL round floats differently.
+- Open (rule-language question for the owner, does not block): give decimal `/` a defined scale, so a rounded division can be written.

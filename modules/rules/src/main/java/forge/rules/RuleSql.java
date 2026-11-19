@@ -163,6 +163,10 @@ public final class RuleSql {
                 case RuleExpr.Fn f -> {
                     List<String> args = new ArrayList<>();
                     f.args().forEach(a -> args.add(expr(a)));
+                    if (f.name().equals("round")) {
+                        // the checker guarantees two arguments and an integer literal 0 to 30 as the second
+                        yield d.round(args.get(0), ((RuleExpr.Num) f.args().get(1)).v());
+                    }
                     yield f.name().equals("least") || f.name().equals("greatest") ? d.pick(f.name(), args)
                         : d.fn(f.name()) + "(" + String.join(", ", args) + ")";
                 }

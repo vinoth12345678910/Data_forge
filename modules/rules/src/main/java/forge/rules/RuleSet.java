@@ -27,7 +27,7 @@ public final class RuleSet {
             if (usesDecimal(r.expr()) || usesDecimal(r.when()) || (r.limit() != null && usesDecimal(r.limit().where()))) {
                 throw new RuleError(r.index(), r.name(), r.kind().name().toLowerCase(Locale.ROOT), 1, 1, r.text(),
                     database + " has no exact decimal arithmetic (a numeric column is stored as a binary float), so a rule over a decimal"
-                        + " column cannot be generated or verified exactly. Use Postgres or MySQL for decimal rules, or keep the money in a whole number of minor units.");
+                        + " column cannot be generated or verified exactly. round() is refused too: SQLite's round() returns a binary float, even for a whole number. Use Postgres or MySQL for decimal rules, or keep the money in a whole number of minor units.");
             }
         }
     }
@@ -41,7 +41,8 @@ public final class RuleSet {
             case RuleExpr.IsNull x -> usesDecimal(x.e());
             case RuleExpr.In x -> usesDecimal(x.e()) || x.items().stream().anyMatch(RuleSet::usesDecimal);
             case RuleExpr.Case x -> x.whens().stream().anyMatch(RuleSet::usesDecimal) || x.thens().stream().anyMatch(RuleSet::usesDecimal) || usesDecimal(x.other());
-            case RuleExpr.Fn x -> x.args().stream().anyMatch(RuleSet::usesDecimal);
+            // round gives an exact decimal even from a whole number, and SQLite's round() returns a binary float, so any round is refused
+            case RuleExpr.Fn x -> x.name().equals("round") || x.args().stream().anyMatch(RuleSet::usesDecimal);
             case RuleExpr.Agg x -> usesDecimal(x.arg()) || usesDecimal(x.where());
             default -> false;
         };
