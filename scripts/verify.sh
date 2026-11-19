@@ -195,6 +195,12 @@ if [ -n "$frozen2" ] && git cat-file -e "$frozen2^{commit}" 2>/dev/null && ! git
   git diff --stat "$frozen2" -- modules/testkit/src/test/java/forge/safety2
   fail "i2. safety2 tests (frozen tests were edited after $frozen2)"
 fi
+# i3. the B1 safety tests (forge.safety3), frozen at the commit in scripts/safety3-frozen.txt; the builder may not change them.
+frozen3="$(head -n1 scripts/safety3-frozen.txt 2>/dev/null || true)"
+if [ -n "$frozen3" ] && git cat-file -e "$frozen3^{commit}" 2>/dev/null && ! git diff --quiet "$frozen3" -- modules/testkit/src/test/java/forge/safety3; then
+  git diff --stat "$frozen3" -- modules/testkit/src/test/java/forge/safety3
+  fail "i3. safety3 tests (frozen tests were edited after $frozen3)"
+fi
 echo ">> i. safety suite (frozen tests)"
 frozen="$(head -n1 scripts/safety-frozen.txt 2>/dev/null || true)"
 if [ -z "$frozen" ] || ! git cat-file -e "$frozen^{commit}" 2>/dev/null; then
