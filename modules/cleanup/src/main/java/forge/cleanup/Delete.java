@@ -362,7 +362,9 @@ final class Delete {
         out.add(t.name());
         if (x.conf().cleanup().allowTriggers().contains(t.name())) {
             for (Table o : x.g().tables()) {
-                out.add(o.name());
+                if (!o.external()) {
+                    out.add(o.name());
+                }
             }
         } else {
             out.addAll(reach(x, t.name(), true));

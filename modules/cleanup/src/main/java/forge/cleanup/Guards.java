@@ -39,7 +39,7 @@ final class Guards {
         try (Connection ro = q.db().openReadOnly()) {
             Dialect d = Dialect.of(ro);
             Sql.session(ro, d);
-            return new Guards(new Ctx(ro, q.db(), d, q.graph(), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId()), q).go();
+            return new Guards(new Ctx(ro, q.db(), d, Relations.graph(q, ro, d), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId()), q).go();
         }
     }
 
@@ -371,6 +371,9 @@ final class Guards {
         }
         Map<String, Long> out = new java.util.TreeMap<>();
         for (forge.core.Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             if (!mine.contains(t.name())) {
                 out.put(t.name(), Sql.count(x.ro(), "select count(*) from " + x.tbl(t.name())));
             }

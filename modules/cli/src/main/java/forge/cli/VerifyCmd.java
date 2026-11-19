@@ -49,7 +49,10 @@ final class VerifyCmd implements Callable<Integer> {
             e.typeWarnings(live.typeWarnings);
             e.out.println("forge verify  env " + env);
             try (Connection c = forge.rules.ReadOnly.wrap(live.db.openReadOnly())) {
-                Report rep = merge(Verifier.run(c, live.graph, live.verifyRules, sample, 120), live);
+                Report base = merge(Verifier.run(c, live.graph, live.verifyRules, sample, 120), live);
+                java.util.List<RuleResult> all = new java.util.ArrayList<>(base.results());
+                all.addAll(forge.rules.RelationCheck.run(c, live.dbGraph, live.conf.relations(), sample));
+                Report rep = new Report(all);
                 e.out.print(rep.text(live.conf.connection().url()));
                 if (expected != null) {
                     listOthers(e.out, live);

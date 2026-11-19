@@ -22,7 +22,11 @@ public record Rule(
 
     /**
      * A capacity limit: the child table's foreign key points at the subject; childColumn is the summed
-     * column (null for a count); cap is the subject's capacity column.
+     * column (null for a count); cap is the subject's capacity column; where is an optional filter on the child rows (null: all children count).
      */
-    public record Limit(String child, Fk fk, String childColumn, String cap) {}
+    public record Limit(String child, Fk fk, String childColumn, String cap, RuleExpr where) {
+        public Limit(String child, Fk fk, String childColumn, String cap) {
+            this(child, fk, childColumn, cap, null);
+        }
+    }
 }

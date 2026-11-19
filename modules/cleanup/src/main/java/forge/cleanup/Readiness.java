@@ -58,7 +58,7 @@ final class Readiness {
         try (Connection ro = q.db().openReadOnly()) {
             Dialect d = Dialect.of(ro);
             Sql.session(ro, d);
-            Ctx x = new Ctx(ro, q.db(), d, q.graph(), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId());
+            Ctx x = new Ctx(ro, q.db(), d, Relations.graph(q, ro, d), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId());
             return new Readiness(x, q).go();
         }
     }
@@ -127,6 +127,9 @@ final class Readiness {
         if (!pre.isEmpty()) {
             List<String> countErrors = new ArrayList<>();
             for (Table t : x.g().tables()) {
+                if (t.external()) {
+                    continue;
+                }
                 Long expected = pre.get(t.name());
                 if (expected == null) continue;
                 long got = Sql.count(x.ro(), "select count(*) from " + x.tbl(t.name()));
@@ -149,6 +152,9 @@ final class Readiness {
         // Check 3: test_patterns_remain
         List<String> patternErrors = new ArrayList<>();
         for (Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             for (Column c : t.columns()) {
                 String type = c.type().name();
                 if (c.type().dims() != 0 || !(type.equals("text") || type.equals("varchar") || type.equals("bpchar"))) {
@@ -324,7 +330,7 @@ final class Readiness {
         for (Table child : x.g().tables()) {
             for (Fk fk : child.fks()) {
                 Table parent = x.g().table(fk.refTable());
-                if (parent == null) continue;
+                if (parent == null || parent.external()) continue;
                 List<String> conds = new ArrayList<>();
                 for (int i = 0; i < fk.columns().size(); i++) {
                     conds.add("c." + x.d().q(fk.columns().get(i)) + " is not null");
@@ -371,6 +377,9 @@ final class Readiness {
     private List<String> checkSeqPg() throws SQLException {
         List<String> errs = new ArrayList<>();
         for (Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             for (Column col : t.columns()) {
                 String seq;
                 try (PreparedStatement ps = x.ro().prepareStatement("select pg_get_serial_sequence(?, ?)")) {
@@ -408,6 +417,9 @@ final class Readiness {
             st.execute("set session information_schema_stats_expiry = 0");
         }
         for (Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             String col;
             try (PreparedStatement ps = x.ro().prepareStatement(
                 "select column_name from information_schema.columns"
@@ -446,6 +458,9 @@ final class Readiness {
         }
         List<String> errs = new ArrayList<>();
         for (Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             String col = t.pk().isEmpty() ? null : t.pk().get(0);
             Long max = col == null ? null : seqMax(x.tbl(t.name()), col);
             long expected = max == null ? 1 : max + 1;

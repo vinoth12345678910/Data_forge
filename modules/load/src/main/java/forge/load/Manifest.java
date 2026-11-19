@@ -12,13 +12,52 @@ import java.util.function.Consumer;
 public record Manifest(
     String runId, long seed, String env, String toolVersion, String configSha, String schemaSha, String clock,
     String loadedAt, List<Tbl> tables, List<Break> breaks, List<Seq> sequences, int format, List<Keep> keep,
-    Map<String, Long> pre) {
+    Map<String, Long> pre, List<Rel> relations) {
+
+    /** A relation declared in forge.yml (relations:) at load time: cleanup protects by this copy, never by the current forge.yml. */
+    public record Rel(String table, List<String> columns, String refTable, List<String> refColumns) {
+
+        /** The JSON text stored in the manifest: {"table":..,"columns":[..],"ref_table":..,"ref_columns":[..]}. */
+        public String json() {
+            try {
+                var m = new java.util.LinkedHashMap<String, Object>();
+                m.put("table", table);
+                m.put("columns", columns);
+                m.put("ref_table", refTable);
+                m.put("ref_columns", refColumns);
+                return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(m);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        public static Rel parse(String json) {
+            try {
+                var n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+                List<String> cols = new java.util.ArrayList<>();
+                n.get("columns").forEach(x -> cols.add(x.asText()));
+                List<String> refs = new java.util.ArrayList<>();
+                n.get("ref_columns").forEach(x -> refs.add(x.asText()));
+                return new Rel(n.get("table").asText(), cols, n.get("ref_table").asText(), refs);
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    /** A manifest with no declared relations. */
+    public Manifest(
+        String runId, long seed, String env, String toolVersion, String configSha, String schemaSha, String clock,
+        String loadedAt, List<Tbl> tables, List<Break> breaks, List<Seq> sequences, int format, List<Keep> keep,
+        Map<String, Long> pre) {
+        this(runId, seed, env, toolVersion, configSha, schemaSha, clock, loadedAt, tables, breaks, sequences, format, keep, pre, List.of());
+    }
 
     /** A format 1 manifest: no fingerprints, no keep, no pre counts. */
     public Manifest(
         String runId, long seed, String env, String toolVersion, String configSha, String schemaSha, String clock,
         String loadedAt, List<Tbl> tables, List<Break> breaks, List<Seq> sequences) {
-        this(runId, seed, env, toolVersion, configSha, schemaSha, clock, loadedAt, tables, breaks, sequences, 1, List.of(), Map.of());
+        this(runId, seed, env, toolVersion, configSha, schemaSha, clock, loadedAt, tables, breaks, sequences, 1, List.of(), Map.of(), List.of());
     }
 
     /** Calls the sink with each key as JSON array text, in row order. */

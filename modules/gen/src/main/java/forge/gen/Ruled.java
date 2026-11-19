@@ -6,6 +6,8 @@ import forge.core.RuleExpr;
 import forge.core.RuleKind;
 import forge.core.SchemaGraph;
 import forge.core.Table;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +30,7 @@ final class Ruled {
     /** A check that pins a column's range from the other side of a comparison. */
     private record Clamp(Rule rule, String column, String op, RuleExpr bound, long lo, long hi) {}
 
-    private record Limit(Rule rule, String child, Fk fk, String childCol, String parent, String cap) {}
+    private record Limit(Rule rule, String child, Fk fk, String childCol, String parent, String cap, RuleExpr where) {}
 
     private record Step(String column, Rule derive, List<Clamp> clamps, List<Limit> asChild, List<Limit> asCap) {}
 
@@ -57,11 +59,12 @@ final class Ruled {
                 case VERIFY -> { }
                 case DERIVE -> {
                     RowGen.Col k = gen.col(r.subject(), r.target());
-                    if (k == null || k.dom == null || !k.dom.kind.equals("int")) {
+                    if (k == null || k.dom == null || !(k.dom.kind.equals("int") || k.dom.kind.equals("dec"))) {
                         throw new GenError("Rule " + r.name() + ": " + r.subject() + "." + r.target()
-                            + " must be a generated whole-number column to be derived.");
+                            + " must be a generated whole-number or decimal column to be derived.");
                     }
                     plainColumn(r, k);
+                    checkScale(r, k);
                     if (gen.info(r.subject()).derived.containsKey(r.target())) {
                         throw new GenError("Rule " + r.name() + ": " + r.subject() + "." + r.target()
                             + " is already computed by a check constraint of the table.");
@@ -80,7 +83,7 @@ final class Ruled {
                 }
                 default -> {
                     Rule.Limit l = r.limit();
-                    Limit ls = new Limit(r, l.child(), l.fk(), l.childColumn(), r.subject(), l.cap());
+                    Limit ls = new Limit(r, l.child(), l.fk(), l.childColumn(), r.subject(), l.cap(), l.where());
                     if (r.when() != null) {
                         throw new GenError("Rule " + r.name() + ": a when on a limit is not supported by generation yet.");
                     }
@@ -128,6 +131,11 @@ final class Ruled {
                 }
             }
         }
+        for (Map<String, List<Limit>> byCap : asCap.values()) {
+            for (List<Limit> ls : byCap.values()) {
+                ls.forEach(this::checkFilter);
+            }
+        }
         List<String> tables = new ArrayList<>();
         for (Table t : g.tables()) {
             if (gen.info(t.name()).ruled) {
@@ -139,12 +147,123 @@ final class Ruled {
         }
     }
 
+    // ---- decimals: exact BigDecimal values, scale known from the column types, no implicit rounding
+
+    private static boolean hasDec(RuleExpr e) {
+        return switch (e) {
+            case null -> false;
+            case RuleExpr.Ref x -> x.type() == RuleExpr.T.NUM;
+            case RuleExpr.Bin x -> hasDec(x.l()) || hasDec(x.r());
+            case RuleExpr.Not x -> hasDec(x.e());
+            case RuleExpr.Case x -> x.thens().stream().anyMatch(Ruled::hasDec) || hasDec(x.other());
+            case RuleExpr.Fn x -> x.args().stream().anyMatch(Ruled::hasDec);
+            case RuleExpr.Agg x -> hasDec(x.arg());
+            default -> false;
+        };
+    }
+
+    /** The number of decimal places an expression's value has. Columns give their scale; + and - take the larger, * adds. */
+    private int scaleOf(RuleExpr e, Rule r) {
+        return switch (e) {
+            case null -> 0;
+            case RuleExpr.Ref x -> {
+                if (x.type() != RuleExpr.T.NUM) {
+                    yield 0;
+                }
+                Integer sc = graph.table(x.table()).column(x.column()).type().scale();
+                if (sc == null) {
+                    throw new GenError((r == null ? "A rule" : "Rule " + r.name()) + ": " + x.table() + "." + x.column() + " is a numeric column with no scale, so its"
+                        + " exact decimal places are unknown. Give the column a scale, for example numeric(12,2).");
+                }
+                yield sc;
+            }
+            case RuleExpr.Bin x -> {
+                int l = scaleOf(x.l(), r);
+                int q = scaleOf(x.r(), r);
+                yield x.op().equals("*") ? l + q : Math.max(l, q);
+            }
+            case RuleExpr.Case x -> {
+                int m = scaleOf(x.other(), r);
+                for (RuleExpr t : x.thens()) {
+                    m = Math.max(m, scaleOf(t, r));
+                }
+                yield m;
+            }
+            case RuleExpr.Fn x -> {
+                if (hasDec(x) && !x.name().equals("abs") && !x.name().equals("coalesce")) {
+                    throw new GenError((r == null ? "A rule" : "Rule " + r.name()) + ": " + x.name() + " on a decimal is not supported yet.");
+                }
+                int m = 0;
+                for (RuleExpr a : x.args()) {
+                    m = Math.max(m, scaleOf(a, r));
+                }
+                yield m;
+            }
+            case RuleExpr.Agg x -> x.fn().equals("count") ? 0 : scaleOf(x.arg(), r);
+            default -> 0;
+        };
+    }
+
+    /** A derived column must be able to hold the expression exactly: more decimal places than the column has would need rounding. */
+    private void checkScale(Rule r, RowGen.Col k) {
+        if (!hasDec(r.expr())) {
+            return;
+        }
+        int have = scaleOf(r.expr(), r);
+        Integer want = k.col.type().scale();
+        int target = k.dom.kind.equals("dec") ? (want == null ? 0 : want) : 0;
+        if (have > target) {
+            throw new GenError("Rule " + r.name() + ": the expression has " + have + " decimal places but " + r.subject() + "." + r.target()
+                + " holds " + target + ", so the value would need rounding, and Data Forge never rounds implicitly. Make the column scale"
+                + " at least " + have + ", or change the expression to have at most " + target + " decimal places.");
+        }
+    }
+
+    private static BigDecimal dec(Object o) {
+        return o instanceof BigDecimal b ? b : BigDecimal.valueOf((Long) o);
+    }
+
+    private int aggScale(RuleExpr.Agg a) {
+        return a.fn().equals("count") || a.arg() == null || !hasDec(a.arg()) ? 0 : scaleOf(a.arg(), null);
+    }
+
     /** A ruled column must be an ordinary drawn column: not a key, sequence, shuffled or tied to another column. */
     private void plainColumn(Rule r, RowGen.Col k) {
         if (k.fk != null || k.sequence || k.perm != null || k.base != null || k.group != null) {
             throw new GenError("Rule " + r.name() + ": " + k.table.name() + "." + k.col.name()
                 + " is a key, a sequence or already tied to another column by a check, so a rule cannot set it.");
         }
+    }
+
+    /**
+     * A limit with a where counts only the children the where is true for. The where is read from the plain drawn value of its
+     * columns, before any rule shapes the row, so a column a rule computes, limits or redraws cannot be read (it would depend on
+     * the limit it filters).
+     */
+    private void checkFilter(Limit l) {
+        if (l.where() == null) {
+            return;
+        }
+        RowGen.Info ci = gen.info(l.child());
+        TreeSet<String> cols = new TreeSet<>();
+        own(l.where(), l.child(), cols);
+        for (String c : cols) {
+            RowGen.Col k = gen.col(l.child(), c);
+            if (k == null || k.fk != null || ci.ruledCols.contains(c)) {
+                throw new GenError("Rule " + l.rule().name() + ": the where reads " + l.child() + "." + c + ", which depends on a rule"
+                    + " (or is a key), so it may depend on the limit it filters. A where may read only plain columns that no rule"
+                    + " computes, limits or constrains.");
+            }
+        }
+        if (!ci.evals.isEmpty() || !ci.derived.isEmpty() || checks.containsKey(l.child())) {
+            throw new GenError("Rule " + l.rule().name() + ": a where on a limit is not supported while " + l.child()
+                + " has check rules or checks that redraw its rows (the filtered column could change after it is counted).");
+        }
+    }
+
+    /** True when the child row counts against the limit: no where, or the where is true. */
+    private boolean counted(Limit l, long row) {
+        return l.where() == null || Boolean.TRUE.equals(eval(l.where(), new Ctx(l.child(), row, 0, null, null, null)));
     }
 
     /** Aggregates look up the child's parent row with attempt 0, so a redrawn child with a nullable key is not supported. */
@@ -167,12 +286,16 @@ final class Ruled {
         }
         switch (e) {
             case RuleExpr.Ref x -> {
-                if (x.type() == RuleExpr.T.NUM || x.type() == RuleExpr.T.OTHER) {
+                if (x.type() == RuleExpr.T.OTHER) {
                     throw new GenError("Rule " + r.name() + ": " + String.join(".", x.names())
                         + " is a decimal or special type; generation reads whole numbers, text, true/false and times only.");
                 }
             }
             case RuleExpr.Bin x -> {
+                if ((x.op().equals("/") || x.op().equals("%")) && (hasDec(x.l()) || hasDec(x.r()))) {
+                    throw new GenError("Rule " + r.name() + ": a division or remainder of a decimal needs rounding, and Data Forge never rounds"
+                        + " implicitly. Use whole numbers, multiply instead, or wait for an explicit round(expr, n).");
+                }
                 scan(x.l(), r, subject);
                 scan(x.r(), r, subject);
             }
@@ -369,6 +492,17 @@ final class Ruled {
             }
             return null;
         }
+        if (k.dom.kind.equals("dec")) {
+            BigDecimal d = dec(val).setScale(k.col.type().scale() == null ? 0 : k.col.type().scale(), RoundingMode.UNNECESSARY);
+            if (k.col.type().precision() != null && d.precision() > k.col.type().precision()) {
+                throw new GenError("Rule " + r.name() + ": " + c.table() + " row " + c.row() + " computes " + d.toPlainString()
+                    + ", which does not fit " + k.col.type().name() + "(" + k.col.type().precision() + "," + k.col.type().scale() + ") column " + k.col.name() + ".");
+            }
+            return d.toPlainString();
+        }
+        if (val instanceof BigDecimal bd) {
+            val = bd.longValueExact();
+        }
         long x = (Long) val;
         long min = switch (k.col.type().name()) {
             case "int2" -> Short.MIN_VALUE;
@@ -460,7 +594,7 @@ final class Ruled {
                 continue;
             }
             Long cap = capOf(l, p);
-            if (cap != null) {
+            if (cap != null && counted(l, c.row())) {
                 hi = Math.min(hi, Math.floorDiv(cap, counts(l).n()[(int) p]));
                 why += " " + l.rule().name();
             }
@@ -511,7 +645,7 @@ final class Ruled {
         long kids = gen.rows(l.child());
         for (long r = 0; r < kids; r++) {
             long p = gen.parentRow(l.child(), l.fk(), r, 0);
-            if (p < 0) {
+            if (p < 0 || !counted(l, r)) {
                 continue;
             }
             n[(int) p]++;
@@ -557,7 +691,7 @@ final class Ruled {
             if (v == null) {
                 continue;
             }
-            long x = a.fn().equals("count") ? 1 : (Long) v;
+            long x = a.fn().equals("count") ? 1 : v instanceof BigDecimal bd ? bd.setScale(aggScale(a), RoundingMode.UNNECESSARY).unscaledValue().longValueExact() : (Long) v;
             int i = (int) p;
             switch (a.fn()) {
                 case "sum", "count" -> val[i] = Math.addExact(val[i], x);
@@ -615,9 +749,10 @@ final class Ruled {
             case RuleExpr.Agg a -> {
                 long[][] arr = aggregate(a);
                 int i = (int) c.row();
+                int sc = aggScale(a);
                 yield switch (a.fn()) {
-                    case "sum", "count" -> arr[0][i];
-                    default -> arr[1][i] == 0 ? null : (Object) arr[0][i];
+                    case "sum", "count" -> sc > 0 ? (Object) BigDecimal.valueOf(arr[0][i], sc) : (Object) arr[0][i];
+                    default -> arr[1][i] == 0 ? null : sc > 0 ? (Object) BigDecimal.valueOf(arr[0][i], sc) : (Object) arr[0][i];
                 };
             }
             case RuleExpr.Bin b -> bin(b, c);
@@ -644,6 +779,9 @@ final class Ruled {
         }
         if (l == null || r == null) {
             return null;
+        }
+        if (l instanceof BigDecimal || r instanceof BigDecimal) {
+            return decBin(b.op(), dec(l), dec(r));
         }
         switch (b.op()) {
             case "+" -> {
@@ -685,6 +823,22 @@ final class Ruled {
         }
     }
 
+    /** Exact decimal arithmetic. Division never reaches here (refused when the rules are read). */
+    private static Object decBin(String op, BigDecimal l, BigDecimal r) {
+        return switch (op) {
+            case "+" -> l.add(r);
+            case "-" -> l.subtract(r);
+            case "*" -> l.multiply(r);
+            case "=" -> l.compareTo(r) == 0;
+            case "<>" -> l.compareTo(r) != 0;
+            case "<" -> l.compareTo(r) < 0;
+            case "<=" -> l.compareTo(r) <= 0;
+            case ">" -> l.compareTo(r) > 0;
+            case ">=" -> l.compareTo(r) >= 0;
+            default -> throw new GenError("A rule uses " + op + " on a decimal, which would need rounding.");
+        };
+    }
+
     private Object fn(RuleExpr.Fn f, Ctx c) {
         List<Object> args = new ArrayList<>();
         for (RuleExpr a : f.args()) {
@@ -700,6 +854,9 @@ final class Ruled {
                 return null;
             }
             case "abs" -> {
+                if (args.get(0) instanceof BigDecimal d) {
+                    return d.abs();
+                }
                 return args.get(0) == null ? null : (Object) Math.abs((Long) args.get(0));
             }
             default -> {
@@ -774,6 +931,7 @@ final class Ruled {
         }
         return switch (t) {
             case INT -> Long.parseLong(text);
+            case NUM -> new BigDecimal(text);
             case BOOL -> text.equals("t") || text.equals("true");
             case TIME -> Values.when(false, text).longValue();
             case DATE -> Values.when(true, text).longValue();

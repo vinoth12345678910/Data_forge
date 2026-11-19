@@ -26,7 +26,7 @@ final class ClassifyCmd implements Callable<Integer> {
         try {
             Live live = new Live(config);
             live.openGraph();
-            Outcome o = Cleanup.classify(new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+            Outcome o = Cleanup.classify(new Request(live.db, live.dbGraph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
                 live.manifestDir(null), allowProd, runId));
             return CleanupCmd.finish(e, "classify", o);
         } catch (SQLException | java.io.IOException | RuntimeException ex) {

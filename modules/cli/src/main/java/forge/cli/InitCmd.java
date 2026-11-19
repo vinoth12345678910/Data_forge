@@ -93,16 +93,36 @@ final class InitCmd implements Callable<Integer> {
 
         Map<String, Config.TableConf> tables = new TreeMap<>();
         for (Table t : g.tables()) {
+            if (t.external()) {
+                continue;
+            }
             tables.put(t.name(), new Config.TableConf(rows(t), false, new TreeMap<>()));
         }
         Config c = new Config(1, seed, "2025-01-01T00:00:00Z", "en_IN", conn, ddlRef, tables);
         ConfigCheck.check(c, g);
         Files.writeString(out, ConfigWriter.write(c));
 
-        e.out.println("Wrote " + out + ": " + g.tables().size() + " tables, seed " + seed + ".");
+        e.out.println("Wrote " + out + ": " + g.withoutExternal().tables().size() + " tables, seed " + seed + ".");
         java.util.List<String> notes = new java.util.ArrayList<>();
         for (Plan.Break b : plan.breaks()) {
             String note = "Cycle broken: " + b.table() + "." + b.fk() + " (" + b.how() + ")";
+            e.out.println(note);
+            notes.add(note);
+        }
+        for (Table x : g.tables()) {
+            if (!x.external()) {
+                continue;
+            }
+            StringBuilder by = new StringBuilder();
+            for (Table t : g.tables()) {
+                for (forge.core.Fk f : t.fks()) {
+                    if (f.refTable().equals(x.name())) {
+                        by.append(by.length() == 0 ? "" : ", ").append(t.name()).append(f.columns());
+                    }
+                }
+            }
+            String note = "External table " + x.name() + " (a foreign key from " + by + " points into a schema that is not read). Data Forge never generates or reads it:"
+                + " list the existing ids of " + x.name() + x.pk() + " under cleanup.keep in forge.yml.";
             e.out.println(note);
             notes.add(note);
         }
@@ -115,14 +135,23 @@ final class InitCmd implements Callable<Integer> {
                 }
             }
         }
+        if (url != null) {
+            try (java.sql.Connection tc = new Db(jdbc(url), user, password).open()) {
+                String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(tc, schema));
+                if (warn != null) {
+                    e.out.println(warn);
+                    notes.add(warn);
+                }
+            }
+        }
         Path snap = out.toAbsolutePath().normalize().getParent().resolve(DriftCmd.SNAPSHOT);
         boolean wrote = !Files.exists(snap);
         if (wrote) {
-            Files.writeString(snap, forge.schema.SnapshotFile.write(g));
+            Files.writeString(snap, forge.schema.SnapshotFile.write(g.withoutExternal()));
             e.out.println("Wrote " + snap + " (the baseline forge drift compares with).");
         }
         e.data.put("snapshot_written", wrote);
-        e.data.put("tables", g.tables().size());
+        e.data.put("tables", g.withoutExternal().tables().size());
         e.data.put("seed", seed);
         e.data.put("out", out.toString());
         e.data.put("notes", notes);

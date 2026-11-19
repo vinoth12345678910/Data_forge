@@ -358,3 +358,32 @@
 - Next: one push of the three branches (the hook runs verify.sh once), three PRs, no merge.
 - Open: GIF frames were looked at for 5 of 15 (hero, ui, tui, mcp and cleanup partly); the rest were checked by their captured text only. The checksums in RELEASE.md are for the final build of this round (rebuild after any further change).
 
+
+## 2026-11-19 limits register (branches lim-register, lim-compat-lab, lim-wave1-decisions, stacked on rel-gifs)
+- Done: `docs/LIMITS_REGISTER.md` checked row by row (44 rows: 34 Confirmed, 4 Refuted, 6 Unknown); probes tagged `probe` (`./gradlew probeTest`); `scripts/compat-lab.sh` and `docs/COMPAT_MATRIX.md` (Postgres 16/17/18, 2,000 tables PASS in 48 s); 10M-row size probe (`SizeProbeTest`); eight Wave 1 design docs. No product code changed.
+- Not done: Chinook (download denied, licence unchecked), the Supabase demo (no connection string), MySQL and SQLite lab runs, the Postgres type matrix beyond the first unsupported column (`bit`), tied-key parents at 10M rows, 50M and 100M rows.
+- Findings: 10M rows at -Xmx256m: parents+children 65.8 s, 181 MB live; tied composite keys 144.6 s, 231 MB live (90%, over the 85% gate). Triggers collide at load (A8); multi-schema refused at init (B1); inheritance child without a key fails at generate; `bit` not generated.
+- Next: owner answers the eight design docs in `docs/design/` (UUID_RULES, RULE_FILTERS, DECIMAL_RULES, CHECK_CONSTRAINTS, LOGICAL_RELATIONS, TRIGGERS, MULTI_SCHEMA, TYPE_MATRIX); nothing is built before that.
+- Open: the register's A1 failure is not reproduced; the verify.sh result is in the final report.
+
+## 2026-11-19 Wave 1 (branches w1-type-matrix, w1-b2-nullable-types, w1-a8-triggers, w1-a1-uuid-probe, w1-a2-limit-where; stacked)
+- Done: B2 type matrix (44 types: 21 PASS, 23 FAIL) and nullable unsupported columns left NULL; A8 trigger warning; A1 uuid as an opaque key (reproduced on Postgres, fixed, verified on Postgres 16); A4 found already mostly handled by the generator.
+- Not done: A2 (filtered limit: disabled gate test, needs a generator ordering decision), A3 (decimals), A7 (`relations:`), B1 (multi-schema).
+- Decisions needed: A2 ordering, A3 rounding rule, A7 key and cleanup, B1 stub tables and cleanup. All touch generator design, config, or Phase 5 safety (yours).
+- Next: owner answers those four; then one branch each.
+- Open: Chinook and the Supabase demo lab rows still SKIPPED (`Dev/texus-demo/.env` read was denied; run the lab from your own shell).
+
+## 2026-11-19 A7 safety tests frozen
+- `modules/testkit/src/test/java/forge/safety2` (27 tests, 24 red, 3 controls) frozen at commit `bc67464` (see scripts/safety2-frozen.txt; verify.sh step i2 fails if they change). Written by the test-first agent in a separate invocation before any A7 code. The builder may not edit them.
+
+- safety2 re-frozen at d4484a6 after one test-side fix (r6: helper table dellog declared keep, the test own delete triggers listed under cleanup.allow_triggers; assertions unchanged; the defect only showed once the feature let generate run). Previous hash bc67464. A7 built at d2ad8be; safety-reviewer run four times, every finding shown to the owner in the session.
+
+## 2026-11-19 B1 safety tests frozen
+- The B1 tests in forge.safety3 (12 tests: 11 red, 1 control green) are frozen at commit 030fbab (scripts/safety3-frozen.txt; verify.sh step i3 fails if they change). Written by the test-first agent in a separate invocation before any B1 code. The builder may not edit them.
+
+## 2026-11-19 Wave 1 closed (A1 A2 A3 A4 A7 A8 B1 B2)
+- Done: A2 (32ab9a8), A3 (42819b0), A7 (d2ad8be), B1 (5772884), plus A1, A8, B2 earlier; A4 needed no code. Decisions on A2, A3, A7 and B1 were the owner's (2026-11-19 answers); open decisions after that were taken as the recommended option and are listed in the register.
+- Not done: Waves 2 to 4; decimal literals and `round(expr, n)` (A3 follow-up); Chinook and the Supabase demo in the lab; MySQL/SQLite lab runs.
+- Safety process: forge.safety2 (A7) frozen at d4484a6 and forge.safety3 (B1) at 030fbab, both guarded by verify.sh; safety-reviewer ran 4 times on A7 and 3 on B1, every finding shown and answered.
+- Next: owner reviews the stacked PRs; Wave 2 only when told.
+- Open: verify.sh result for this tip is in the final report.

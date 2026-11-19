@@ -45,6 +45,8 @@ public final class ManifestDb {
             + " n int not null, fps bytea not null, primary key (run_id, table_name, chunk))",
         "create table if not exists _dataforge.run_keep (run_id uuid not null, table_name text not null, spec text not null,"
             + " primary key (run_id, table_name))",
+        "create table if not exists _dataforge.run_relations (run_id uuid not null, ord int not null, spec text not null,"
+            + " primary key (run_id, ord))",
         "create table if not exists _dataforge.run_pre (run_id uuid not null, table_name text not null, row_count bigint not null,"
             + " primary key (run_id, table_name))"
     };
@@ -197,6 +199,16 @@ public final class ManifestDb {
             }
             ps.executeBatch();
         }
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_relations values (?::uuid, ?, ?)")) {
+            int ord = 0;
+            for (Manifest.Rel r : m.relations()) {
+                ps.setString(1, m.runId());
+                ps.setInt(2, ord++);
+                ps.setString(3, r.json());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
         try (PreparedStatement ps = c.prepareStatement("insert into _dataforge.run_pre values (?::uuid, ?, ?)")) {
             for (Map.Entry<String, Long> e : new TreeMap<>(m.pre()).entrySet()) {
                 ps.setString(1, m.runId());
@@ -314,7 +326,21 @@ public final class ManifestDb {
                 }
             }
         }
-        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, seqs, 2, keep, pre);
+        List<Manifest.Rel> relations = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("select spec from _dataforge.run_relations where run_id = ?::uuid order by ord")) {
+            ps.setString(1, runId);
+            try (ResultSet r = ps.executeQuery()) {
+                while (r.next()) {
+                    relations.add(Manifest.Rel.parse(r.getString(1)));
+                }
+            }
+        } catch (SQLException e) {
+            // A database from before relations existed has no such table: no relations.
+            if (!"42P01".equals(e.getSQLState())) {
+                throw e;
+            }
+        }
+        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, seqs, 2, keep, pre, relations);
     }
 
     private static void readFps(Connection c, String runId, String table, Manifest.Chunk sink) {

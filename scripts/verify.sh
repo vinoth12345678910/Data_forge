@@ -189,6 +189,18 @@ fi
 # i. frozen safety tests (Phase 5): the tests were written by the test-first agent from docs/design/CLEANUP_SAFETY_TESTS.md
 # and frozen at the commit in scripts/safety-frozen.txt; the builder may not change them. This step (1) fails if they
 # changed since, and (2) runs the patterns in scripts/safety-green.txt, which a feature adds as it makes tests pass.
+# i2. the A7/B1 safety tests (forge.safety2), frozen at the commit in scripts/safety2-frozen.txt; the builder may not change them.
+frozen2="$(head -n1 scripts/safety2-frozen.txt 2>/dev/null || true)"
+if [ -n "$frozen2" ] && git cat-file -e "$frozen2^{commit}" 2>/dev/null && ! git diff --quiet "$frozen2" -- modules/testkit/src/test/java/forge/safety2; then
+  git diff --stat "$frozen2" -- modules/testkit/src/test/java/forge/safety2
+  fail "i2. safety2 tests (frozen tests were edited after $frozen2)"
+fi
+# i3. the B1 safety tests (forge.safety3), frozen at the commit in scripts/safety3-frozen.txt; the builder may not change them.
+frozen3="$(head -n1 scripts/safety3-frozen.txt 2>/dev/null || true)"
+if [ -n "$frozen3" ] && git cat-file -e "$frozen3^{commit}" 2>/dev/null && ! git diff --quiet "$frozen3" -- modules/testkit/src/test/java/forge/safety3; then
+  git diff --stat "$frozen3" -- modules/testkit/src/test/java/forge/safety3
+  fail "i3. safety3 tests (frozen tests were edited after $frozen3)"
+fi
 echo ">> i. safety suite (frozen tests)"
 frozen="$(head -n1 scripts/safety-frozen.txt 2>/dev/null || true)"
 if [ -z "$frozen" ] || ! git cat-file -e "$frozen^{commit}" 2>/dev/null; then

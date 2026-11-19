@@ -53,7 +53,7 @@ public final class ManifestBuilder {
         for (String name : gen.plan().order()) {
             order++;
             Config.TableConf tc = conf.tables().get(name);
-            if ((tc != null && tc.keep()) || gen.rows(name) == 0) {
+            if ((tc != null && tc.keep()) || g.table(name).external() || gen.rows(name) == 0) {
                 continue;
             }
             tables.add(table(g.table(name), order, gen, pre != null));
@@ -71,11 +71,20 @@ public final class ManifestBuilder {
         }
         String runId = runId(conf.seed(), configSha, at);
         if (pre == null) {
-            return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g)), clock, at,
+            return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g.withoutRelations())), clock, at,
                 tables, breaks, seqs);
         }
-        return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g)), clock, at,
-            tables, breaks, seqs, 2, keep(g, conf), new TreeMap<>(pre));
+        return new Manifest(runId, conf.seed(), env, TOOL_VERSION, configSha, Sha.hex(Snapshot.yaml(g.withoutRelations())), clock, at,
+            tables, breaks, seqs, 2, keep(g, conf), new TreeMap<>(pre), relations(conf));
+    }
+
+    /** The relations declared in forge.yml at load time, in the order written. */
+    private static List<Manifest.Rel> relations(Config conf) {
+        List<Manifest.Rel> out = new java.util.ArrayList<>();
+        for (Config.Relation r : conf.relations()) {
+            out.add(new Manifest.Rel(r.table(), r.columns(), r.refTable(), r.refColumns()));
+        }
+        return out;
     }
 
     /**

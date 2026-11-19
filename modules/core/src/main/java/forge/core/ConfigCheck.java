@@ -9,7 +9,51 @@ public final class ConfigCheck {
 
     private ConfigCheck() {}
 
+    /** Each declared relation: tables and columns exist, the counts and types match, the target is a key, and it is not a real foreign key already. */
+    public static void relations(Config c, SchemaGraph g) {
+        for (int i = 0; i < c.relations().size(); i++) {
+            Config.Relation r = c.relations().get(i);
+            String p = "relations[" + i + "]";
+            Table t = g.table(r.table());
+            Table ref = g.table(r.refTable());
+            if (t == null) {
+                throw new ConfigError(p + ".table: no such table in the schema: " + r.table() + ".");
+            }
+            if (ref == null) {
+                throw new ConfigError(p + ".ref_table: no such table in the schema: " + r.refTable() + ".");
+            }
+            if (r.columns().size() != r.refColumns().size()) {
+                throw new ConfigError(p + ": columns has " + r.columns().size() + " name(s) but ref_columns has " + r.refColumns().size() + ".");
+            }
+            for (int k = 0; k < r.columns().size(); k++) {
+                Column a = t.column(r.columns().get(k));
+                Column b = ref.column(r.refColumns().get(k));
+                if (a == null) {
+                    throw new ConfigError(p + ".columns: no such column " + r.table() + "." + r.columns().get(k) + ".");
+                }
+                if (b == null) {
+                    throw new ConfigError(p + ".ref_columns: no such column " + r.refTable() + "." + r.refColumns().get(k) + ".");
+                }
+                if (!a.type().name().equals(b.type().name()) || a.type().dims() != b.type().dims()) {
+                    throw new ConfigError(p + ": the types differ: " + r.table() + "." + a.name() + " is " + a.type().name() + ", "
+                        + r.refTable() + "." + b.name() + " is " + b.type().name() + ".");
+                }
+            }
+            boolean key = ref.pk().equals(r.refColumns())
+                || ref.uniques().stream().anyMatch(u -> u.columns().equals(r.refColumns()) && u.where() == null && u.exprs().isEmpty());
+            if (!key) {
+                throw new ConfigError(p + ".ref_columns: " + r.refTable() + "." + r.refColumns() + " is not a primary key or a unique key.");
+            }
+            for (Fk f : t.fks()) {
+                if (!f.name().startsWith(SchemaGraph.RELATION) && f.columns().equals(r.columns()) && f.refTable().equals(r.refTable()) && f.refColumns().equals(r.refColumns())) {
+                    throw new ConfigError(p + ": " + r.table() + "." + r.columns() + " already has a real foreign key (" + f.name() + ").");
+                }
+            }
+        }
+    }
+
     public static void check(Config c, SchemaGraph g) {
+        relations(c, g);
         for (int i = 0; i < c.cleanup().keep().size(); i++) {
             KeepSet.of(g, c.cleanup().keep().get(i), i);
         }
@@ -18,6 +62,9 @@ public final class ConfigCheck {
             String path = "tables." + te.getKey();
             if (t == null) {
                 throw new ConfigError(path + ": no such table in the schema.");
+            }
+            if (t.external() && te.getValue().rows() != null) {
+                throw new ConfigError(path + ".rows: " + t.name() + " is an external table (another schema): Data Forge never generates it. List its ids under cleanup.keep.");
             }
             for (Map.Entry<String, ColConf> ce : te.getValue().columns().entrySet()) {
                 column(t, ce.getKey(), ce.getValue(), path + ".columns." + ce.getKey());

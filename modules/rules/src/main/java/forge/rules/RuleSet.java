@@ -18,6 +18,35 @@ public final class RuleSet {
 
     private RuleSet() {}
 
+    /**
+     * SQLite has no exact decimal arithmetic (a numeric column is stored as a binary float, so 0.1 + 0.2 = 0.3 is false there),
+     * so a rule that reads a decimal column cannot be generated or verified exactly on it. Refused by rule name.
+     */
+    public static void noDecimals(List<Rule> rules, String database) {
+        for (Rule r : rules) {
+            if (usesDecimal(r.expr()) || usesDecimal(r.when()) || (r.limit() != null && usesDecimal(r.limit().where()))) {
+                throw new RuleError(r.index(), r.name(), r.kind().name().toLowerCase(Locale.ROOT), 1, 1, r.text(),
+                    database + " has no exact decimal arithmetic (a numeric column is stored as a binary float), so a rule over a decimal"
+                        + " column cannot be generated or verified exactly. Use Postgres or MySQL for decimal rules, or keep the money in a whole number of minor units.");
+            }
+        }
+    }
+
+    private static boolean usesDecimal(RuleExpr e) {
+        return switch (e) {
+            case null -> false;
+            case RuleExpr.Ref x -> x.type() == RuleExpr.T.NUM;
+            case RuleExpr.Bin x -> usesDecimal(x.l()) || usesDecimal(x.r());
+            case RuleExpr.Not x -> usesDecimal(x.e());
+            case RuleExpr.IsNull x -> usesDecimal(x.e());
+            case RuleExpr.In x -> usesDecimal(x.e()) || x.items().stream().anyMatch(RuleSet::usesDecimal);
+            case RuleExpr.Case x -> x.whens().stream().anyMatch(RuleSet::usesDecimal) || x.thens().stream().anyMatch(RuleSet::usesDecimal) || usesDecimal(x.other());
+            case RuleExpr.Fn x -> x.args().stream().anyMatch(RuleSet::usesDecimal);
+            case RuleExpr.Agg x -> usesDecimal(x.arg()) || usesDecimal(x.where());
+            default -> false;
+        };
+    }
+
     /** Throws RuleError at the first mistake, in rule order. */
     public static List<Rule> check(List<Config.RuleConf> confs, SchemaGraph g) {
         List<Rule> out = new ArrayList<>();

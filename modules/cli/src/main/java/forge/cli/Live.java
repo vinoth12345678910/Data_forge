@@ -21,7 +21,10 @@ final class Live {
     final String text;
     final Config conf;
     final Db db;
+    /** The schema with the declared relations of forge.yml added: for generate, verify and the file outputs. */
     SchemaGraph graph;
+    /** The schema as the database has it: for cleanup, purge, classify, readiness and drift (cleanup adds the manifest's own relations). */
+    SchemaGraph dbGraph;
     /** One line per column the reader did not know and read as text (MySQL and SQLite). */
     final List<String> typeWarnings = new java.util.ArrayList<>();
 
@@ -65,6 +68,7 @@ final class Live {
     /** Reads only the schema (drift must work even when the spec no longer fits it). */
     void openGraph() throws SQLException {
         graph = read(conf.connection().url());
+        dbGraph = graph;
     }
 
     /** The schema of a database at a url, with this spec's user and password. */
@@ -93,6 +97,9 @@ final class Live {
                 graph = forge.schema.JdbcReader.read(c, typeWarnings);
             }
         }
+        dbGraph = graph;
+        forge.core.ConfigCheck.relations(conf, dbGraph);
+        graph = dbGraph.withRelations(conf.relations());
         forge.rules.Applies.Split split = forge.rules.Applies.split(conf.rules(), graph);
         rules = split.rules();
         notApplicable.addAll(split.notApplicable());
@@ -111,7 +118,14 @@ final class Live {
                 graph = forge.schema.JdbcReader.read(c, typeWarnings);
             }
         }
+        dbGraph = graph;
+        forge.core.ConfigCheck.relations(conf, dbGraph);
+        graph = dbGraph.withRelations(conf.relations());
         rules = RuleSet.check(conf.rules(), graph);
+        String u = conf.connection().url();
+        if (u.startsWith("sqlite:") || u.startsWith("jdbc:sqlite:")) {
+            RuleSet.noDecimals(rules, "SQLite");
+        }
         verifyRules = new java.util.ArrayList<>(rules);
         verifyRules.addAll(forge.rules.StateRules.expand(conf, graph));
     }

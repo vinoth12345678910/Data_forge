@@ -56,6 +56,10 @@ final class GenerateCmd implements Callable<Integer> {
             return files(e, live, gen);
         }
         try (Connection c = live.db.open()) {
+            String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(c, live.graph.schema()));
+            if (warn != null) {
+                e.out.println(warn);
+            }
             PgLoader.Result r = live.postgres()
                 ? PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(), live.manifestDir(manifestDir))
                 : forge.load.JdbcLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
@@ -79,10 +83,13 @@ final class GenerateCmd implements Callable<Integer> {
             e.data.put("loaded", new java.util.TreeMap<>(r.rows()));
             e.data.put("manifest", live.manifestDir(manifestDir).resolve(r.runId() + ".json").toString());
             int code = 0;
-            if (live.verifyRules.isEmpty()) {
+            if (live.verifyRules.isEmpty() && live.conf.relations().isEmpty()) {
                 e.out.println("No rules in forge.yml: nothing to verify.");
             } else {
-                Report rep = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
+                Report base = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
+                java.util.List<forge.rules.RuleResult> all = new java.util.ArrayList<>(base.results());
+                all.addAll(forge.rules.RelationCheck.run(c, live.dbGraph, live.conf.relations(), 5));
+                Report rep = new Report(all);
                 e.out.print(rep.text(live.conf.connection().url()));
                 e.report(rep, live.conf.connection().env());
                 code = rep.exitCode();

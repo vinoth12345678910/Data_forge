@@ -55,7 +55,7 @@ public final class JdbcLoader {
         List<String> tables = new ArrayList<>();
         for (String name : gen.plan().order()) {
             Config.TableConf tc = conf.tables().get(name);
-            if (!(tc != null && tc.keep()) && gen.rows(name) > 0) {
+            if (!(tc != null && tc.keep()) && !g.table(name).external() && gen.rows(name) > 0) {
                 tables.add(name);
             }
         }
@@ -70,7 +70,9 @@ public final class JdbcLoader {
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
         Map<String, Long> pre = new TreeMap<>();
         for (Table t : g.tables()) {
-            pre.put(t.name(), existing(c, d, t.name()));
+            if (!t.external()) {
+                pre.put(t.name(), existing(c, d, t.name()));
+            }
         }
         Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, List.of(), pre);
         ManifestFile.Staged staged = ManifestFile.stage(manifestDir, m);

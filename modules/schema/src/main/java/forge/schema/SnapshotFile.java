@@ -26,7 +26,7 @@ public final class SnapshotFile {
             for (Check ck : t.checks()) {
                 checks.add(new Check(ck.name(), ck.expr(), List.of(), false));
             }
-            tables.add(new Table(t.name(), t.columns(), t.pk(), t.uniques(), t.fks(), checks, t.partKey(), t.parts()));
+            tables.add(new Table(t.name(), t.columns(), t.pk(), t.uniques(), t.fks(), checks, t.partKey(), t.parts(), t.external()));
         }
         try {
             return JSON.writeValueAsString(new SchemaGraph(g.schema(), tables)) + "\n";
@@ -44,7 +44,7 @@ public final class SnapshotFile {
                 for (Check ck : t.checks()) {
                     checks.add(CheckParser.parse(ck.name(), ck.expr(), null));
                 }
-                tables.add(new Table(t.name(), t.columns(), t.pk(), t.uniques(), t.fks(), checks, t.partKey(), t.parts()));
+                tables.add(new Table(t.name(), t.columns(), t.pk(), t.uniques(), t.fks(), checks, t.partKey(), t.parts(), t.external()));
             }
             return new SchemaGraph(raw.schema(), tables);
         } catch (JsonProcessingException e) {

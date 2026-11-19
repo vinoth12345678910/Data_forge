@@ -42,6 +42,11 @@ public enum Dialect {
 
     /** A table name as written in SQL: schema-qualified on Postgres, plain on MySQL (the connection's database) and SQLite. */
     public String table(String schema, String table) {
+        int dot = table.indexOf('.');
+        if (dot > 0 && this == POSTGRES) {
+            // An external table of another schema (auth.users): its own schema, not the connection's.
+            return q(table.substring(0, dot)) + "." + q(table.substring(dot + 1));
+        }
         return this == POSTGRES ? q(schema) + "." + q(table) : q(table);
     }
 
