@@ -401,3 +401,10 @@
 - Next: C3 (locale data) after you say go.
 - Decisions: schema only, conservative (2+ values, not a key); output is notes, so forge.output/1 is unchanged.
 - Open: step k (UI smoke) still SKIPPED.
+
+## 2026-11-19 Wave 3, D7 (branch w3-d7-parity)
+- Done: `ParityContainerTest`: the two translated goldens on Postgres, MySQL and SQLite, same seed; counts and integer columns equal; added to verify.sh step f2.
+- Not done: translations for saas-multitenant and Pagila; dialect-native sample schemas (licences); text tails are not compared (they follow the declared length).
+- Next: A5, A6, C2, D9, E1 (recommended choices, see the register).
+- Decisions: tables whose translated schema lacks a check are listed and not compared (`reservations` on MySQL and SQLite).
+- Open: should a translated schema's `varchar(255)` change the generated text length? Today it does.
