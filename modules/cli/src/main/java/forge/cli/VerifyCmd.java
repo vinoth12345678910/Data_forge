@@ -35,6 +35,7 @@ final class VerifyCmd implements Callable<Integer> {
     @Option(names = "--strict-na", description = "Exit 1 when a rule is not applicable to the target") boolean strictNa;
     @Option(names = "--expected", description = "A golden expected.yml: its rules that are not in forge.yml are listed as not checked") Path expected;
     @Option(names = "--sample", defaultValue = "5", description = "Rows to show per failing rule") int sample;
+    @Option(names = "--legacy-sql", description = "Check aggregates with the old correlated subqueries instead of a grouped join (slow without an index; removed after the next release)") boolean legacySql;
 
     @Override
     public Integer call() {
@@ -49,7 +50,7 @@ final class VerifyCmd implements Callable<Integer> {
             e.typeWarnings(live.typeWarnings);
             e.out.println("forge verify  env " + env);
             try (Connection c = forge.rules.ReadOnly.wrap(live.db.openReadOnly())) {
-                Report base = merge(Verifier.run(c, live.graph, live.verifyRules, sample, 120), live);
+                Report base = merge(Verifier.run(c, live.graph, live.verifyRules, sample, 120, legacySql), live);
                 java.util.List<RuleResult> all = new java.util.ArrayList<>(base.results());
                 all.addAll(forge.rules.RelationCheck.run(c, live.dbGraph, live.conf.relations(), sample));
                 Report rep = new Report(all);

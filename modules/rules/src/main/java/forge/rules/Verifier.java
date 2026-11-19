@@ -20,6 +20,11 @@ public final class Verifier {
 
     /** Verifies every rule. A rule whose query fails is ERROR, never PASS. The connection is left as found. */
     public static Report run(Connection c, SchemaGraph g, List<Rule> rules, int sample, int timeoutSeconds) {
+        return run(c, g, rules, sample, timeoutSeconds, false);
+    }
+
+    /** legacy = compile aggregates the old way (a correlated subquery per row); see RuleSql. Removed after the next release. */
+    public static Report run(Connection c, SchemaGraph g, List<Rule> rules, int sample, int timeoutSeconds, boolean legacy) {
         List<RuleResult> out = new ArrayList<>();
         try {
             boolean auto = c.getAutoCommit();
@@ -31,7 +36,7 @@ public final class Verifier {
             }
             try {
                 for (Rule r : rules) {
-                    out.add(one(c, g, r, sample, timeoutSeconds));
+                    out.add(one(c, g, r, sample, timeoutSeconds, legacy));
                 }
             } finally {
                 c.rollback();
@@ -46,10 +51,10 @@ public final class Verifier {
         return new Report(out);
     }
 
-    private static RuleResult one(Connection c, SchemaGraph g, Rule r, int sample, int timeoutSeconds) throws SQLException {
+    private static RuleResult one(Connection c, SchemaGraph g, Rule r, int sample, int timeoutSeconds, boolean legacy) throws SQLException {
         long t0 = System.nanoTime();
         forge.core.Dialect d = forge.core.Dialect.of(c);
-        RuleSql.Sql q = RuleSql.compile(r, g, d);
+        RuleSql.Sql q = RuleSql.compile(r, g, d, legacy);
         String kind = r.kind().name().toLowerCase(java.util.Locale.ROOT);
         try (Statement s = c.createStatement()) {
             s.setQueryTimeout(timeoutSeconds);
@@ -81,7 +86,8 @@ public final class Verifier {
                 }
             }
             String note = checked == 0 ? "checked 0 rows (nothing to test)" : null;
-            if (checked > 10_000) {
+            // The slow-without-an-index note is about the old form; a grouped join needs no index, so it only gets the hint on an ERROR.
+            if (legacy && checked > 10_000) {
                 String h = IndexHint.hint(c, g, r);
                 note = h.isEmpty() ? note : h;
             }

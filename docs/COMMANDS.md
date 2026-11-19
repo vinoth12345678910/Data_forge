@@ -66,9 +66,9 @@ Read the schema and draft forge.yml.
 ## forge generate
 
 ```text
-Usage: forge generate [--edge] [--json] [-c=<config>] [--dialect=<dialect>]
-                      [--manifest-dir=<manifestDir>] [--out=<out>]
-                      [--out-dir=<outDir>] [-s=<scenario>]
+Usage: forge generate [--edge] [--json] [--legacy-sql] [-c=<config>]
+                      [--dialect=<dialect>] [--manifest-dir=<manifestDir>]
+                      [--out=<out>] [--out-dir=<outDir>] [-s=<scenario>]
 Generate data, load it into the database and verify the rules (Postgres).
   -c, --config=<config>     forge.yml to use
       --dialect=<dialect>   Quoting for --out sql: postgres, mysql or sqlite
@@ -78,6 +78,9 @@ Generate data, load it into the database and verify the rules (Postgres).
                               strings
       --json                Print one JSON document (forge.output/1) instead of
                               human text
+      --legacy-sql          Verify aggregates with the old correlated
+                              subqueries instead of a grouped join (slow
+                              without an index; removed after the next release)
       --manifest-dir=<manifestDir>
                             Where the local manifest copy goes (default .
                               forge/manifests next to forge.yml)
@@ -90,10 +93,10 @@ Generate data, load it into the database and verify the rules (Postgres).
 ## forge verify
 
 ```text
-Usage: forge verify [--allow-prod] [--json] [--strict-na] [-c=<config>]
-                    [--expected=<expected>] [--password-env=<passwordEnv>]
-                    [-s=<scenario>] [--sample=<sample>] [--url=<url>]
-                    [--user=<user>]
+Usage: forge verify [--allow-prod] [--json] [--legacy-sql] [--strict-na]
+                    [-c=<config>] [--expected=<expected>]
+                    [--password-env=<passwordEnv>] [-s=<scenario>]
+                    [--sample=<sample>] [--url=<url>] [--user=<user>]
 Verify the rules of forge.yml on a database (Postgres).
       --allow-prod        Allow a connection labelled prod (verify only reads,
                             but production needs this on purpose)
@@ -103,6 +106,9 @@ Verify the rules of forge.yml on a database (Postgres).
                             forge.yml are listed as not checked
       --json              Print one JSON document (forge.output/1) instead of
                             human text
+      --legacy-sql        Check aggregates with the old correlated subqueries
+                            instead of a grouped join (slow without an index;
+                            removed after the next release)
       --password-env=<passwordEnv>
                           Name of the environment variable that holds the
                             password for --url

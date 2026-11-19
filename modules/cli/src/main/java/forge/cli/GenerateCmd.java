@@ -31,6 +31,7 @@ final class GenerateCmd implements Callable<Integer> {
     @Option(names = "--out", description = "Write files instead of loading: sql, csv or json (needs --out-dir)") String out;
     @Option(names = "--out-dir", description = "Directory for --out (new or empty)") Path outDir;
     @Option(names = "--dialect", description = "Quoting for --out sql: postgres, mysql or sqlite (default: from the connection)") String dialect;
+    @Option(names = "--legacy-sql", description = "Verify aggregates with the old correlated subqueries instead of a grouped join (slow without an index; removed after the next release)") boolean legacySql;
     @Option(names = "--edge", description = "Edge-case mode: NULLs, maximum lengths, unicode, case-only duplicates, leap days, DST, injection strings") boolean edge;
 
     @Override
@@ -86,7 +87,7 @@ final class GenerateCmd implements Callable<Integer> {
             if (live.verifyRules.isEmpty() && live.conf.relations().isEmpty()) {
                 e.out.println("No rules in forge.yml: nothing to verify.");
             } else {
-                Report base = Verifier.run(c, live.graph, live.verifyRules, 5, 120);
+                Report base = Verifier.run(c, live.graph, live.verifyRules, 5, 120, legacySql);
                 java.util.List<forge.rules.RuleResult> all = new java.util.ArrayList<>(base.results());
                 all.addAll(forge.rules.RelationCheck.run(c, live.dbGraph, live.conf.relations(), 5));
                 Report rep = new Report(all);

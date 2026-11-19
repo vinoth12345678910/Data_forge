@@ -401,3 +401,10 @@
 - Next: feature 2, grouped-join verify (branch a4-grouped-verify).
 - Decisions: `n` limited to 0 to 30 (MySQL DECIMAL limit); a float argument is refused because Postgres and MySQL round floats differently.
 - Open (rule-language question for the owner, does not block): give decimal `/` a defined scale, so a rounded division can be written.
+
+## 2026-11-19 A4 verify as a grouped join (branch a4-grouped-verify; stacked on a3-round)
+- Done: every aggregate and limit compiles to one grouped derived table left-joined to the rule's table (default); the old correlated-subquery form stays behind `forge verify|generate --legacy-sql` for one release. Gates: `GroupedSqlTest` (pinned SQL, 13 tests), `GroupedEquivalenceContainerTest` (events-merch and ecommerce, seed and every broken fixture, every row compared; hand-written empty-group and NULL answers), `GroupedRandomTest` and `GroupedRandomContainerTest` (random data, SQLite 50 tries, Postgres and MySQL 10 each), `legacySqlReachesTheVerifier`. `./gradlew test` and the full `containerTest` pass; scope-guard found nothing.
+- Measured (`docs/VERIFY_COST.md`, Postgres 16, Apple M4): grouped 1.4 s at 1,000,000 parents with or without an index; legacy without an index 20 s at 20,000 and the 120 s timeout at 100,000 and 1,000,000. One regression: a `when` keeping about 0.1% of the parents with the index present is 0.9 s grouped vs 0.5 s legacy at 1,000,000.
+- Not done: a rule-subset flag; saas-multitenant has no rules in the language so it is not in the equivalence test; MySQL and SQLite timings and Postgres spill behaviour not measured. The JSON report has no `sql` field, so the flag test checks the legacy-only `slow:` note. verify.sh not run on this tip; step k (UI smoke) still SKIPPED (the Playwright Chromium 1148 install did not complete).
+- Next: feature 3, measured limits table and preflight (branch l-limits-preflight).
+- Decisions: the `slow:` index note applies to the legacy form only; the legacy path is removed after the next release.
