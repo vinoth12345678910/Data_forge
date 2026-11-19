@@ -14,3 +14,6 @@
 **Recommendation:** option 1; rounding rule = refuse any rule whose result scale exceeds the target column's scale (no silent rounding); SQLite verify via integer scaling. Other shapes in A3 (derived text/time, nullable-fk aggregates) one by one afterwards.
 
 **Decision for you:** option 1, and the no-silent-rounding rule?
+
+## Decision (owner, 2026-11-19) and what was built
+Scaled/exact arithmetic; any rule that needs rounding is refused (message names the rule and what is needed); decimal rules refused on SQLite (verified: it stores numeric as a float). **Next item, not built:** an explicit `round(expr, n)` with one pinned mode, half away from zero (`RoundingMode.HALF_UP` on BigDecimal; `round()` in Postgres and MySQL are half away from zero for numeric; SQLite not applicable). Rounding is never implicit. Also open: decimal literals (G6).
