@@ -50,6 +50,17 @@ rules:
     derive: payments.amount_minor = payments.order_id.total_minor when payments.status = 'succeeded'
   - name: reservation_quantity_matches_item
     derive: reservations.quantity = reservations.order_item_id.quantity
+  - name: inventory_reserved_matches_active
+    derive: >-
+      inventory.reserved = sum(reservations.quantity where reservations.status = 'active'
+      via reservations.product_id = inventory.product_id)
+  - name: stock_on_hand_matches_movements
+    derive: >-
+      inventory.on_hand = inventory.opening_qty
+      - sum(shipment_items.quantity where shipment_items.shipment_id.status in ('shipped', 'delivered')
+      via shipment_items.order_item_id.product_id = inventory.product_id)
+      + sum(returns.restocked_qty where returns.status = 'received'
+      via returns.order_item_id.product_id = inventory.product_id)
   - name: coupon_total_uses_within_limit
     limit: count(*) per coupon_redemptions.coupon_id <= coupons.max_uses
   - name: shipped_quantity_within_ordered

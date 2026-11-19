@@ -26,7 +26,7 @@ expr
   | '(' expr ')'                                          # paren
   ;
 
-agg    : fn=(SUM | COUNT | MIN | MAX) '(' ('*' | expr)? (WHERE expr)? (VIA colRef)? ')' ;
+agg    : fn=(SUM | COUNT | MIN | MAX) '(' ('*' | expr)? (WHERE expr)? (VIA colRef ('=' colRef)?)? ')' ;
 colRef : name ('.' name)+ ;
 name   : IDENT | QIDENT ;
 literal: INT | STRING | TRUE | FALSE | NULL ;

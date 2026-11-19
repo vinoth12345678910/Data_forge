@@ -97,6 +97,9 @@ class GenerateCliContainerTest {
     /** The golden's Phase 2 config with its ddl line replaced by a live connection. */
     static Path liveConfig(String name, String db, Path dir, String env) throws Exception {
         String text = Files.readString(golden(name + "/phase2.forge.yml"));
+        for (String r : RuleGenContainerTest.VERIFY_ONLY) {
+            text = text.replaceAll("(?m)^  - name: " + r + "\n(?:    .*\n)+", ""); // verified by the verify pass, not generated (A5)
+        }
         text = text.replace("ddl: schema.sql\n", "connection:\n  url: " + url(db) + "\n  env: " + env
             + "\n  user: postgres\n  password_env: TEST_PG_PASSWORD\n");
         Path yml = dir.resolve("forge.yml");

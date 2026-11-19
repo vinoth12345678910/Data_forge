@@ -235,9 +235,14 @@ public final class RuleSql {
             String savedSubject = outer ? alias.put(subject, "s") : null;
             String arg = a.arg() == null ? "*" : expr(a.arg());
             String where = a.where() == null ? "" : " where (" + expr(a.where()) + ") is true";
+            String key = a.join() == null ? null : expr(a.join().key());
             restore(a.child(), savedChild);
             if (outer) {
                 restore(subject, savedSubject);
+            }
+            if (key != null) {
+                joins.add(groupByKey(key, a.join().subjectCol(), c, g, a.fn() + "(" + arg + ")", where, outer, a.child()));
+                return a.fn().equals("sum") || a.fn().equals("count") ? "coalesce(" + g + ".v, 0)" : g + ".v";
             }
             joins.add(groupJoin(a.via(), c, g, a.fn() + "(" + arg + ")", where, outer, a.child()));
             return a.fn().equals("sum") || a.fn().equals("count") ? "coalesce(" + g + ".v, 0)" : g + ".v";
@@ -281,18 +286,29 @@ public final class RuleSql {
                 + " group by " + String.join(", ", by) + ") " + g + " on " + String.join(" and ", on);
         }
 
+        /**
+         * The same grouped join for "via child.key = subject.col": grouped by the key expression (output column 1, so a key that walks
+         * foreign keys is written once), joined to the rule's table on that column. A NULL key never equals anything, so it joins nothing.
+         */
+        String groupByKey(String key, String subjectCol, String c, String g, String agg, String where, boolean outer, String child) {
+            String src = table(child) + " " + c + (outer ? " join " + table(subject) + " s on " + key + " = s." + q(subjectCol) : "");
+            return "left join (select " + key + " as k0, " + agg + " as v from " + src + where + " group by 1) " + g
+                + " on " + g + ".k0 = t." + q(subjectCol);
+        }
+
         /** The old form: a correlated scalar subquery per parent row. */
         private String legacyAgg(RuleExpr.Agg a) {
             String c = "c" + (++aggs);
             String saved = alias.put(a.child(), c);
             String arg = a.arg() == null ? "*" : expr(a.arg());
             String where = a.where() == null ? "" : " and (" + expr(a.where()) + ") is true";
+            String key = a.join() == null ? null : expr(a.join().key());
             if (saved == null) {
                 alias.remove(a.child());
             } else {
                 alias.put(a.child(), saved);
             }
-            String cond = childJoin(a.via(), c, "t");
+            String cond = key == null ? childJoin(a.via(), c, "t") : key + " = t." + q(a.join().subjectCol());
             String body = " from " + table(a.child()) + " " + c + " where " + cond + where + ")";
             return switch (a.fn()) {
                 case "sum" -> "coalesce((select sum(" + arg + ")" + body + ", 0)";

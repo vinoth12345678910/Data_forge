@@ -102,7 +102,7 @@ final class Ruled {
                             + " must be a generated whole-number column.");
                     }
                     asCap.computeIfAbsent(r.subject(), x -> new TreeMap<>()).computeIfAbsent(l.cap(), x -> new ArrayList<>()).add(ls);
-                    nullableKey(r, l.child(), l.fk());
+                    nullableKey(r, l.child(), l.fk().columns());
                     gen.info(l.child()).ruled = true;
                     gen.info(r.subject()).ruled = true;
                     gen.info(r.subject()).ruledCols.add(l.cap());
@@ -272,14 +272,14 @@ final class Ruled {
     }
 
     /** Aggregates look up the child's parent row with attempt 0, so a redrawn child with a nullable key is not supported. */
-    private void nullableKey(Rule r, String child, Fk fk) {
+    private void nullableKey(Rule r, String child, List<String> cols) {
         RowGen.Info ci = gen.info(child);
         boolean nullable = false;
-        for (String c : fk.columns()) {
+        for (String c : cols) {
             nullable |= graph.table(child).column(c).nullable();
         }
         if (nullable && !(ci.evals.isEmpty() && ci.derived.isEmpty())) {
-            throw new GenError("Rule " + r.name() + ": " + child + "." + fk.columns()
+            throw new GenError("Rule " + r.name() + ": " + child + "." + cols
                 + " is nullable and the table is redrawn by checks; not supported yet.");
         }
     }
@@ -318,7 +318,7 @@ final class Ruled {
             case RuleExpr.Fn x -> x.args().forEach(i -> scan(i, r, subject));
             case RuleExpr.Agg x -> {
                 aggSubject.put(x, subject);
-                nullableKey(r, x.child(), x.via());
+                nullableKey(r, x.child(), x.join() == null ? x.via().columns() : List.of(x.join().key().names().get(1)));
                 scan(x.arg(), r, subject);
                 scan(x.where(), r, subject);
             }
@@ -671,6 +671,26 @@ final class Ruled {
         return lo;
     }
 
+    /**
+     * For "via child.key = subject.col": the subject rows by the value of their column. Read cell by cell (a key is never a computed
+     * column of the rule), so no subject row is built here. Lists are in row order and the map is only looked up, never walked.
+     */
+    private Map<String, List<Integer>> subjectsByKey(RuleExpr.Agg a, String subject, int parents) {
+        Map<String, List<Integer>> m = new HashMap<>();
+        for (int i = 0; i < parents; i++) {
+            String text = cellOf(subject, a.join().subjectCol(), i);
+            if (text != null) {
+                m.computeIfAbsent(keyText(typed(a.join().key().type(), text)), k -> new ArrayList<>()).add(i);
+            }
+        }
+        return m;
+    }
+
+    /** The same text for the same value, whatever its scale. */
+    private static String keyText(Object v) {
+        return v instanceof BigDecimal d ? d.stripTrailingZeros().toPlainString() : String.valueOf(v);
+    }
+
     /** sum, count, min or max of the child rows, per parent row. [0] = value, [1] = seen (0 or 1). */
     private synchronized long[][] aggregate(RuleExpr.Agg a) {
         long[][] hit = aggArrays.get(a);
@@ -682,28 +702,36 @@ final class Ruled {
         long[] val = new long[parents];
         long[] seen = new long[parents];
         long kids = gen.rows(a.child());
+        Map<String, List<Integer>> byKey = a.join() == null ? null : subjectsByKey(a, subject, parents);
         for (long r = 0; r < kids; r++) {
-            long p = gen.parentRow(a.child(), a.via(), r, 0);
-            if (p < 0) {
-                continue;
+            List<Integer> owners = new ArrayList<>();
+            if (byKey == null) {
+                long p = gen.parentRow(a.child(), a.via(), r, 0);
+                if (p >= 0) {
+                    owners.add((int) p);
+                }
+            } else {
+                Object k = eval(a.join().key(), new Ctx(a.child(), r, 0, null, null, null));
+                owners = k == null ? owners : byKey.getOrDefault(keyText(k), owners);
             }
-            Ctx outer = new Ctx(subject, p, 0, null, null, null);
-            Ctx inner = new Ctx(a.child(), r, 0, null, null, outer);
-            if (a.where() != null && !Boolean.TRUE.equals(eval(a.where(), inner))) {
-                continue;
+            for (int i : owners) {
+                Ctx outer = new Ctx(subject, i, 0, null, null, null);
+                Ctx inner = new Ctx(a.child(), r, 0, null, null, outer);
+                if (a.where() != null && !Boolean.TRUE.equals(eval(a.where(), inner))) {
+                    continue;
+                }
+                Object v = a.arg() == null ? Long.valueOf(1) : eval(a.arg(), inner);
+                if (v == null) {
+                    continue;
+                }
+                long x = a.fn().equals("count") ? 1 : v instanceof BigDecimal bd ? bd.setScale(aggScale(a), RoundingMode.UNNECESSARY).unscaledValue().longValueExact() : (Long) v;
+                switch (a.fn()) {
+                    case "sum", "count" -> val[i] = Math.addExact(val[i], x);
+                    case "min" -> val[i] = seen[i] == 0 ? x : Math.min(val[i], x);
+                    default -> val[i] = seen[i] == 0 ? x : Math.max(val[i], x);
+                }
+                seen[i] = 1;
             }
-            Object v = a.arg() == null ? Long.valueOf(1) : eval(a.arg(), inner);
-            if (v == null) {
-                continue;
-            }
-            long x = a.fn().equals("count") ? 1 : v instanceof BigDecimal bd ? bd.setScale(aggScale(a), RoundingMode.UNNECESSARY).unscaledValue().longValueExact() : (Long) v;
-            int i = (int) p;
-            switch (a.fn()) {
-                case "sum", "count" -> val[i] = Math.addExact(val[i], x);
-                case "min" -> val[i] = seen[i] == 0 ? x : Math.min(val[i], x);
-                default -> val[i] = seen[i] == 0 ? x : Math.max(val[i], x);
-            }
-            seen[i] = 1;
         }
         hit = new long[][] {val, seen};
         aggArrays.put(a, hit);

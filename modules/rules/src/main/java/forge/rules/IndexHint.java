@@ -54,7 +54,9 @@ final class IndexHint {
         switch (e) {
             case null -> { }
             case RuleExpr.Agg x -> {
-                out.add(new Object[] {x.child(), x.via()});
+                if (x.via() != null) {
+                    out.add(new Object[] {x.child(), x.via()});
+                }
                 collect(x.arg(), out);
                 collect(x.where(), out);
             }
