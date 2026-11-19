@@ -37,6 +37,9 @@ Wrote forge.yml: 12 tables, seed 42.
 Cycle broken: orders.orders_latest_payment_fk (deferred)
 Check not fully understood: order_items.order_items_one_target (num_nonnulls(ticket_type_id, merch_id) = 1)
 Check not fully understood: payments.payments_completed_when_done ((status = 'initiated'::text) = (completed_at IS NULL))
+Status column events.status has 5 values (draft, on_sale, sold_out, closed, cancelled). With no state machine, generate picks them at random with no flow. To get a realistic flow add a states: entry for events (column, start, mix, transitions); see docs/design/STATE_MACHINES.md.
+Status column orders.status has 5 values (pending, paid, fulfilled, cancelled, refunded). With no state machine, generate picks them at random with no flow. To get a realistic flow add a states: entry for orders (column, start, mix, transitions); see docs/design/STATE_MACHINES.md.
+Status column payments.status has 3 values (initiated, succeeded, failed). With no state machine, generate picks them at random with no flow. To get a realistic flow add a states: entry for payments (column, start, mix, transitions); see docs/design/STATE_MACHINES.md.
 Wrote /work/forge.schema.json (the baseline forge drift compares with).
 (exit 0)
 

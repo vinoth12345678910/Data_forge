@@ -394,3 +394,10 @@
 - Not done: Chinook and the Supabase run (owner), clustering in the UI, a grouped-join rewrite of verify (owner's verify design), 50M and 100M row runs, verify.sh for this wave (see the final report).
 - Next: owner answers the open list (round(expr, n), grouped-join verify, README limits, Wave 3 start, Chinook file, Supabase variable, browser for step k).
 - Open: step k (UI smoke) still SKIPPED on this machine.
+
+## 2026-11-19 Wave 3, C4 (branch w3-c4-state-suggest)
+- Done: `init` suggests a state machine for status-like columns (`StateHints`, notes in text and in `data.notes`). Random statuses are still the default when no `states:` entry exists.
+- Not done: no `states:` block is written, no transitions guessed, no detection from data, MySQL/SQLite init unchanged. scope-guard and `scripts/verify.sh` not yet run.
+- Next: C3 (locale data) after you say go.
+- Decisions: schema only, conservative (2+ values, not a key); output is notes, so forge.output/1 is unchanged.
+- Open: step k (UI smoke) still SKIPPED.

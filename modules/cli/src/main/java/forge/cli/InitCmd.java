@@ -135,6 +135,14 @@ final class InitCmd implements Callable<Integer> {
                 }
             }
         }
+        for (forge.schema.StateHints.Hint h : forge.schema.StateHints.find(g)) {
+            String note = "Status column " + h.table() + "." + h.column() + " has " + h.values().size() + " values ("
+                + String.join(", ", h.values()) + "). With no state machine, generate picks them at random with no flow."
+                + " To get a realistic flow add a states: entry for " + h.table()
+                + " (column, start, mix, transitions); see docs/design/STATE_MACHINES.md.";
+            e.out.println(note);
+            notes.add(note);
+        }
         if (url != null) {
             try (java.sql.Connection tc = new Db(jdbc(url), user, password).open()) {
                 String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(tc, schema));

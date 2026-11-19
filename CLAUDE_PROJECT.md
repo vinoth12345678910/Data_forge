@@ -69,3 +69,5 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Limits register (2026-11-19): branches `lim-register`, `lim-compat-lab`, `lim-wave1-decisions` (stacked on `rel-gifs`, PRs open, not merged). Probes and design docs only; waiting for the owner's reply on the eight Wave 1 design docs before any build.
 
 - Wave 1 of the limits register closed on stacked branches (tip `w1-b1-external-stubs`, PRs open, not merged): A1 A2 A3 A7 A8 B1 B2 built, A4 needed no code. Waiting for the owner's review; Waves 2 to 4 not started.
+
+- Wave 3 item C4 (2026-11-19, branch `w3-c4-state-suggest`, PR to `main`): `init` suggests a state machine for status-like columns (notes only, nothing written to forge.yml). verify.sh PASS except j and k SKIPPED. C3, D7 not started; A5, A6, C2, D9, E1 wait for the owner.
