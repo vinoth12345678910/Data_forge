@@ -24,6 +24,7 @@ Everything here is a known limit of `1.0.0-rc1`, collected from the status notes
 - MariaDB is refused with a message.
 - **CSV output** is for inspection and Postgres `COPY`, not for loading into MySQL or SQLite.
 - **Supabase, Neon, other Postgres hosts and Prisma:** not tested ([SUPABASE_AND_PRISMA.md](SUPABASE_AND_PRISMA.md)).
+- **Scale (Apple M4, Postgres 16):** about 10,000,000 rows of simple parents and children in 66 s at the default 256 MB heap. Tied composite foreign keys keep an index of parent rows in memory: about 3,000,000 parent rows fit in 256 MB; 10,000,000 parent rows (30,100,000 rows) needs `-Xmx1024m` and took 27 minutes. Nothing is promised above that ([LIMITS_REGISTER.md](LIMITS_REGISTER.md) D2).
 - Time on 1,000,000 rows: Postgres 4.4 s, SQLite 6.0 s, MySQL 12.6 s ([PERF.md](PERF.md)).
 
 ## Cleanup and purge
