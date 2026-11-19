@@ -39,7 +39,7 @@ final class Guards {
         try (Connection ro = q.db().openReadOnly()) {
             Dialect d = Dialect.of(ro);
             Sql.session(ro, d);
-            return new Guards(new Ctx(ro, q.db(), d, q.graph(), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId()), q).go();
+            return new Guards(new Ctx(ro, q.db(), d, Relations.graph(q, ro, d), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId()), q).go();
         }
     }
 

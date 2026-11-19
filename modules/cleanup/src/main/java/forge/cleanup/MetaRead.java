@@ -101,7 +101,23 @@ final class MetaRead {
                 }
             }
         }
-        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, List.of(), 2, keep, pre);
+        List<Manifest.Rel> relations = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("select spec from _dataforge_run_relations where run_id = ? order by ord")) {
+            ps.setString(1, runId);
+            try (ResultSet r = ps.executeQuery()) {
+                while (r.next()) {
+                    relations.add(Manifest.Rel.parse(r.getString(1)));
+                }
+            }
+        } catch (SQLException e) {
+            // A database from before relations existed has no such table: no relations.
+            if (!Meta.exists(c, d, "run_relations")) {
+                relations.clear();
+            } else {
+                throw e;
+            }
+        }
+        return new Manifest(runId, seed, env, tool, cfg, sch, clock, at, tables, breaks, List.of(), 2, keep, pre, relations);
     }
 
     private static List<long[]> ranges(Connection c, String runId, String table) throws SQLException {

@@ -36,7 +36,7 @@ final class PurgeCmd implements Callable<Integer> {
         try {
             Live live = new Live(config);
             live.openGraph();
-            Request q = new Request(live.db, live.graph, live.conf,
+            Request q = new Request(live.db, live.dbGraph, live.conf,
                 live.file.toAbsolutePath().normalize().getParent(),
                 live.manifestDir(null), allowProd, runId,
                 run ? confirmDb : null, run ? confirmRows : null,

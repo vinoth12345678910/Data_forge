@@ -79,14 +79,14 @@ final class DriftCmd implements Callable<Integer> {
         e.typeWarnings(live.typeWarnings);
         Path snap = config.toAbsolutePath().normalize().getParent().resolve(SNAPSHOT);
         if (accept) {
-            Files.writeString(snap, SnapshotFile.write(live.graph));
-            e.out.println("Wrote " + snap + " from the live schema (" + live.graph.tables().size() + " tables). forge.yml was not touched.");
+            Files.writeString(snap, SnapshotFile.write(live.dbGraph));
+            e.out.println("Wrote " + snap + " from the live schema (" + live.dbGraph.tables().size() + " tables). forge.yml was not touched.");
             e.data.put("accepted", true);
             e.data.put("snapshot", snap.toString());
             return e.done("drift", 0);
         }
         SchemaGraph base = baseline(live, snap);
-        List<Change> changes = new ArrayList<>(Drift.diff(base, live.graph, live.conf));
+        List<Change> changes = new ArrayList<>(Drift.diff(base, live.dbGraph, live.conf));
         Set<String> added = new LinkedHashSet<>();
         boolean hasError = false;
         for (Change c : changes) {

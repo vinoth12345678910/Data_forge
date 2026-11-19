@@ -33,6 +33,8 @@ public final class ManifestJdbc {
             + " chunk int not null, n int not null, fps %BLOB% not null, primary key (run_id, table_name, chunk))",
         "create table if not exists _dataforge_run_keep (run_id varchar(36) not null, table_name varchar(128) not null,"
             + " spec text not null, primary key (run_id, table_name))",
+        "create table if not exists _dataforge_run_relations (run_id varchar(36) not null, ord int not null, spec text not null,"
+            + " primary key (run_id, ord))",
         "create table if not exists _dataforge_run_pre (run_id varchar(36) not null, table_name varchar(128) not null,"
             + " row_count bigint not null, primary key (run_id, table_name))"
     };
@@ -175,6 +177,16 @@ public final class ManifestJdbc {
                 ps.setString(1, m.runId());
                 ps.setString(2, k.table());
                 ps.setString(3, k.spec());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+        try (PreparedStatement ps = c.prepareStatement("insert into _dataforge_run_relations values (?, ?, ?)")) {
+            int ord = 0;
+            for (Manifest.Rel r : m.relations()) {
+                ps.setString(1, m.runId());
+                ps.setInt(2, ord++);
+                ps.setString(3, r.json());
                 ps.addBatch();
             }
             ps.executeBatch();

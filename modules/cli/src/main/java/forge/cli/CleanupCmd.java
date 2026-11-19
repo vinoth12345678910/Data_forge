@@ -37,7 +37,7 @@ final class CleanupCmd implements Callable<Integer> {
             try {
                 Live live = new Live(config);
                 live.openGraph();
-                Request q = new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+                Request q = new Request(live.db, live.dbGraph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
                     live.manifestDir(null), allowProd, runId, confirmDb, confirmRows, false);
                 Outcome o = Cleanup.dropMetadata(q);
                 return finish(e, "cleanup", o);
@@ -49,7 +49,7 @@ final class CleanupCmd implements Callable<Integer> {
         try {
             Live live = new Live(config);
             live.openGraph();
-            Request q = new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+            Request q = new Request(live.db, live.dbGraph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
                 live.manifestDir(null), allowProd, runId, confirmDb, confirmRows, resume);
             Outcome o = run || resume ? Cleanup.run(q) : Cleanup.dry(q);
             return finish(e, "cleanup", o);
