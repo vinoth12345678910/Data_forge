@@ -45,3 +45,7 @@ MySQL generated columns and check enforcement vary by version; the pinned image 
 ## least and greatest with NULL (review fix 8)
 
 Postgres `least` and `greatest` ignore NULL arguments (the result is NULL only if every argument is NULL). MySQL `LEAST`/`GREATEST` and SQLite scalar `min`/`max` return NULL if any argument is NULL. The rule language follows Postgres, so `Dialect.pick` writes `least(coalesce(a, b), coalesce(b, a))` (each argument falls back to the others) on MySQL and SQLite; Postgres SQL is unchanged. `LeastGreatestNullContainerTest` runs the same five rows and four rules on all three databases and catches a wrong stored answer on each.
+
+## round(expr, n) (A3)
+
+One pinned mode: half away from zero, on exact numbers only. Postgres `round(numeric, int)` and MySQL `ROUND(DECIMAL, n)` both round half away from zero, as does `BigDecimal` `HALF_UP` in the generator. `Dialect.round` writes `round((x)::numeric, n)` on Postgres (there is no `round(bigint, int)`, and `round(double precision)` rounds half to even) and `round(x, n)` on MySQL. SQLite's `round()` returns a binary float even for a whole number, so a rule that uses `round` is refused on SQLite by `RuleSet.noDecimals`. Float columns are refused by the checker for the same reason. One difference in representation: when `n` is above the argument's scale Postgres pads (`1.20000`) and MySQL does not (`1.2`); values compare equal. `RoundEdgeContainerTest` runs the edge-value table, every x with every n as rules, and 2,000 generated rows per database.

@@ -45,6 +45,17 @@ public sealed interface RuleExpr {
      * sum, count, min or max over a child table. arg is null for count(*). viaNames is the path after
      * "via" (null if absent). After the check: child is the child table and via the foreign key from it.
      */
-    record Agg(Pos pos, String fn, RuleExpr arg, RuleExpr where, List<String> viaNames, String child, Fk via)
-        implements RuleExpr {}
+    record Agg(Pos pos, String fn, RuleExpr arg, RuleExpr where, List<String> viaNames, String child, Fk via, ColJoin join)
+        implements RuleExpr {
+        public Agg(Pos pos, String fn, RuleExpr arg, RuleExpr where, List<String> viaNames, String child, Fk via) {
+            this(pos, fn, arg, where, viaNames, child, via, null);
+        }
+    }
+
+    /**
+     * "via child.key = subject.col": the child is joined on equal columns, not a foreign key. left and right are the two sides as
+     * written. After the check: key is the child side (a column of the child, possibly after foreign-key hops) and subjectCol the
+     * column of the rule's own table. via is null on such an aggregate.
+     */
+    record ColJoin(List<String> left, List<String> right, Ref key, String subjectCol) {}
 }

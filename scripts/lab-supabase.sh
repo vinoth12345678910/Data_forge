@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # F7: run Data Forge zero-config (init, generate, verify) against a REAL Postgres such as a local Supabase, in a throwaway schema.
-# It creates ONE schema, forge_lab, with three small uuid tables (lab/schemas/uuid_app.sql), runs forge against that schema only, and
-# always drops forge_lab again, and drops the _dataforge metadata schema too if it did not exist before. It never reads or changes
-# any other table. Probe only. Needs Docker (for psql), Java 21.
+# It creates ONE schema, forge_lab_<uuid> (a fresh random name; it refuses if that name already exists), with three small uuid tables (lab/schemas/uuid_app.sql), runs forge against that schema only, and
+# always drops that schema again, and drops the _dataforge metadata schema it creates. It refuses to start if _dataforge already exists. It never reads or changes
+# any other table. It asks you to type the host name before touching anything and never prints the URL or password. Probe only. Needs Docker (for psql), Java 21.
 #
 # Usage (run it from your own shell so the password never passes through anyone else):
 #   export PGPASSWORD='...'                       # the database password
@@ -15,9 +15,13 @@ root="$(pwd)"
 : "${LAB_DB_URL:?set LAB_DB_URL, for example postgres://127.0.0.1:54322/postgres}"
 : "${PGPASSWORD:?set PGPASSWORD to the database password}"
 user="${LAB_DB_USER:-postgres}"
-schema="forge_lab"
+schema="forge_lab_$(uuidgen | tr 'A-Z-' 'a-z_')"
 hostport_db="${LAB_DB_URL#postgres://}"
 hostport_db="${hostport_db#postgresql://}"
+host="${hostport_db%%[:/]*}"
+# Typed confirmation: the host name is not printed here, so you must know which database this points at.
+read -r -p "lab-supabase: type the database host name to confirm: " typed </dev/tty
+[ "$typed" = "$host" ] || { echo "lab-supabase: host name did not match; nothing was touched." >&2; exit 1; }
 dockerhost="${hostport_db/127.0.0.1/host.docker.internal}"
 dockerhost="${dockerhost/localhost/host.docker.internal}"
 psqlx() {
@@ -29,17 +33,20 @@ psqlx() {
 version="$(sed -n 's/^    version = "\(.*\)"/\1/p' build.gradle.kts | head -1)"
 export FORGE_JAR="$root/modules/cli/build/libs/forge-$version.jar"
 
-had_meta="$(psqlx -tAc "select count(*) from information_schema.schemata where schema_name = '_dataforge'")"
+if [ "$(psqlx -tAc "select count(*) from information_schema.schemata where schema_name = '_dataforge'")" != 0 ]; then
+  echo "lab-supabase: a _dataforge schema already exists in that database (Data Forge has been used there). Refusing: this script would have to drop it, and it only drops what it created. Use an empty database or a fresh local Supabase." >&2
+  exit 1
+fi
 if [ "$(psqlx -tAc "select count(*) from information_schema.schemata where schema_name = '$schema'")" != 0 ]; then
   echo "lab-supabase: the schema $schema already exists in that database; refusing to touch it. Drop it yourself or rename it in this script." >&2
   exit 1
 fi
 version_str="$(psqlx -tAc 'show server_version' | tr -d ' ')"
 cleanup() {
+  [ -n "${work:-}" ] && rm -rf "$work"
   psqlx -c "drop schema if exists $schema cascade" >/dev/null 2>&1 || true
-  if [ "$had_meta" = 0 ]; then
-    psqlx -c "drop schema if exists _dataforge cascade" >/dev/null 2>&1 || true
-  fi
+  # Safe: the preflight above proved _dataforge did not exist, so anything there now was created by this run.
+  psqlx -c "drop schema if exists _dataforge cascade" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -61,6 +68,7 @@ for step in init generate verify; do
   if [ "$rc" -ne 0 ]; then
     res="FAIL at $step (exit $rc)"
     err="$(grep -v '^[[:space:]]*$' "$work/$step.log" | tail -1 | tr '|' '/' | cut -c1-240)"
+    err="${err//$LAB_DB_URL/<url>}"; err="${err//$hostport_db/<db>}"; err="${err//$host/<host>}"
     break
   fi
 done

@@ -49,7 +49,7 @@ A rule name is `[a-z][a-z0-9_]*`, unique in the file. Exactly one of `derive`, `
 | Arithmetic | `+ - * /  %` on integers. `/` is integer division, truncating toward zero, as in Postgres and Java. Overflow is an error, never a wrap. |
 | Compare | `= <> < <= > >=` on numbers, timestamps, dates; `= <>` on text and booleans |
 | Logic | `and or not`, `is null`, `is not null`, `in ('a','b')`. Three-valued as in SQL: an unknown is not true. |
-| Functions | `coalesce(a,b,...)`, `least(...)`, `greatest(...)`, `abs(x)` |
+| Functions | `coalesce(a,b,...)`, `least(...)`, `greatest(...)`, `abs(x)`, `round(x, n)`: `x` a whole number or exact decimal (not a float), `n` an integer literal 0 to 30; half away from zero; the result has exactly `n` decimal places. SQLite refuses it. See `DECIMAL_RULES.md`. |
 | Conditional | `case when c then a [when c then b] else z end` |
 | Aggregates | `sum(e)`, `count(*)`, `min(e)`, `max(e)` over a child table, optional `where cond`. Written `sum(child.col * child.col2)`; the join is the one foreign key from `child` to the subject table. If two exist, write `via child.fkcol`: `sum(refunds.amount_paise via refunds.payment_id)`. Inside an aggregate the subject row is still readable (an "outer reference"): `orders.subtotal_minor`. `sum` of no rows is 0; `min` and `max` of no rows are null. |
 
@@ -194,6 +194,6 @@ Written for `events-merch` and `ecommerce`, the Phase 2 language covers the 6 + 
 
 - Code: `Ruled` (the engine, with its own evaluator of the rule tree) in `gen`; `RowGen.of(graph, config, rules)` takes the checked rules as data. With no rules `RowGen` behaves exactly as in Phase 1 (pinned by `RulesOffIdenticalTest` and `RulesOffGoldenContainerTest`).
 - Supported: `derive` of whole-number columns (with `when`; aggregates over a child table with outer references; parent paths); `check` as a clamp when it has the shape `own_column <op> expr` on a whole-number, date or timestamp column, otherwise by redraw (the Phase 1 attempts, up to 5,000); `limit` as designed in D1c (children shrink to an even share, a cap is raised only when counts force it, a derived cap is never raised).
-- Not supported yet, each a clear `GenError` at the start or at the row: derive of text, decimal or time columns; a rule reading decimal (`numeric`) columns; a `when` on a `limit`; a rule that sets a key, sequence, shuffled or comparison-tied column; an aggregate or limit whose child foreign key is nullable while the child table is redrawn by checks; a column derived by one rule and also limited.
+- Not supported yet, each a clear `GenError` at the start or at the row: derive of text, decimal or time columns; a `when` on a `limit`; a rule that sets a key, sequence, shuffled or comparison-tied column; an aggregate or limit whose child foreign key is nullable while the child table is redrawn by checks; a column derived by one rule and also limited.
 - A parent's key column is read directly (not through the whole parent row) when the parent has rules, so a parent waiting for its children never asks for itself.
 - Measured on ecommerce (rules on vs off): 20,000 rows per table, 2.3 s vs 2.1 s, heap about 120 MB vs 85 MB (a rough in-process check, not a JFR profile).

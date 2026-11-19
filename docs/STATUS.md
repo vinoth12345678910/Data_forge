@@ -422,3 +422,17 @@
 - Next: A5 derive-with-join, then D9 MariaDB.
 - Decisions: recommended design (shift the parent's earliest by the minimum gap). It changes the parent time column's values for existing seeds.
 - Open: none new.
+
+## 2026-11-19 A3 follow-up: round(expr, n) (branch a3-round; stacked on w2-housekeeping)
+- Done: explicit `round(expr, n)`, half away from zero, `n` a literal 0 to 30, never implicit; checker, SQL per dialect (Postgres casts to numeric), generator (`Ruled`), SQLite and float refused. Edge-value table measured on Postgres 16.15 and MySQL 8.4.3: every row agrees with BigDecimal HALF_UP (only difference: MySQL does not pad when n is above the scale). Gates: `RoundRuleTest`, `DecimalRulesTest`, `RoundEdgeContainerTest` (7 tests: table, every x with every n as rules, 2,000 generated rows per database with a mutation caught). `./gradlew test` and the full `containerTest` pass; determinism-auditor and scope-guard (fresh agents) found nothing.
+- Not done: negative `n`, decimal `/` and `%` (so `round(a * b / c, n)` is still not writable), decimal literals (G6), round in SQL check constraints. verify.sh not run on this tip yet.
+- Next: feature 2, grouped-join verify (branch a4-grouped-verify).
+- Decisions: `n` limited to 0 to 30 (MySQL DECIMAL limit); a float argument is refused because Postgres and MySQL round floats differently.
+- Open (rule-language question for the owner, does not block): give decimal `/` a defined scale, so a rounded division can be written.
+
+## 2026-11-19 A4 verify as a grouped join (branch a4-grouped-verify; stacked on a3-round)
+- Done: every aggregate and limit compiles to one grouped derived table left-joined to the rule's table (default); the old correlated-subquery form stays behind `forge verify|generate --legacy-sql` for one release. Gates: `GroupedSqlTest` (pinned SQL, 13 tests), `GroupedEquivalenceContainerTest` (events-merch and ecommerce, seed and every broken fixture, every row compared; hand-written empty-group and NULL answers), `GroupedRandomTest` and `GroupedRandomContainerTest` (random data, SQLite 50 tries, Postgres and MySQL 10 each), `legacySqlReachesTheVerifier`. `./gradlew test` and the full `containerTest` pass; scope-guard found nothing.
+- Measured (`docs/VERIFY_COST.md`, Postgres 16, Apple M4): grouped 1.4 s at 1,000,000 parents with or without an index; legacy without an index 20 s at 20,000 and the 120 s timeout at 100,000 and 1,000,000. One regression: a `when` keeping about 0.1% of the parents with the index present is 0.9 s grouped vs 0.5 s legacy at 1,000,000.
+- Not done: a rule-subset flag; saas-multitenant has no rules in the language so it is not in the equivalence test; MySQL and SQLite timings and Postgres spill behaviour not measured. The JSON report has no `sql` field, so the flag test checks the legacy-only `slow:` note. verify.sh not run on this tip; step k (UI smoke) still SKIPPED (the Playwright Chromium 1148 install did not complete).
+- Next: feature 3, measured limits table and preflight (branch l-limits-preflight).
+- Decisions: the `slow:` index note applies to the legacy form only; the legacy path is removed after the next release.
