@@ -49,15 +49,26 @@ class SizeProbeTest {
         List<String> out = new ArrayList<>();
         try (PostgreSQLContainer pg = new PostgreSQLContainer("postgres:16-alpine").withUsername("postgres").withPassword("pw")) {
             pg.start();
-            Object[][] runs = {{"s2", 2_500_000, "parents + 3x children (10,000,000 rows)"}, {"s4", 3_333_333, "tied composite keys (about 10,000,000 rows)"}};
+            // FORGE_SIZE_RUNS="shape:scale:heapMb,..." overrides the default two runs (for example s4:10000000:1024).
+            Object[][] runs = {{"s2", 2_500_000, "parents + 3x children (10,000,000 rows)", 256}, {"s4", 3_333_333, "tied composite keys (about 10,000,000 rows)", 256}};
+            String custom = System.getenv("FORGE_SIZE_RUNS");
+            if (custom != null && !custom.isBlank()) {
+                String[] parts = custom.split(",");
+                runs = new Object[parts.length][];
+                for (int i = 0; i < parts.length; i++) {
+                    String[] f = parts[i].trim().split(":");
+                    runs[i] = new Object[] {f[0], Integer.parseInt(f[1]), f[0] + " at scale " + f[1], Integer.parseInt(f[2])};
+                }
+            }
             for (Object[] r : runs) {
                 String shape = (String) r[0];
                 int scale = (Integer) r[1];
+                int xmx = (Integer) r[3];
                 String d = db(pg, ScaleShapes.ddl(shape, "postgres"));
-                Path dir = Files.createDirectory(tmp.resolve(shape));
-                Run run = ScaleContainerTest.child("load", "postgres", shape, scale, 42, XMX + "m", jdbc(pg, d), "postgres", "pw", dir);
+                Path dir = Files.createDirectory(tmp.resolve(shape + "_" + scale + "_" + xmx));
+                Run run = ScaleContainerTest.child("load", "postgres", shape, scale, 42, xmx + "m", jdbc(pg, d), "postgres", "pw", dir);
                 out.add(shape + " | " + r[2] + " | exit " + run.exit() + " | rows " + run.rows() + " | " + run.ms() / 1000.0 + " s | live " + run.liveMb()
-                    + " MB | peak " + run.peakMb() + " MB | -Xmx" + XMX + "m | " + run.line().replace('\n', ' ')
+                    + " MB | peak " + run.peakMb() + " MB | -Xmx" + xmx + "m | " + run.line().replace('\n', ' ')
                     + (run.exit() == 0 ? "" : " | log: " + run.log().lines().limit(4).toList()));
             }
         }

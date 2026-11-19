@@ -81,11 +81,21 @@ public final class Verifier {
                 }
             }
             String note = checked == 0 ? "checked 0 rows (nothing to test)" : null;
+            if (checked > 10_000) {
+                String h = IndexHint.hint(c, g, r);
+                note = h.isEmpty() ? note : h;
+            }
             return new RuleResult(r.name(), kind, r.subject(), bad == 0 ? "PASS" : "FAIL", checked, bad, cols, rows,
                 ms(t0), null, note, q.violations());
         } catch (SQLException e) {
+            try {
+                c.rollback();
+            } catch (SQLException ignore) {
+                // the transaction is over either way; the hint only reads catalog metadata
+            }
+            String h = IndexHint.hint(c, g, r);
             return new RuleResult(r.name(), kind, r.subject(), "ERROR", 0, 0, List.of(), List.of(), ms(t0),
-                e.getMessage().replace('\n', ' '), null, q.violations());
+                e.getMessage().replace('\n', ' ') + (h.isEmpty() ? "" : " " + h), null, q.violations());
         } finally {
             c.rollback();
         }
