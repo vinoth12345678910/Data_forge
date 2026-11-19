@@ -100,6 +100,9 @@ final class Classify {
         long manifestRows = 0;
         long otherRows = 0;
         for (Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             Manifest.Tbl mt = manifest.get(t.name());
             long live = Sql.count(x.ro(), "select count(*) from " + x.tbl(t.name()));
             long mine = mt == null ? 0 : found.get(t.name());

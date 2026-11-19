@@ -53,7 +53,7 @@ public final class ManifestBuilder {
         for (String name : gen.plan().order()) {
             order++;
             Config.TableConf tc = conf.tables().get(name);
-            if ((tc != null && tc.keep()) || gen.rows(name) == 0) {
+            if ((tc != null && tc.keep()) || g.table(name).external() || gen.rows(name) == 0) {
                 continue;
             }
             tables.add(table(g.table(name), order, gen, pre != null));

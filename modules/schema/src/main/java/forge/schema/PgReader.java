@@ -87,6 +87,13 @@ public final class PgReader {
                 }
             }
         }
+        for (Table t : tables) {
+            if (t.name().indexOf('.') > 0) {
+                throw new SQLException("Table " + t.name() + " has a dot in its name. Data Forge names a table of another schema as schema.table"
+                    + " (for a foreign key into it), so a table name with a dot is not supported on Postgres.");
+            }
+        }
+        tables.addAll(externals(md, tables));
         tables.sort(Comparator.comparing(Table::name));
         return new SchemaGraph(schema, tables);
     }
@@ -124,6 +131,67 @@ public final class PgReader {
     }
 
     // ---- columns
+
+    /**
+     * A foreign key into a schema that is not read becomes an external stub table, in memory only: the table named as the key names
+     * it (auth.users) with just the referenced key columns, whose types come from the catalog. No row of it is read and nothing is
+     * created in the database. Its values come from cleanup.keep in forge.yml.
+     */
+    private List<Table> externals(DatabaseMetaData md, List<Table> read) throws SQLException {
+        Map<String, List<String>> keys = new TreeMap<>();
+        for (Table t : read) {
+            for (Fk f : t.fks()) {
+                if (f.refTable().indexOf('.') > 0) {
+                    List<String> have = keys.computeIfAbsent(f.refTable(), k -> new ArrayList<>());
+                    for (String c : f.refColumns()) {
+                        if (!have.contains(c)) {
+                            have.add(c);
+                        }
+                    }
+                }
+            }
+        }
+        List<Table> out = new ArrayList<>();
+        for (Map.Entry<String, List<String>> e : keys.entrySet()) {
+            int dot = e.getKey().indexOf('.');
+            String refSchema = e.getKey().substring(0, dot);
+            String refTable = e.getKey().substring(dot + 1);
+            List<Column> cols = new ArrayList<>();
+            for (String col : e.getValue()) {
+                try (ResultSet rs = exact(md.getColumns(null, refSchema, refTable, col), refSchema, refTable, col)) {
+                    if (rs == null) {
+                        throw new SQLException("Foreign key into " + e.getKey() + " names column " + col + ", which the catalog does not list.");
+                    }
+                    int size = rs.getInt("COLUMN_SIZE");
+                    int digits = rs.getInt("DECIMAL_DIGITS");
+                    String type = switch (rs.getString("TYPE_NAME")) {
+                        case "bigserial" -> "int8";
+                        case "serial" -> "int4";
+                        case "smallserial" -> "int2";
+                        default -> rs.getString("TYPE_NAME");
+                    };
+                    boolean numeric = type.equals("numeric");
+                    boolean chars = type.equals("varchar") || type.equals("bpchar");
+                    cols.add(new Column(col, new Type(type, 0, chars ? Integer.valueOf(size) : null, numeric ? Integer.valueOf(size) : null,
+                        numeric ? Integer.valueOf(digits) : null, List.of(), null), false, null, null, null));
+                }
+            }
+            List<String> key = e.getValue();
+            out.add(new Table(e.getKey(), cols, key, List.of(new Unique(e.getKey() + "_key", key, List.of(), null, true)), List.of(), List.of(), null, List.of(), true));
+        }
+        return out;
+    }
+
+    /** The catalog patterns are LIKE patterns ("_" matches any character): positions the result on the row with exactly this name, or returns null. */
+    private static ResultSet exact(ResultSet rs, String refSchema, String refTable, String col) throws SQLException {
+        while (rs.next()) {
+            if (refSchema.equals(rs.getString("TABLE_SCHEM")) && refTable.equals(rs.getString("TABLE_NAME")) && col.equals(rs.getString("COLUMN_NAME"))) {
+                return rs;
+            }
+        }
+        rs.close();
+        return null;
+    }
 
     private List<Column> columns(DatabaseMetaData md, String table, long oid, List<Check> domainChecks) throws SQLException {
         Map<String, String[]> meta = new TreeMap<>();

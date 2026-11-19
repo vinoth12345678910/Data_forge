@@ -14,7 +14,15 @@ public record Table(
     List<Fk> fks,
     List<Check> checks,
     String partKey,
-    List<Part> parts) {
+    List<Part> parts,
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_DEFAULT) boolean external) {
+
+    /** An ordinary table (not an external stub). */
+    public Table(
+        String name, List<Column> columns, List<String> pk, List<Unique> uniques, List<Fk> fks, List<Check> checks, String partKey,
+        List<Part> parts) {
+        this(name, columns, pk, uniques, fks, checks, partKey, parts, false);
+    }
 
     public Column column(String name) {
         for (Column c : columns) {

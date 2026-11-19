@@ -26,6 +26,9 @@ public final class StructureCheck {
     public static List<String> violations(Connection c, SchemaGraph g) throws SQLException {
         List<String> out = new ArrayList<>();
         for (Table t : g.tables()) {
+            if (t.external()) {
+                continue;
+            }
             String from = " from " + q(g.schema()) + "." + q(t.name());
             for (Column col : t.columns()) {
                 if (!col.nullable()) {
