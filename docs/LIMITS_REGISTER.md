@@ -36,7 +36,7 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | D3 | **Confirmed** | No thread, executor or parallel code in `modules/load`. |
 | D4 | **Unknown** | Not measured. |
 | D5 | **Unknown** (part refuted) | A statement timeout already exists (`Verifier.java:55-57`). Cost on huge tables, EXPLAIN, rule-subset flag, sample mode: not seen, not measured. |
-| D6 | **Refuted** | The test suite uses 16 only, but the lab PASSED the three goldens and Pagila on Postgres 16.15, 17.11 and 18.6. 14 and 15 not run. |
+| D6 | **Refuted** (Wave 2, branch `w2-d6-pg-matrix`). The lab (`scripts/compat-lab.sh`, `docs/COMPAT_MATRIX.md`) ran zero-config `init`, `generate` and `verify` on the three goldens and Pagila on Postgres 14.25, 15.20, 16.15, 17.11 and 18.6: all PASS. The container test suite itself still uses 16 only. |
 | D7 | **Confirmed** | LIMITS.md (not re-run). |
 | D8 | **Confirmed** | LIMITS.md (not re-run). |
 | D9 | **Confirmed** | `InitCmd.java:151`: MariaDB url refused with a message. |
