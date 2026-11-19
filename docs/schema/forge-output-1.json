@@ -31,6 +31,6 @@
   "perCommand": {
     "generate": {"required": ["seed", "loaded", "partial", "not_checked"]},
     "verify": {"required": ["rules", "counts"]},
-    "init": {"required": ["tables", "notes"]}
+    "init": {"required": ["tables", "notes", "schemas", "init_warnings", "schema"]}
   }
 }

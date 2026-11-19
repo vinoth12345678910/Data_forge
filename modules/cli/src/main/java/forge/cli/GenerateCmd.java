@@ -32,6 +32,7 @@ final class GenerateCmd implements Callable<Integer> {
     @Option(names = "--out-dir", description = "Directory for --out (new or empty)") Path outDir;
     @Option(names = "--dialect", description = "Quoting for --out sql: postgres, mysql or sqlite (default: from the connection)") String dialect;
     @Option(names = "--legacy-sql", description = "Verify aggregates with the old correlated subqueries instead of a grouped join (slow without an index; removed after the next release)") boolean legacySql;
+    @Option(names = "--preflight", description = "Only estimate the memory this run needs and say whether it fits; load nothing (exit 1 when it does not fit)") boolean preflightOnly;
     @Option(names = "--edge", description = "Edge-case mode: NULLs, maximum lengths, unicode, case-only duplicates, leap days, DST, injection strings") boolean edge;
 
     @Override
@@ -53,6 +54,23 @@ final class GenerateCmd implements Callable<Integer> {
         live.open();
         e.typeWarnings(live.typeWarnings);
         RowGen gen = RowGen.of(live.graph, live.conf, live.rules);
+        forge.gen.Preflight.Result pf = forge.gen.Preflight.check(gen.tiedIndexRows(), forge.gen.Preflight.heapMb());
+        java.util.Map<String, Object> pm = new java.util.LinkedHashMap<>();
+        pm.put("tied_parent_rows", pf.tiedParentRows());
+        pm.put("estimated_live_mb", pf.estimatedLiveMb());
+        pm.put("heap_mb", pf.heapMb());
+        pm.put("ok", pf.ok());
+        pm.put("xmx_mb_needed", pf.xmxMbNeeded());
+        e.data.put("preflight", pm);
+        if (!pf.ok()) {
+            throw new forge.gen.GenError("memory_preflight", "Tied composite keys keep " + pf.tiedParentRows() + " parent rows in memory: about "
+                + pf.estimatedLiveMb() + " MB of live heap are needed and this run has " + pf.heapMb() + " MB. Nothing was loaded. Run with -Xmx"
+                + pf.xmxMbNeeded() + "m (for example FORGE_JAVA_OPTS=-Xmx" + pf.xmxMbNeeded() + "m with the forge launcher).");
+        }
+        if (preflightOnly) {
+            e.out.println("Preflight ok: " + (pf.estimatedLiveMb() == null ? "no tied composite keys, nothing to estimate" : "about " + pf.estimatedLiveMb() + " MB live of " + pf.heapMb() + " MB") + ".");
+            return 0;
+        }
         if (out != null) {
             return files(e, live, gen);
         }
