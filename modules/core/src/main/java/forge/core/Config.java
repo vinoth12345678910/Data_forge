@@ -11,7 +11,18 @@ import java.util.Set;
 public record Config(
     int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
     List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run,
-    String manifestDir, Cleanup cleanup) {
+    String manifestDir, Cleanup cleanup, List<Relation> relations) {
+
+    /** A foreign key the database does not have, declared in forge.yml (relations:). */
+    public record Relation(String table, List<String> columns, String refTable, List<String> refColumns) {}
+
+    /** A config with no relations: section. */
+    public Config(
+        int version, long seed, String clock, String locale, Conn connection, String ddl, Map<String, TableConf> tables,
+        List<RuleConf> rules, Map<String, StateConf> states, Map<String, Scenario> scenarios, Run run,
+        String manifestDir, Cleanup cleanup) {
+        this(version, seed, clock, locale, connection, ddl, tables, rules, states, scenarios, run, manifestDir, cleanup, List.of());
+    }
 
     /** A config with no cleanup: section. */
     public Config(
@@ -44,12 +55,12 @@ public record Config(
 
     /** The same config pointed at another connection. */
     public Config withConnection(Conn c) {
-        return new Config(version, seed, clock, locale, c, ddl, tables, rules, states, scenarios, run, manifestDir, cleanup);
+        return new Config(version, seed, clock, locale, c, ddl, tables, rules, states, scenarios, run, manifestDir, cleanup, relations);
     }
 
     /** The same config with other table settings. */
     public Config withTables(Map<String, TableConf> t) {
-        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir, cleanup);
+        return new Config(version, seed, clock, locale, connection, ddl, t, rules, states, scenarios, run, manifestDir, cleanup, relations);
     }
 
     /** A config without rules. */

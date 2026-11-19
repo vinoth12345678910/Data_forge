@@ -49,6 +49,18 @@ public final class ConfigWriter {
         root.put("states", Map.of());
         root.put("scenarios", Map.of());
         root.put("cleanup", cleanup(c.cleanup()));
+        if (!c.relations().isEmpty()) {
+            List<Object> rel = new java.util.ArrayList<>();
+            for (Config.Relation r : c.relations()) {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("table", r.table());
+                m.put("columns", r.columns());
+                m.put("ref_table", r.refTable());
+                m.put("ref_columns", r.refColumns());
+                rel.add(m);
+            }
+            root.put("relations", rel);
+        }
         try {
             return YAML.writeValueAsString(root);
         } catch (JsonProcessingException e) {

@@ -183,3 +183,11 @@ Validation (added): exactly one of `derive`, `check`, `limit` per item; an unkno
 | `test_patterns` | list of `{table, column, like}` | `[]` | Patterns that mark test rows. |
 
 An unknown key or a wrong type is a config error with its path. Manifest format 2 is described in `design/MANIFEST.md`.
+
+
+## `relations:` (optional)
+```yaml
+relations:
+  - { table: orders, columns: [user_id], ref_table: users, ref_columns: [id] }
+```
+A foreign key the database does not have. `columns` and `ref_columns` are lists of equal length (composite keys allowed); the column types must match, and `ref_columns` must be the primary key or a unique key of `ref_table`. A relation that duplicates a real foreign key, or names an unknown table or column, is an error naming `relations[N]`. Cleanup uses the relations recorded in the manifest at load time (see [LIMITS.md](LIMITS.md)).

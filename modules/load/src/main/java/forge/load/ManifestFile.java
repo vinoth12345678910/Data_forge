@@ -64,6 +64,12 @@ public final class ManifestFile {
             for (Manifest.Keep k : m.keep()) {
                 keep.add(om.readTree(k.spec()));
             }
+            if (!m.relations().isEmpty()) {
+                ArrayNode rel = root.putArray("relations");
+                for (Manifest.Rel r : m.relations()) {
+                    rel.add(om.readTree(r.json()));
+                }
+            }
             ObjectNode pre = root.putObject("pre");
             for (Map.Entry<String, Long> e : new TreeMap<>(m.pre()).entrySet()) {
                 pre.put(e.getKey(), e.getValue());

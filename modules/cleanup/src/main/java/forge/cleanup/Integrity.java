@@ -66,7 +66,7 @@ final class Integrity {
             return no("manifest_tampered", "The manifest file and the database copy of run " + runId + " differ (hash "
                 + rebuilt + " against " + stored + "). Nothing was deleted.");
         }
-        String live = hex(Snapshot.yaml(x.g()).getBytes(StandardCharsets.UTF_8));
+        String live = hex(Snapshot.yaml(x.g().withoutRelations()).getBytes(StandardCharsets.UTF_8));
         if (!live.equals(m.schemaSha())) {
             return no("schema_changed", "The schema changed since run " + runId + " was loaded (hash differs). Nothing was deleted.");
         }

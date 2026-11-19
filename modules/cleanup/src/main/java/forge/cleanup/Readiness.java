@@ -58,7 +58,7 @@ final class Readiness {
         try (Connection ro = q.db().openReadOnly()) {
             Dialect d = Dialect.of(ro);
             Sql.session(ro, d);
-            Ctx x = new Ctx(ro, q.db(), d, q.graph(), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId());
+            Ctx x = new Ctx(ro, q.db(), d, Relations.graph(q, ro, d), q.conf(), q.home(), q.manifestDir(), q.allowProd(), q.runId());
             return new Readiness(x, q).go();
         }
     }

@@ -372,3 +372,8 @@
 - Decisions needed: A2 ordering, A3 rounding rule, A7 key and cleanup, B1 stub tables and cleanup. All touch generator design, config, or Phase 5 safety (yours).
 - Next: owner answers those four; then one branch each.
 - Open: Chinook and the Supabase demo lab rows still SKIPPED (`Dev/texus-demo/.env` read was denied; run the lab from your own shell).
+
+## 2026-11-19 A7 safety tests frozen
+- `modules/testkit/src/test/java/forge/safety2` (27 tests, 24 red, 3 controls) frozen at commit `bc67464` (see scripts/safety2-frozen.txt; verify.sh step i2 fails if they change). Written by the test-first agent in a separate invocation before any A7 code. The builder may not edit them.
+
+- safety2 re-frozen at d4484a6 after one test-side fix (r6: helper table dellog declared keep, the test own delete triggers listed under cleanup.allow_triggers; assertions unchanged; the defect only showed once the feature let generate run). Previous hash bc67464. A7 built at d2ad8be; safety-reviewer run four times, every finding shown to the owner in the session.

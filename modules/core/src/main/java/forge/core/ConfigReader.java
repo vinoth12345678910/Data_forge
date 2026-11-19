@@ -40,7 +40,7 @@ public final class ConfigReader {
             throw new ConfigError("forge.yml must be a map of keys.");
         }
         keys(root, "", "version", "seed", "clock", "locale", "connection", "ddl", "use", "tables",
-            "rules", "states", "scenarios", "cleanup", "manifest_dir");
+            "rules", "states", "scenarios", "cleanup", "manifest_dir", "relations");
 
         JsonNode version = root.get("version");
         if (version == null || !version.isInt() || version.intValue() != 1) {
@@ -92,7 +92,7 @@ public final class ConfigReader {
             }
         }
         return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE,
-            text(root, "manifest_dir", ""), cleanup);
+            text(root, "manifest_dir", ""), cleanup, relations(root.get("relations")));
     }
 
     private static Config.Cleanup cleanup(JsonNode n) {
@@ -406,6 +406,42 @@ public final class ConfigReader {
     }
 
     private static final Pattern RULE_NAME = Pattern.compile("[a-z][a-z0-9_]*");
+
+    private static List<Config.Relation> relations(JsonNode n) {
+        List<Config.Relation> out = new ArrayList<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isArray()) {
+            throw new ConfigError("relations: a list of relations is required.");
+        }
+        for (int i = 0; i < n.size(); i++) {
+            JsonNode r = n.get(i);
+            String path = "relations[" + i + "]";
+            keys(r, path, "table", "columns", "ref_table", "ref_columns");
+            String table = text(r, "table", path);
+            String ref = text(r, "ref_table", path);
+            if (table == null || ref == null) {
+                throw new ConfigError(path + ": table and ref_table are required.");
+            }
+            out.add(new Config.Relation(table, names(r.get("columns"), path + ".columns"), ref, names(r.get("ref_columns"), path + ".ref_columns")));
+        }
+        return out;
+    }
+
+    private static List<String> names(JsonNode n, String path) {
+        if (n == null || !n.isArray() || n.isEmpty()) {
+            throw new ConfigError(path + ": required, a list of column names.");
+        }
+        List<String> out = new ArrayList<>();
+        for (JsonNode x : n) {
+            if (!x.isTextual() || x.asText().isBlank()) {
+                throw new ConfigError(path + ": column names must be text.");
+            }
+            out.add(x.asText());
+        }
+        return out;
+    }
 
     private static List<Config.RuleConf> rules(JsonNode n) {
         List<Config.RuleConf> out = new ArrayList<>();

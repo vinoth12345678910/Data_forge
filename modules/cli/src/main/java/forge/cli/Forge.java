@@ -74,7 +74,7 @@ public final class Forge implements Runnable {
             try {
                 Live live = new Live(config);
                 live.openGraph();
-                Request q = new Request(live.db, live.graph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
+                Request q = new Request(live.db, live.dbGraph, live.conf, live.file.toAbsolutePath().normalize().getParent(),
                     live.manifestDir(null), allowProd, runId, null, null, false, null, false, false);
                 Outcome o = Cleanup.readiness(q);
                 return CleanupCmd.finish(e, "readiness", o);
