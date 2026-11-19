@@ -75,10 +75,10 @@ test('connect, schema, run, verify, go-live, prod refused', async ({ page }) => 
   await expect(page.getByTestId('run-state')).toContainText(/done|failed/, { timeout: 120_000 });
   await expect(page.getByTestId('run-summary')).toContainText('This data is partial');
 
-  // Verify on a SQLite fixture has no rules: an error is shown and no empty "Failed (0)" list that could read as clean
+  // Verify on a SQLite fixture has no rules: it says nothing was verified (not a pass) and shows no empty "Failed (0)" list
   await page.keyboard.press('4');
   await page.getByRole('button', { name: 'Run verify' }).click();
-  await expect(page.getByRole('alert').first()).toBeVisible();
+  await expect(page.getByTestId('verify-empty')).toContainText('nothing was verified');
   await expect(page.getByTestId('verify-failed')).toHaveCount(0);
 
   // Go-live: dry run, readiness and a copyable command; nothing on the page runs it

@@ -63,6 +63,10 @@ async function connect(page: Page) {
   await page.getByLabel('Database URL').fill(dbUrl);
   await page.getByLabel(/Password/).fill('pw-not-stored');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  // the fixture has a column of an unknown type, so the warnings stay on screen until the person continues
+  const cont = page.getByRole('button', { name: 'Continue to the schema graph' });
+  await Promise.race([cont.waitFor(), page.getByRole('heading', { name: 'Schema graph' }).waitFor()]);
+  if (await cont.isVisible()) await cont.click();
 }
 
 async function shot(page: Page, name: string) {
@@ -75,7 +79,9 @@ test.use({ colorScheme: 'dark' });
 test('connect asks for the schema to read and lists the init warnings as readable items', async ({ page }) => {
   await page.goto(openUrl);
   await expect(page.getByLabel('Schema to read')).toBeVisible();
-  await connect(page);
+  await page.getByLabel('Database URL').fill(dbUrl);
+  await page.getByLabel(/Password/).fill('pw-not-stored');
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
   const w = page.getByTestId('init-warnings');
   await expect(w).toBeVisible();
   const item = w.getByTestId('init-warning').first();
@@ -102,7 +108,7 @@ test('graph: a declared relation is dashed and labelled, an external table is dr
   await connect(page);
   await expect(page.getByRole('heading', { name: 'Schema graph' })).toBeVisible();
   const g = page.getByTestId('graph');
-  await expect(g.getByTestId('edge-declared')).toHaveCount(1);
+  await expect(g.locator('.edge-declared')).toHaveCount(1);
   await expect(g).toContainText('declared, not a database foreign key');
   await expect(g.getByTestId('node-external')).toContainText('external: not generated, ids from config');
   await expect(g.getByTestId('type-badge-uuid').first()).toBeVisible();

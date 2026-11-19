@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, { Background, Controls, type ReactFlowInstance } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api } from '../api/client';
+import type { TableInfo } from '../api/types';
 import { findCycles, layout } from './graph';
 import { dagrePositions } from './positions';
 import {
@@ -40,7 +41,8 @@ export function Schema() {
   const shown = useMemo(() => (tables ? (sel ? tables.filter((t) => sel.names.has(t.name)) : tables) : []), [tables, sel]);
   // Positions depend on the shown tables only; the selected border is applied on top without a new dagre run.
   const pos = useMemo(() => dagrePositions(shown), [shown]);
-  const view = useMemo(() => (tables ? layout(shown, cycles, large ? center : picked, pos) : null), [tables, shown, cycles, large, center, picked, pos]);
+  const relations = q.data?.relations ?? [];
+  const view = useMemo(() => (tables ? layout(shown, cycles, large ? center : picked, pos, relations) : null), [tables, shown, cycles, large, center, picked, pos, relations]);
 
   // "/" focuses the search box (not while typing in a field).
   useEffect(() => {
@@ -143,6 +145,12 @@ export function Schema() {
               Click a table to centre on it.
             </p>
           ) : null}
+          {large ? (
+            <p data-testid="graph-notice" className="muted">
+              Showing {shown.length} of {total} tables around {center ?? 'the most connected table'}. Search a name, open a group below, or
+              expand a hop to see more.
+            </p>
+          ) : null}
           <div className="graph" data-testid="graph">
             <ReactFlow
               nodes={view.nodes}
@@ -157,6 +165,7 @@ export function Schema() {
               <Controls showInteractive={false} />
             </ReactFlow>
           </div>
+          {large ? <Groups tables={tables} onPick={choose} /> : null}
           <details>
             <summary>{large ? 'Visible tables as text' : 'Tables as text'}</summary>
             <ul data-testid="schema-text">
@@ -186,5 +195,54 @@ export function Schema() {
         </>
       ) : null}
     </section>
+  );
+}
+
+/** The group of a table: the part of its name before the first "_" or ".", or "(no prefix)". */
+function groupOf(name: string): string {
+  const m = /^[^_.]+(?=[_.])/.exec(name);
+  return m ? m[0] : '(no prefix)';
+}
+
+/** All tables of a big schema in collapsible groups. A group lists its tables only while it is open, so 2,000 tables stay cheap. */
+function Groups({ tables, onPick }: { tables: TableInfo[]; onPick: (name: string) => void }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const t of tables) {
+      const g = groupOf(t.name);
+      m.set(g, [...(m.get(g) ?? []), t.name]);
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [tables]);
+  const toggle = (g: string, isOpen: boolean) =>
+    setOpen((prev) => {
+      const n = new Set(prev);
+      if (isOpen) n.add(g);
+      else n.delete(g);
+      return n;
+    });
+  return (
+    <div data-testid="groups">
+      <h3>Groups ({groups.length})</h3>
+      {groups.map(([g, names]) => (
+        <details key={g} data-testid={`group-${g}`} open={open.has(g)} onToggle={(e) => toggle(g, e.currentTarget.open)}>
+          <summary>
+            {g} ({names.length} tables)
+          </summary>
+          {open.has(g) ? (
+            <ul>
+              {names.map((n) => (
+                <li key={n}>
+                  <button type="button" className="linklike" onClick={() => onPick(n)}>
+                    {n}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </details>
+      ))}
+    </div>
   );
 }
