@@ -15,11 +15,7 @@ class LimitWhereTest {
     static final String DDL = "create table slots (id integer primary key, capacity integer not null);"
         + "create table bookings (id integer primary key, slot_id integer not null references slots(id), qty integer not null, status text not null check (status in ('pending','confirmed','cancelled')));";
 
-    /**
-     * Currently refused: `a limit takes no where or via` (RuleCheck.limit). The grammar already allows the where. Building it needs the
-     * filter's child columns drawn before the limited column (Ruled.order), a generator-design change that waits for the owner.
-     */
-    @Disabled("A2: waits for the owner's decision on generator ordering (docs/design/RULE_FILTERS.md)")
+
     @Test
     void onlyConfirmedBookingsCountAgainstCapacity(@TempDir Path dir) throws Exception {
         String rules = "  - name: confirmed_cap\n    limit: sum(bookings.qty where bookings.status = 'confirmed') per bookings.slot_id <= slots.capacity\n";
@@ -27,5 +23,37 @@ class LimitWhereTest {
         assertTrue(r.startsWith("GENERATED+LOADED"), r);
         assertTrue(r.contains("confirmed_cap=PASS"), r);
         assertEquals(-1, r.indexOf("FAIL"), r);
+    }
+
+    static String go(Path dir, String rules, String ddl, String rows) throws Exception {
+        return LimitsGenProbeTest.go(Files.createDirectory(dir.resolve("a" + System.nanoTime())), ddl, rules, rows);
+    }
+
+    @Test
+    void aCountLimitWithAFilter(@TempDir Path dir) throws Exception {
+        String r = go(dir, "  - name: c\n    limit: count(* where bookings.status = 'confirmed') per bookings.slot_id <= slots.capacity\n", DDL,
+            "  slots:\n    rows: 5\n  bookings:\n    rows: 40\n");
+        assertTrue(r.startsWith("GENERATED+LOADED") && r.contains("c=PASS") && !r.contains("FAIL"), r);
+    }
+
+    @Test
+    void aFilterOnTheLimitedColumnIsRefusedWithAReason(@TempDir Path dir) throws Exception {
+        String r = go(dir, "  - name: c\n    limit: sum(bookings.qty where bookings.qty > 1) per bookings.slot_id <= slots.capacity\n", DDL,
+            "  slots:\n    rows: 5\n  bookings:\n    rows: 40\n");
+        assertTrue(r.startsWith("FAILED") && r.contains("depends on a rule") && r.contains("bookings.qty"), r);
+    }
+
+    @Test
+    void aFilterOnAChildWithCheckRulesIsRefused(@TempDir Path dir) throws Exception {
+        String r = go(dir, "  - name: c\n    limit: sum(bookings.qty where bookings.status = 'confirmed') per bookings.slot_id <= slots.capacity\n"
+            + "  - name: q\n    check: bookings.qty >= 1\n", DDL, "  slots:\n    rows: 5\n  bookings:\n    rows: 40\n");
+        assertTrue(r.startsWith("FAILED") && r.contains("check rules"), r);
+    }
+
+    @Test
+    void aFilterMayNotReadTheParent(@TempDir Path dir) throws Exception {
+        String r = go(dir, "  - name: c\n    limit: sum(bookings.qty where slots.capacity > 1) per bookings.slot_id <= slots.capacity\n", DDL,
+            "  slots:\n    rows: 5\n  bookings:\n    rows: 40\n");
+        assertTrue(r.startsWith("FAILED") && r.contains("columns of bookings only"), r);
     }
 }

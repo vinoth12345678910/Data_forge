@@ -97,8 +97,8 @@ final class RuleCheck {
         if (!a.fn().equals("sum") && !a.fn().equals("count")) {
             throw new Problem(a.pos(), "a limit uses sum or count, not " + a.fn());
         }
-        if (a.where() != null || a.viaNames() != null) {
-            throw new Problem(a.pos(), "a limit takes no where or via: the child table comes from the 'per' foreign key");
+        if (a.viaNames() != null) {
+            throw new Problem(a.pos(), "a limit takes no via: the child table comes from the 'per' foreign key");
         }
         RuleExpr.Ref per = p.per();
         if (per.names().size() != 2) {
@@ -119,6 +119,15 @@ final class RuleCheck {
                 + "; pick a column that belongs to one");
         }
         Fk fk = fks.get(0);
+        RuleExpr filter = null;
+        if (a.where() != null) {
+            R w = walk(a.where(), new Ctx(fk.refTable(), childName, false));
+            if (w.t() != T.BOOL) {
+                throw new Problem(pos(a.where()), "where must be true or false");
+            }
+            ownColumns(w.e(), childName, pos(a.where()));
+            filter = w.e();
+        }
         String childCol = null;
         if (a.fn().equals("sum")) {
             if (!(a.arg() instanceof RuleExpr.Ref r) || r.names().size() != 2) {
@@ -162,7 +171,38 @@ final class RuleCheck {
         }
         RuleExpr when = when(p.when(), fk.refTable());
         return new Rule(name, RuleKind.LIMIT, text, index, fk.refTable(), null, null, when,
-            new Rule.Limit(childName, fk, childCol, capCol));
+            new Rule.Limit(childName, fk, childCol, capCol, filter));
+    }
+
+    /** The filter of a limit may read plain columns of the child row only: no parent, no aggregate. */
+    private void ownColumns(RuleExpr e, String child, Pos at) {
+        switch (e) {
+            case RuleExpr.Ref r -> {
+                if (!r.scope().equals(child) || !r.hops().isEmpty()) {
+                    throw new Problem(at, "the where of a limit may read columns of " + child + " only, not " + String.join(".", r.names()));
+                }
+            }
+            case RuleExpr.Bin x -> {
+                ownColumns(x.l(), child, at);
+                ownColumns(x.r(), child, at);
+            }
+            case RuleExpr.Not x -> ownColumns(x.e(), child, at);
+            case RuleExpr.IsNull x -> ownColumns(x.e(), child, at);
+            case RuleExpr.In x -> {
+                ownColumns(x.e(), child, at);
+                x.items().forEach(i -> ownColumns(i, child, at));
+            }
+            case RuleExpr.Case x -> {
+                x.whens().forEach(i -> ownColumns(i, child, at));
+                x.thens().forEach(i -> ownColumns(i, child, at));
+                if (x.other() != null) {
+                    ownColumns(x.other(), child, at);
+                }
+            }
+            case RuleExpr.Fn x -> x.args().forEach(i -> ownColumns(i, child, at));
+            case RuleExpr.Agg x -> throw new Problem(at, "the where of a limit cannot contain an aggregate");
+            default -> { }
+        }
     }
 
     private RuleExpr when(RuleExpr w, String subject) {

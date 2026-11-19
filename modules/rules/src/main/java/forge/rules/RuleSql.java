@@ -229,7 +229,17 @@ public final class RuleSql {
         String used(Rule.Limit l) {
             String c = "c" + (++aggs);
             String what = l.childColumn() == null ? "count(*)" : "coalesce(sum(" + c + "." + q(l.childColumn()) + "), 0)";
-            return "(select " + what + " from " + table(l.child()) + " " + c + " where " + childJoin(l.fk(), c, "t") + ")";
+            String where = "";
+            if (l.where() != null) {
+                String saved = alias.put(l.child(), c);
+                where = " and (" + expr(l.where()) + ") is true";
+                if (saved == null) {
+                    alias.remove(l.child());
+                } else {
+                    alias.put(l.child(), saved);
+                }
+            }
+            return "(select " + what + " from " + table(l.child()) + " " + c + " where " + childJoin(l.fk(), c, "t") + where + ")";
         }
     }
 }
