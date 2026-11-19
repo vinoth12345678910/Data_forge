@@ -380,3 +380,10 @@
 
 ## 2026-11-19 B1 safety tests frozen
 - The B1 tests in forge.safety3 (12 tests: 11 red, 1 control green) are frozen at commit 030fbab (scripts/safety3-frozen.txt; verify.sh step i3 fails if they change). Written by the test-first agent in a separate invocation before any B1 code. The builder may not edit them.
+
+## 2026-11-19 Wave 1 closed (A1 A2 A3 A4 A7 A8 B1 B2)
+- Done: A2 (32ab9a8), A3 (42819b0), A7 (d2ad8be), B1 (5772884), plus A1, A8, B2 earlier; A4 needed no code. Decisions on A2, A3, A7 and B1 were the owner's (2026-11-19 answers); open decisions after that were taken as the recommended option and are listed in the register.
+- Not done: Waves 2 to 4; decimal literals and `round(expr, n)` (A3 follow-up); Chinook and the Supabase demo in the lab; MySQL/SQLite lab runs.
+- Safety process: forge.safety2 (A7) frozen at d4484a6 and forge.safety3 (B1) at 030fbab, both guarded by verify.sh; safety-reviewer ran 4 times on A7 and 3 on B1, every finding shown and answered.
+- Next: owner reviews the stacked PRs; Wave 2 only when told.
+- Open: verify.sh result for this tip is in the final report.

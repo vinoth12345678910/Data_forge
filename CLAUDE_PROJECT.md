@@ -67,3 +67,5 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Open: owner review of delegated safety design; Backup secret-masking incomplete; five known purge gaps and the picocli `@file` setting in docs/STATUS.md; `npm audit` reports 4 vulnerabilities in the UI dev tooling (not looked at); the web UI shows "This data is partial" even after a failed run.
 
 - Limits register (2026-11-19): branches `lim-register`, `lim-compat-lab`, `lim-wave1-decisions` (stacked on `rel-gifs`, PRs open, not merged). Probes and design docs only; waiting for the owner's reply on the eight Wave 1 design docs before any build.
+
+- Wave 1 of the limits register closed on stacked branches (tip `w1-b1-external-stubs`, PRs open, not merged): A1 A2 A3 A7 A8 B1 B2 built, A4 needed no code. Waiting for the owner's review; Waves 2 to 4 not started.
