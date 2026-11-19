@@ -415,3 +415,10 @@
 - Next: A5, A6, C2, D9, E1 (recommended choices, see the register).
 - Decisions: tables whose translated schema lacks a check are listed and not compared (`reservations` on MySQL and SQLite).
 - Open: should a translated schema's `varchar(255)` change the generated text length? Today it does.
+
+## 2026-11-19 Wave 3, A6 (branch w3-a6-gap-headroom)
+- Done: planner headroom for time-gap rules (`Ruled.headroom`). Seed 50 with 28 orders now generates and verifies; 12 seeds pass; fast and container suites green; determinism-auditor run in a fresh agent.
+- Not done: parents shaped by their own rules, unique time columns and non-column bounds get no headroom.
+- Next: A5 derive-with-join, then D9 MariaDB.
+- Decisions: recommended design (shift the parent's earliest by the minimum gap). It changes the parent time column's values for existing seeds.
+- Open: none new.

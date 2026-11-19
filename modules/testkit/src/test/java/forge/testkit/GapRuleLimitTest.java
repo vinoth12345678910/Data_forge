@@ -17,11 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Review fix 9: the documented limit of a time rule with a gap (docs/design/TEMPORAL_RULES.md). registration_before_event
- * needs created_at at least 1h before the event's starts_at; at forge seed 50 with 28 orders the 27th registration's
- * event starts 2293 s after the earliest time the generator can make, so the rule leaves no value. The determinism audit
- * found this as the "flaky" P3.6 property. It stays a GenError (generator behaviour is not changed here); the message must
- * say what is wrong. SQLite, no Docker.
+ * Review fix 9, then A6 (Wave 3). A time rule with a minimum gap (registration_before_event: created_at at least 1h before
+ * the event's starts_at) used to fail at forge seed 50 with 28 orders: the 27th registration's event started 2293 s after the
+ * earliest time the generator can make. A6 gives the parent's time column headroom: its earliest value moves later by the
+ * minimum gap, so the child always has room. A gap that is larger than the whole range still fails with the same clear
+ * GenError. SQLite, no Docker.
  */
 class GapRuleLimitTest {
 
@@ -40,14 +40,40 @@ class GapRuleLimitTest {
     }
 
     @Test
-    void seed50With28OrdersFailsWithAClearGenError(@TempDir Path dir) throws Exception {
+    void seed50With28OrdersNowGeneratesAndVerifies(@TempDir Path dir) throws Exception {
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("g.db"))) {
             DialectGate.script(c, DialectGate.golden("events-merch/schema.sqlite.sql"));
-            GenError e = assertThrows(GenError.class, () -> DialectGate.run(c, "events-merch", dir, conf(50, 28)));
-            String m = e.getMessage();
-            assertTrue(m.contains("registration_before_event") && m.contains("registrations row 27") && m.contains("created_at"), m);
-            assertTrue(m.contains("leaves no room for the minimum gap"), "the message must say that the parent's time leaves no room for the minimum gap: " + m);
-            assertFalse(m.contains("Fewer children"), "the advice about children and caps is for a cap, not for a time gap: " + m);
+            assertEquals(java.util.List.of(), DialectGate.run(c, "events-merch", dir, conf(50, 28)));
+        }
+    }
+
+    @Test
+    void manySeedsGenerateAndVerifyWithTheGapRule(@TempDir Path dir) throws Exception {
+        for (int seed : new int[] {1, 7, 13, 21, 34, 50, 51, 77, 99, 123, 500, 2026}) {
+            Path d = dir.resolve("s" + seed);
+            java.nio.file.Files.createDirectories(d);
+            try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + d.resolve("g.db"))) {
+                DialectGate.script(c, DialectGate.golden("events-merch/schema.sqlite.sql"));
+                assertEquals(java.util.List.of(), DialectGate.run(c, "events-merch", d, conf(seed, 28)), "seed " + seed);
+            }
+        }
+    }
+
+    @Test
+    void aGapLargerThanTheWholeRangeStillFailsWithAClearGenError(@TempDir Path dir) throws Exception {
+        Config base = conf(50, 28);
+        var rules = new java.util.ArrayList<Config.RuleConf>();
+        for (Config.RuleConf r : base.rules()) {
+            rules.add(r.name().equals("registration_before_event") ? new Config.RuleConf(r.name(), r.kind(), r.text(), r.description(), "5000d..6000d") : r);
+        }
+        Config huge = new Config(base.version(), base.seed(), base.clock(), base.locale(), base.connection(), base.ddl(), base.tables(),
+            rules, base.states(), base.scenarios(), base.run(), base.manifestDir());
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("g.db"))) {
+            DialectGate.script(c, DialectGate.golden("events-merch/schema.sqlite.sql"));
+            GenError e = assertThrows(GenError.class, () -> DialectGate.run(c, "events-merch", dir, huge));
+            assertTrue(e.getMessage().contains("registration_before_event") && e.getMessage().contains("no room")
+                || e.getMessage().contains("leaves no room for the minimum gap"), e.getMessage());
+            assertFalse(e.getMessage().contains("Fewer children"), e.getMessage());
         }
     }
 
