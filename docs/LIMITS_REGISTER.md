@@ -56,7 +56,7 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | F4 | **Confirmed** | LIMITS.md: Windows and Linux untried. |
 | F5 | **Unknown** | Not checked. |
 | F6 | **Unknown** | Commit `db1c6be` reconciled README and docs once; what remains was not checked. |
-| F7 | **Confirmed** | `golden/` holds the three goldens and `holdout`; no wider lab yet. |
+| F7 | **Partly built, two lab rows owed by the owner** (Wave 2, branch `w2-f7-lab`). The lab (`scripts/compat-lab.sh`, `docs/COMPAT_MATRIX.md`) runs the three goldens and Pagila on Postgres 14 to 18, six lab schemas and a generated 2,000-table schema on 16, with the exact error for each failure. New: `scripts/lab-supabase.sh` runs the same zero-config path against a real Postgres or a local Supabase in a throwaway schema `forge_lab` (always dropped, and `_dataforge` dropped if it did not exist before; tested against a throwaway container: 300 rows, PASS, nothing left behind, an existing table untouched). **Owed:** the Supabase run (the owner runs it from their own shell with `PGPASSWORD` and `LAB_DB_URL`; the `.env` read was denied to the assistant), and Chinook (the download was denied; a Postgres `.sql` file plus a licence check by the owner, then `LAB_CHINOOK=path bash scripts/compat-lab.sh`). Not added: Northwind, Sakila, Django, Rails and Prisma sample apps. |
 
 ## Wave 1 progress (2026-11-19, branches w1-*, stacked, tip `w1-a2-limit-where`)
 

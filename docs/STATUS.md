@@ -387,3 +387,10 @@
 - Safety process: forge.safety2 (A7) frozen at d4484a6 and forge.safety3 (B1) at 030fbab, both guarded by verify.sh; safety-reviewer ran 4 times on A7 and 3 on B1, every finding shown and answered.
 - Next: owner reviews the stacked PRs; Wave 2 only when told.
 - Open: verify.sh result for this tip is in the final report.
+
+## 2026-11-19 Wave 2 (branches w2-d6-pg-matrix, w2-b3-partitions-views, w2-b5-mysql-identifiers, w2-d5-verify-cost, w2-d2-scale, w2-b4-ui-large-schema, w2-f7-lab; stacked on w1-b1-external-stubs)
+- Done: D6 (Postgres 14 to 18 PASS), B3 (partitions, view, materialized view PASS; inheritance child refused with its remedy), B5 (MySQL identifiers PASS), D5 (verify is quadratic without a child FK index: 20 s at 20,000 parents, timeout at 100,000; verify now names the missing index), D2 (10M-parent tied-key: OOM at 256 MB, 27 min at 1 GB; limits to promise written), B4 (UI: search, neighbourhood graph, iterative cycles; 86 ms vs 1,290 ms at 2,000 tables; two ui-reviewer passes), F7 script for a real Postgres.
+- Decided, not built: D3 parallel loading (breaks the all-or-nothing load; docs/design/PARALLEL_LOAD.md).
+- Not done: Chinook and the Supabase run (owner), clustering in the UI, a grouped-join rewrite of verify (owner's verify design), 50M and 100M row runs, verify.sh for this wave (see the final report).
+- Next: owner answers the open list (round(expr, n), grouped-join verify, README limits, Wave 3 start, Chinook file, Supabase variable, browser for step k).
+- Open: step k (UI smoke) still SKIPPED on this machine.
