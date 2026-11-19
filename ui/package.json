@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --test test/subgraph.test.ts test/cycles.test.ts",
+    "test": "node --test test/subgraph.test.ts test/cycles.test.ts test/api-allowlist.test.ts",
     "bench": "node test/bench.ts",
     "check": "node scripts/check-no-external-urls.mjs && node scripts/check-no-delete-calls.mjs",
     "e2e": "playwright test"
