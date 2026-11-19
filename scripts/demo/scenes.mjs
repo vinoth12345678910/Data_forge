@@ -50,6 +50,14 @@ PY`], steps: [
     { show: 'psql -c "update orders set total_paise = total_paise + 1 where id = (select min(id) from orders)"' },
     { show: 'forge verify | tail -6' },
   ] },
+  { name: 'packs', db: 'pack', golden: 'ecommerce', pre: ['cp "$REPO/golden/ecommerce/expected.yml" .'], steps: [
+    { show: 'tail -1 forge.yml' },
+    { show: 'forge generate | tail -3' },
+    { show: 'forge verify --expected expected.yml | grep -c "^  PASS"' },
+    { show: 'psql -c "update orders set total_minor = total_minor + 1 where id = (select min(id) from orders)"' },
+    { show: 'forge verify --expected expected.yml | grep -E "^  FAIL|id=|^result"' },
+    { show: 'forge verify --expected expected.yml | grep -E "^  SKIP" | head -4' },
+  ] },
   { name: 'realism', db: 'rules', pre: ['forge generate >/dev/null'], steps: [
     { show: 'psql -c "select status, count(*) from orders group by 1 order by 2 desc"' },
     { show: 'psql -c "select o.status as order, p.status as payment, count(*) from orders o join payments p on p.order_id = o.id group by 1, 2 order by 1, 2"' },

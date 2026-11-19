@@ -75,7 +75,7 @@ flowchart LR
 
 ### Reads a schema
 
-`forge init` reads a live Postgres database, or a DDL file that it applies to a scratch Postgres (it is tested on those two only). Composite keys, self-references, many-to-many tables, deferrable constraints and foreign key cycles are handled. `init` and `generate` run with zero config on the Pagila sample (a test).
+`forge init` reads a live Postgres database, or a DDL file that it applies to a scratch Postgres (it is tested on those two only). Composite keys, self-references, many-to-many tables, deferrable constraints and foreign key cycles are handled. `init` and `generate` run with zero config on the Pagila sample (a test). `init` also notices status-like columns (two or more values, not a key) and suggests a `states:` entry in its notes. It never writes the block or guesses transitions; without a `states:` entry, statuses stay random.
 
 ![Schema reading and planning](docs/img/schema.gif)
 
@@ -103,9 +103,33 @@ Rule kinds: `derive` (a calculated column), `check` (a condition every row must 
 
 ![Writing a rule, generating, breaking a row, and verify naming the rule and row](docs/img/rules.gif)
 
+A rule can join on equal columns, not only on a foreign key, with `via child.column = table.column`. The child side may follow foreign keys (`shipment_items.order_item_id.product_id`):
+
+```yaml
+rules:
+  - name: inventory_reserved_matches_active
+    derive: >-
+      inventory.reserved = sum(reservations.quantity where reservations.status = 'active'
+      via reservations.product_id = inventory.product_id)
+```
+
+Each aggregate is computed once per key, never per child row, and a key with no children gives 0 (a NULL key matches nothing). `forge verify` runs every aggregate as one grouped join, 1.4 s at 1,000,000 parents on the measured machine ([docs/VERIFY_COST.md](docs/VERIFY_COST.md)); `--legacy-sql` keeps the old per-row form for one more release. `round(expr, n)` rounds explicitly, half away from zero, with `n` a literal from 0 to 30. The two e-commerce inventory rules above are **verified but not generated**: that table has `check (reserved <= on_hand)` and both columns are derived, so generation refuses them with a clear message.
+
+### Rule packs
+
+A pack is a set of ready rules, states and scenarios that ships inside the program, so it works offline. Name it in `forge.yml`; your row counts, schema and connection stay yours:
+
+```yaml
+use: [ecommerce]
+```
+
+The pack adds its rules after yours. A rule, state or scenario with the same name in both is an error, never a silent override. One pack ships today, `ecommerce`, and it equals the supported rules of the e-commerce golden schema (a test keeps them equal). The header of `packs/ecommerce.yml` lists what it does **not** contain: the two verify-only inventory rules, six rules the language cannot express yet, and eight that `forge verify` reports as not checked, never as passed.
+
+![A config that only says use: [ecommerce]: generate, verify, a broken order total caught by name, and the rules that are not checked](docs/img/packs.gif)
+
 ### Realistic shape
 
-State machines (`pending` to `paid` to `refunded`) with the child rows each state needs. Time rules (a registration before the event it is for). Skewed (Zipf and Pareto) distributions, correlated columns, and seasonality. Locale-aware values that pass independent checkers: Indian phone numbers, pincodes and GSTIN, and IBANs for DE, ES, GB and NL.
+State machines (`pending` to `paid` to `refunded`) with the child rows each state needs. Time rules (a registration before the event it is for). Skewed (Zipf and Pareto) distributions, correlated columns, and seasonality. Locale-aware values that pass independent checkers: Indian phone numbers, pincodes and GSTIN, and IBANs for DE, ES, GB and NL. Names, cities and words come in five locales: `en_IN` (the default), `en_US`, `en_GB`, `de_DE` and `fr_FR` (German and French names are ASCII, such as Mueller and Koeln, so emails stay valid). Phone, postal and bank-number formats are not per locale yet: they stay `en_IN`, and asking for one in another locale is an error.
 
 ![State machines and time rules](docs/img/realism.gif)
 
@@ -221,6 +245,8 @@ Setup and what was tried: [docs/MCP.md](docs/MCP.md). Terminal and web UI detail
 | PostgreSQL 16 | Full target. All golden schemas and the Pagila holdout. Also run on 17 for information |
 | MySQL 8.4 | Works on translated golden schemas. Not every Postgres type is covered. `init` is not tested on MySQL |
 | SQLite | Works on translated golden schemas. `init` is not tested on SQLite |
+| Parity across the three | A test generates the two translated golden schemas on Postgres, MySQL and SQLite with the same seed: row counts and integer columns are equal. The tails of text values are not compared (they follow each schema's declared length), and tables whose translated schema lacks a check are listed and skipped |
+| MariaDB | Refused with a clear message. Not built; on demand |
 | Supabase, Neon and other Postgres hosts | Expected to work. Not tested. See [docs/SUPABASE_AND_PRISMA.md](docs/SUPABASE_AND_PRISMA.md) |
 | Prisma apps | Point Data Forge at the database Prisma creates. Not tested |
 
@@ -248,7 +274,8 @@ Honest limits, in full in [docs/LIMITS.md](docs/LIMITS.md):
 - **A drafted `forge.yml` has no business rules.** You write them. Some rules cannot be written yet; `forge verify` lists what it did not check and never counts it as passed.
 - **MySQL and SQLite** run translated golden schemas only, and `forge init` is tested on Postgres and DDL files only. MySQL cleanup handles one kind of self-referencing table and refuses the rest during the run.
 - **CSV output** is for inspection and Postgres `COPY`, not for loading into MySQL or SQLite.
-- **A time-gap rule** can fail when a parent's time leaves no room for the gap. The error says so.
+- **A time-gap rule** can still fail when the gap is as large as the whole range, or when the parent's time column is shaped by another rule, is unique, or is not a plain column. The error says so. A parent time column that a gap rule reads now has its earliest value moved later by the minimum gap, so common cases generate; this changes that column's values for existing seeds.
+- **Rules the language cannot express yet:** the "fill" and "pick" kinds (11 of the golden rules). The e-commerce pack lists them. `forge verify` reports them as not checked, never as passed.
 - **The web UI and terminal UI** start with Gradle from the source tree, not from the packages. With MySQL or SQLite they show the schema only. A prod label is refused at connect.
 - **The JUnit 5 extension** exists in the source tree and has container tests, but it is not documented or supported as a feature in this release.
 - **Not tested:** Windows and Linux, Supabase, Neon, Prisma, an AI client connected to MCP.

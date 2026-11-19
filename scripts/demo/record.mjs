@@ -42,15 +42,17 @@ function startPg() {
   }
   sh('sleep 2');
 }
-function resetDb(schema) {
+function resetDb(schema, golden = 'events-merch') {
   sh(`docker exec ${PG} psql -q -U postgres -c "drop database if exists app with (force)" -c "create database app"`);
   if (schema) {
-    const r = sh(`docker exec -i ${PG} psql -q -v ON_ERROR_STOP=1 -U postgres -d app < "${REPO}/golden/events-merch/schema.sql"`);
+    const r = sh(`docker exec -i ${PG} psql -q -v ON_ERROR_STOP=1 -U postgres -d app < "${REPO}/golden/${golden}/schema.sql"`);
     if (r.status !== 0) throw new Error('schema load failed: ' + r.stderr);
   }
 }
-function writeConfig(dir, backup) {
-  let t = readFileSync(join(REPO, 'golden/events-merch/phase3.forge.yml'), 'utf8');
+function writeConfig(dir, backup, golden = 'events-merch', pack = false) {
+  let t = readFileSync(join(REPO, `golden/${golden}/phase3.forge.yml`), 'utf8');
+  // a pack scene keeps only the golden's tables and says use: [ecommerce] instead of its rules, states and scenarios
+  if (pack) t = t.slice(0, t.indexOf('\nrules:') + 1) + 'use: [ecommerce]\n';
   const conn = `connection:\n  url: postgres://localhost:${PORT}/app\n  user: postgres\n  password_env: PGPASSWORD\n  env: dev\n` +
     (backup ? '  backup_cmd: "echo backup-ok > backup.log"\n' : '');
   if (!t.includes('ddl: schema.sql\n')) throw new Error('golden config changed: no ddl line');
@@ -69,12 +71,13 @@ function runCmd(cmd, dir) {
 function capture(sc) {
   const dir = join(sandbox, sc.name);
   mkdirSync(dir);
-  resetDb(sc.db !== 'none');
+  resetDb(sc.db !== 'none', sc.golden);
   if (sc.db === 'rules') writeConfig(dir, sc.name === 'cleanup');
+  if (sc.db === 'pack') writeConfig(dir, false, sc.golden, true);
   for (const c of sc.pre || []) { const r = sh(c, { cwd: dir, env: baseEnv }); if (r.status !== 0) throw new Error(`${sc.name}: setup failed: ${c}\n${r.stdout}${r.stderr}`); }
   const done = [];
   for (const s of sc.steps) {
-    if (s.reset) { resetDb(true); }
+    if (s.reset) { resetDb(true, sc.golden); }
     const show = typeof s.show === 'function' ? s.show(done) : s.show;
     done.push({ show, out: runCmd(s.run || show, dir), hold: s.hold });
   }
