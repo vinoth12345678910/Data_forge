@@ -74,3 +74,23 @@ Each row now gets a 16-byte fingerprint, computed from the generator cells when 
 | 2026-11-13 | p5.1 | S1 one table | sqlite | 1000000 | 6.0 | 32 | 124 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
 | 2026-11-13 | p5.1 | S4 tied composite keys, 1M-row parents | postgres | 3010000 | 36.8 | 154 | 424 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
 | 2026-11-13 | p5.1 | S3 events-merch rules + states, 1M orders | postgres | 4019699 | 272.8 | 156 | 426 | 256 | Apple M4, 16 GB; java version 21.0.12.1 2026-08-18 LTS; postgres:16-alpine |
+
+## Re-measure after A2, A3, A5, A6 and the D5 rewrite (2026-11-19, label w3-closeout)
+
+`bash scripts/perf.sh w3-closeout`, Apple M4, 16 GB, Postgres 16, `-Xmx256m`, one run each, nothing else running. Old = the p5.1 row above (2026-11-13). Slowdowns over 10 percent are flagged. perf.sh appends rows only when every scale test passes, and two did not, so the rows are recorded here by hand from `build/perf/scale.tsv`.
+
+| shape | database | old s | new s | change | live MB old / new | flag |
+|---|---|---|---|---|---|---|
+| S1 one table, 1M rows | Postgres 16 | 4.4 | 8.0 | +82% | 33 / 33 | **SLOWER** |
+| S2 1M parents + 3M children | Postgres 16 | 23.2 | 30.6 | +32% | 77 / 78 | **SLOWER** |
+| S1 | MySQL 8.4 | 12.6 | 16.6 | +32% | 34 / 34 | **SLOWER** |
+| S1 | SQLite | 6.0 | 6.7 | +12% | 32 / 32 | **SLOWER** |
+| S4 tied keys, 1M parents | Postgres 16 | 36.8 | 42.3 | +15% | 154 / 149 | **SLOWER** |
+| S3 events-merch, 1M orders | Postgres 16 | 272.8 | 332, then 342 on a second run | +22% to +25% | 156 / not recorded | **SLOWER, over the 300 s gate: the test FAILS** |
+| Cleanup S2 (4M rows) on postgres | Postgres 16 | 119 MB live at P5.6 | 230 MB live on two runs, 45 s | n/a | 119 / 230 | **over the 85% heap gate (217 MB): the test FAILS** |
+
+Findings, not explained yet:
+- S1 and S2 do not use rules, so the +82% and +32% are not from A2, A3, A5, A6 or D5. The machine may be slower than on 2026-11-13 (S4 and the S1 SQLite row moved less), or something common (the fingerprint, the manifest or the loader) changed. A single run each: treat the size of the changes as unconfirmed, the direction as measured.
+- S3 failed its time gate on two runs (332 s, 342 s). Cause unknown; a bisect was started and abandoned (a worktree of an older commit would not build because of a Gradle cache error), so no commit is named.
+- Cleanup S2 held 230 MB live on two runs against 119 MB recorded in `PHASE5_RESULTS.md` (a different machine, a MacBook Air, and a coarse sampler). Not shown to be a code regression. Cleanup code is the owner's; nothing was changed.
+- Pinned hashes: the scale hash tests did not fail, so no pin changed and none was re-pinned.

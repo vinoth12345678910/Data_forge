@@ -258,6 +258,16 @@ if [ -d ui/node_modules ] && command -v node >/dev/null 2>&1; then
     const exe = process.env.FORGE_E2E_BROWSER || undefined;
     chromium.launch({ headless: true, executablePath: exe }).then((b) => b.close()).then(() => process.exit(0), () => process.exit(1));
   " >/dev/null 2>&1); then e2e_ok=1; fi
+  # Not launchable: try the headless shells already in the local Playwright cache, newest first. Nothing is downloaded.
+  # The browser used is printed, so a run on a browser other than the pinned one is visible.
+  if [ "$e2e_ok" != "1" ] && [ -z "${FORGE_E2E_BROWSER:-}" ]; then
+    for cand in $(ls -d "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell 2>/dev/null | sort -r); do
+      if (cd ui && FORGE_E2E_BROWSER="$cand" node -e "
+        const { chromium } = require('@playwright/test');
+        chromium.launch({ headless: true, executablePath: process.env.FORGE_E2E_BROWSER }).then((b) => b.close()).then(() => process.exit(0), () => process.exit(1));
+      " >/dev/null 2>&1); then export FORGE_E2E_BROWSER="$cand"; e2e_ok=1; echo "step k: using cached browser $cand (not the one pinned to Playwright)"; break; fi
+    done
+  fi
 fi
 if [ "${FORGE_E2E:-}" = "0" ]; then
   record "SKIPPED" "k. UI smoke test: SKIPPED: UI gate not proven (FORGE_E2E=0)"
