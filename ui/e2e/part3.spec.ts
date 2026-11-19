@@ -39,8 +39,13 @@ test.beforeAll(async () => {
   });
 });
 
-test.afterAll(() => {
-  if (server.pid) process.kill(-server.pid, 'SIGTERM');
+// Wait until the server has really exited: the next spec starts its own gradle run, and two at once can fail on the build lock.
+test.afterAll(async () => {
+  if (!server.pid) return;
+  const gone = new Promise<void>((res) => (server.exitCode !== null ? res() : server.once('exit', () => res())));
+  process.kill(-server.pid, 'SIGTERM');
+  await Promise.race([gone, new Promise<void>((res) => setTimeout(res, 30_000))]);
+  await new Promise<void>((res) => setTimeout(res, 3_000));
 });
 
 // Every request must go to localhost: anything else fails the test.
