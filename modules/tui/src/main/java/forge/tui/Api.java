@@ -8,14 +8,14 @@ import java.io.IOException;
 import java.sql.SQLException;
 
 /**
- * The six things the web UI's API offers (docs/design/UI_API.md), called in this process on the server's Session. No
+ * The seven things the web UI's API offers (docs/design/UI_API.md), called in this process on the server's Session. No
  * socket and no HTTP: the TUI makes no network call at all. These six methods are all there is; ApiTest-style checks in
  * TuiTest fail if another one appears.
  */
 final class Api {
 
     /** The six calls. TuiTest compares this with the methods of this class. */
-    static final java.util.List<String> CALLS = java.util.List.of("connect", "schema", "generate", "progress", "verify", "golive");
+    static final java.util.List<String> CALLS = java.util.List.of("connect", "schema", "preflight", "generate", "progress", "verify", "golive");
 
     record Reply(int status, JsonNode body) {}
 
@@ -34,9 +34,9 @@ final class Api {
         return session.connected() ? null : error(409, "not connected: connect first");
     }
 
-    Reply connect(String url, String env, String user, String password) throws IOException {
+    Reply connect(String url, String env, String user, String password, String schema) throws IOException {
         if (url.isBlank() || env.isBlank()) return error(400, "url and env are required");
-        Session.Result r = session.connect(url, env, user, password);
+        Session.Result r = session.connect(url, env, user, password, schema);
         ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
         o.set("envelope", r.envelope());
         return new Reply(r.code() == 0 ? 200 : 422, o);
@@ -50,6 +50,16 @@ final class Api {
         } catch (SQLException | RuntimeException e) {
             return error(500, "cannot read the schema");
         }
+    }
+
+    /** forge generate --preflight: the memory estimate; loads nothing. */
+    Reply preflight() {
+        Reply no = needConnection();
+        if (no != null) return no;
+        Session.Result r = session.preflight();
+        ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
+        o.set("envelope", r.envelope());
+        return new Reply(200, o);
     }
 
     Reply generate() {

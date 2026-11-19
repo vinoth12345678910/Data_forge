@@ -102,11 +102,11 @@ class TuiTest {
 
     @Test
     void onlyTheSixCallsOfTheApiContractExist() {
-        assertEquals(List.of("connect", "generate", "golive", "progress", "schema", "verify"),
+        assertEquals(List.of("connect", "generate", "golive", "preflight", "progress", "schema", "verify"),
             java.util.Arrays.stream(Api.class.getDeclaredMethods()).filter(m -> !m.isSynthetic())
                 .filter(m -> !java.lang.reflect.Modifier.isPrivate(m.getModifiers())).map(java.lang.reflect.Method::getName)
                 .sorted().toList(), "any new call fails here until the owner reviews it");
-        assertEquals(List.of("connect", "schema", "generate", "progress", "verify", "golive"), Api.CALLS);
+        assertEquals(List.of("connect", "schema", "preflight", "generate", "progress", "verify", "golive"), Api.CALLS);
         for (String c : Api.CALLS) {
             assertFalse(c.matches("(?i).*(cleanup|purge|delete|truncate|backup|drop|resume).*"), c);
         }
