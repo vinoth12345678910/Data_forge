@@ -220,12 +220,12 @@ All of them call the same engine. The command line and MCP read `forge.yml`; the
 The commands above. Every command has `--json` output with a versioned envelope (`forge.output/1`), so you can pipe it into `jq` or CI.
 
 ### Terminal UI
-A numbered menu: connect, schema, run (generate), verify, and go-live (a cleanup dry run, readiness and the manual checklist). It cannot run a cleanup. Its code contains no network calls (a source scan checks this).
+A numbered menu: connect, schema, run (generate, with the memory preflight first), verify (three separate lists, a reason for each not-checked rule), and go-live (a cleanup dry run, readiness and the manual checklist). It shows the same warnings, relations and external tables as the web UI. It cannot run a cleanup. Its code contains no network calls (a source scan checks this).
 
 ![Terminal UI](docs/img/tui.gif)
 
 ### Web UI
-A local page on `127.0.0.1` with a session token: connect, schema graph, run, verify, and go-live. It cannot run a cleanup; it shows the exact command for you to type.
+A local page on `127.0.0.1` with a session token: connect (with the schema to read and the init warnings), schema graph (declared relations drawn dashed, external tables marked, uuid and read-as-text badges, insert triggers, search and groups for big schemas), run (a memory preflight before generating), verify (passed, failed and not checked kept apart, each not-checked rule with its reason), and go-live. It cannot run a cleanup; it shows the command with placeholders for you to fill in and type.
 
 ![Web UI](docs/img/ui.gif)
 
@@ -254,16 +254,16 @@ Setup and what was tried: [docs/MCP.md](docs/MCP.md). Terminal and web UI detail
 
 ## Speed
 
-Measured on an Apple M4 MacBook Air with 16 GB, Java 21, Postgres 16 in Docker, with a 256 MB heap. These are the p5.1 runs of 2026-11-13 in [docs/PERF.md](docs/PERF.md) (they include the per-row fingerprints the manifest records; the earlier, faster p4 runs did not).
+Measured on an Apple M4 with 16 GB, Java 21, Postgres 16 in Docker, with a 256 MB heap, one run each, in [docs/PERF.md](docs/PERF.md). The first column is the p5.1 run of 2026-11-13; the second is the re-measure of 2026-11-19 after Waves 1 to 3. Both include the per-row fingerprints the manifest records.
 
-| Shape | Rows | Time |
-|---|---|---|
-| One table | 1,000,000 | 4.4 s |
-| 1M parents and 3M children | 4,000,000 | 23.2 s |
-| Events schema with rules and state machines | 4,019,699 | 272.8 s (the gate limit is 300 s) |
-| Tied composite keys | 3,010,000 | 36.8 s |
+| Shape | Rows | p5.1 | After Waves 1 to 3 |
+|---|---|---|---|
+| One table | 1,000,000 | 4.4 s | 8.0 s |
+| 1M parents and 3M children | 4,000,000 | 23.2 s | 30.6 s |
+| Events schema with rules and state machines | 4,019,699 | 272.8 s | 332 s and 342 s: **over the 300 s gate, the scale test fails** |
+| Tied composite keys | 3,010,000 | 36.8 s | 42.3 s |
 
-On the same machine, one table of 1,000,000 rows takes 12.6 s on MySQL and 6.0 s on SQLite.
+On the same machine, one table of 1,000,000 rows takes 16.6 s on MySQL and 6.7 s on SQLite (12.6 s and 6.0 s at p5.1). The slowdown is measured and not yet explained; see the 2026-11-19 section of [docs/PERF.md](docs/PERF.md). Which databases were tried: [docs/COMPAT_MATRIX.md](docs/COMPAT_MATRIX.md).
 
 ---
 
@@ -278,6 +278,10 @@ Honest limits, in full in [docs/LIMITS.md](docs/LIMITS.md):
 - **Rules the language cannot express yet:** the "fill" and "pick" kinds (11 of the golden rules). The e-commerce pack lists them. `forge verify` reports them as not checked, never as passed.
 - **The web UI and terminal UI** start with Gradle from the source tree, not from the packages. With MySQL or SQLite they show the schema only. A prod label is refused at connect.
 - **The JUnit 5 extension** exists in the source tree and has container tests, but it is not documented or supported as a feature in this release.
+- **The two inventory rules** of the e-commerce golden (`inventory_reserved_matches_active`, `stock_on_hand_matches_movements`) are verified but not generated: `inventory` has a check `reserved <= on_hand` over two derived columns, and making generation satisfy it needs a new rule form (a floor on `opening_qty`), which is not built.
+- **One schema per connection.** A foreign key into another schema is an external table (ids from `cleanup.keep`); reading several schemas (`connection.schemas`) is not built.
+- **The memory preflight** estimates tied composite keys only; other shapes are not estimated.
+- **Scale gates:** the events-merch run at 1,000,000 orders exceeds its 300 s time gate and the 4,000,000-row cleanup run exceeds its 85% heap gate on the latest measurement (see docs/PERF.md); the cause is not found.
 - **Not tested:** Windows and Linux, Supabase, Neon, Prisma, an AI client connected to MCP.
 - **Outside the database:** payment gateways, files, queues, email and caches are not simulated or cleaned.
 
@@ -285,7 +289,7 @@ Honest limits, in full in [docs/LIMITS.md](docs/LIMITS.md):
 
 ## Documentation
 
-[Quick start](docs/QUICKSTART.md) | [Commands](docs/COMMANDS.md) | [Config](docs/CONFIG.md) | [Rules guide](docs/RULES_GUIDE.md) | [Safety](docs/SAFETY.md) | [MCP](docs/MCP.md) | [UI and TUI](docs/UI_AND_TUI.md) | [Architecture](docs/ARCHITECTURE.md) | [Limits](docs/LIMITS.md) | [Release](docs/RELEASE.md) | [Changelog](CHANGELOG.md)
+[Quick start](docs/QUICKSTART.md) | [Commands](docs/COMMANDS.md) | [Config](docs/CONFIG.md) | [Rules guide](docs/RULES_GUIDE.md) | [Safety](docs/SAFETY.md) | [MCP](docs/MCP.md) | [UI and TUI](docs/UI_AND_TUI.md) | [Architecture](docs/ARCHITECTURE.md) | [Limits](docs/LIMITS.md) | [Limits register](docs/LIMITS_REGISTER.md) | [Compatibility matrix](docs/COMPAT_MATRIX.md) | [Release](docs/RELEASE.md) | [Changelog](CHANGELOG.md)
 
 ## Contributing and security
 
