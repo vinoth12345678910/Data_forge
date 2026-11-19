@@ -61,6 +61,7 @@ subprojects {
         classpath = sourceSets["test"].runtimeClasspath
         useJUnitPlatform { includeTags("probe") }
         filter { isFailOnNoMatchingTests = false }
+        systemProperty("golden.dir", rootProject.file("golden").absolutePath)
         outputs.upToDateWhen { false }
     }
     // The scale tests (one million rows, minutes long) carry the "scale" tag and run via `scaleTest` (verify.sh step h).

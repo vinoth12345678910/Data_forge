@@ -5,9 +5,9 @@ Row ids are the owner's. New limits found by the check have new ids (G1 and up).
 
 ## Step 1 result (checked 2026-11-19, branch `lim-register`)
 
-Machine: Apple Silicon Mac, Docker **not running**, so every probe that needs Postgres or MySQL was NOT run. Probes that ran use rule compile, config reading, the check parser and SQLite. SQLite is lenient about column types, so it shows reader and generator behaviour, not Postgres behaviour.
+Machine: Apple M4. The rule, config, check-parser and SQLite probes ran first (Docker was down); the Postgres lab and size probes ran after Docker was started. SQLite is lenient about column types, so its rows show reader and generator behaviour only. MySQL was not probed.
 
-**Totals (44 rows): Confirmed 33, Refuted 0 whole rows (3 rows have a refuted part: A1, A2, D5), Unknown 11.**
+**Totals (44 rows), after the Docker lab run: Confirmed 34, Refuted 4 (B4, B5, B6, D6), Unknown 6 (A1, C4, D4, D5, F5, F6). Rows with a refuted part: A1, A2, D5.** The lab (`scripts/compat-lab.sh`, results in `docs/COMPAT_MATRIX.md`) ran on Postgres 16.15, 17.11 and 18.6 in Docker; the size probe is `SizeProbeTest` (Apple M4, 10 cores, 16 GB, -Xmx256m child JVM).
 
 Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, results in `modules/testkit/build/probes/`): `LimitsProbeTest` (rule compile, config), `LimitsGenProbeTest` (SQLite generate, load, verify), `forge.schema.CheckProbeTest` (check parser), all in `modules/testkit`.
 
@@ -16,27 +16,27 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | A1 | **Unknown** (part refuted) | Compile accepts uuid `=`, `<>`, `is not null`, walking a uuid foreign key, `limit` and `derive` aggregates grouped by a uuid foreign key. Refused: ordering (`of another type cannot be compared with >`) and uuid against a text literal (`cannot compare of another type with text`). SQLite: uuid primary key + uuid foreign key + `limit` generated, loaded, verified PASS. The Supabase failure was not reproduced; it needs a Postgres uuid column (Docker). |
 | A2 | **Confirmed** (the "no `when` on a limit" half is refuted) | `when` on the child table: `this rule is about slots, but bookings.status starts at another table; reach a parent through a foreign key column...`. `when` on the parent table is accepted. `limit` already takes `[when cond]` (RULE_LANGUAGE.md line 37). |
 | A3 | **Confirmed** | Compile accepts decimal rules. Generation refuses: `Rule total: orders.total must be a generated whole-number column to be derived.` and `Rule pr: items.price is a decimal or special type; generation reads whole numbers, text, true/false and times only.` A table with numeric(12,2) columns and no rule generates and loads. |
-| A4 | **Confirmed** | `CheckParser` keeps these raw, not understood: `num_nonnulls(...)`, arithmetic (`price * qty > 0`), `CASE`, regex (`~`), `OR` across columns. Understood: IN lists, ranges, column-to-column compare, `char_length`. `init` prints "Check not fully understood: ..." (InitCmd.java:112). Five shapes, not two. |
+| A4 | **Confirmed** | Lab: `init` reports checks not fully understood on events-merch 2, ecommerce 6, saas-multitenant 9, Pagila 0. `CheckParser` keeps these raw, not understood: `num_nonnulls(...)`, arithmetic (`price * qty > 0`), `CASE`, regex (`~`), `OR` across columns. Understood: IN lists, ranges, column-to-column compare, `char_length`. `init` prints "Check not fully understood: ..." (InitCmd.java:112). Five shapes, not two. |
 | A5 | **Confirmed** | docs/design/PHASE3_LANGUAGE_CHANGES.md: 13 rules; `fill`, `pick`, derive-with-join. Count not re-derived. |
 | A6 | **Confirmed** | `GapRuleLimitTest` (seed 50, 28 orders): `leaves no room for the minimum gap`. |
 | A7 | **Confirmed** | `relations: unknown key. Allowed here: [version, seed, clock, locale, connection, ddl, use, tables, rules, states, scenarios, cleanup, manifest_dir]`. Does not exist. |
-| A8 | **Confirmed** | No trigger code in `schema`, `cli` or `load`; only `cleanup` reads triggers (refuses delete triggers, `allow_triggers`). `init` and `generate` do not warn. |
-| B1 | **Confirmed** (half) | `connection.schemas: unknown key. Allowed here: [url, schema, env, user, password_env, backup_cmd]`: one `schema` only. The refusal of a foreign key into another schema was not run (needs Postgres). |
-| B2 | **Unknown** | SQLite accepted jsonb, tsvector, money, inet, hstore, geometry, ltree, int4range, bit(8), text[] as plain columns, so it says nothing about Postgres. Needs the Postgres type matrix (Docker). |
-| B3 | **Unknown** | SQLite view beside a table: generated and loaded. `PgReader` folds partitions into the parent (code). Partitioned inserts, inheritance, foreign tables, materialized views untested. |
-| B4 | **Unknown** | Not measured. Step 2. |
-| B5 | **Unknown** (works on SQLite) | Quoted, reserved-word (`select`), mixed-case, Unicode names generated, loaded, verified on SQLite. Postgres and MySQL not run. |
-| B6 | **Unknown** (part refuted) | Self reference to a non-primary-key unique column generated and loaded on SQLite. Postgres and composite-key `IN` on SQLite not run. |
+| A8 | **Confirmed** | No trigger code in `schema`, `cli` or `load`. Lab `lab/triggers` (profile-per-user trigger): `forge generate: loading table profiles failed: ERROR: duplicate key value violates unique constraint "profiles_pkey" Detail: Key (user_id)=(17) already exists. ... Nothing was loaded`. `init` printed no warning. |
+| B1 | **Confirmed** | Lab `lab/multi_schema` fails at `init`: `Foreign key profiles.profiles_id_fkey references table auth.users, which is not in the schema that was read.` `connection.schemas: unknown key`. |
+| B2 | **Confirmed** (differs from the register) | Not read as text: `forge generate` refuses with `Table kinds: column b has type bit, which cannot be generated yet.` One column per run, so the rest of the matrix (jsonb, tsvector, money, inet, hstore, ltree, ranges, arrays, enum, domain, composite) is still unseen behind the first failure. |
+| B3 | **Confirmed** | Lab `lab/partitions_views` fails at `generate`: `table child_t has no primary key or unique not-null key; cleanup could not tell its rows apart. Add a key or mark the table keep in forge.yml.` (inheritance child). `init` gave no warning. Partitions, view and materialized view not reached because of that failure. |
+| B4 | **Refuted** for the CLI | Lab: a generated 2,000-table schema (one foreign key per table) PASSED `init`, `generate` (200,000 rows) and `verify` in 48 s on Postgres 16. UI graph rendering still unmeasured. |
+| B5 | **Refuted** | Lab `lab/identifiers` (`"Order"`, `"select"`, `"Naïve Col"`, `"ünï table"`, `"user"`) PASSED zero-config on Postgres 16. MySQL not run. |
+| B6 | **Refuted** for Postgres | Lab `lab/selfref` (self reference to a non-primary-key unique column, composite foreign key) PASSED. Composite-key `IN` on SQLite not probed. |
 | C1 | **Confirmed** | LIMITS.md, first line. |
 | C2 | **Confirmed** (worse) | `packs/` holds only `.gitkeep`: no pack ships. The events rules live in `golden/events-merch`. |
 | C3 | **Confirmed** | One locale data folder: `modules/gen/src/main/resources/data/en_IN`. |
 | C4 | **Unknown** | No probe; needs `init` on a database. |
 | D1 | **Confirmed** | `JdbcLoader.java:65`: `table X already has N rows; Data Forge only loads into empty tables. Empty it, load into a fresh database, or mark the table keep in forge.yml.` |
-| D2 | **Confirmed** | PERF.md: tied composite keys measured to 1,000,000-row parents (132 and 210 MB live at -Xmx256m); nothing above about 4M rows. Step 2 measures 10M. |
+| D2 | **Confirmed** | PERF.md: tied composite keys measured to 1,000,000-row parents (132 and 210 MB live at -Xmx256m); nothing above about 4M rows in PERF.md. **Probe at about 10M rows, -Xmx256m, Postgres 16:** parents + 3x children 10,000,000 rows, 65.8 s, live heap 181 MB; tied composite keys 10,033,332 rows (3.33M-row parents), 144.6 s, live heap 231 MB (90% of the heap, over the 85% gate). 10M-row tied parents (30M rows) not run. |
 | D3 | **Confirmed** | No thread, executor or parallel code in `modules/load`. |
 | D4 | **Unknown** | Not measured. |
 | D5 | **Unknown** (part refuted) | A statement timeout already exists (`Verifier.java:55-57`). Cost on huge tables, EXPLAIN, rule-subset flag, sample mode: not seen, not measured. |
-| D6 | **Confirmed** | Every Postgres test image is `postgres:16-alpine`. |
+| D6 | **Refuted** | The test suite uses 16 only, but the lab PASSED the three goldens and Pagila on Postgres 16.15, 17.11 and 18.6. 14 and 15 not run. |
 | D7 | **Confirmed** | LIMITS.md (not re-run). |
 | D8 | **Confirmed** | LIMITS.md (not re-run). |
 | D9 | **Confirmed** | `InitCmd.java:151`: MariaDB url refused with a message. |
@@ -64,6 +64,8 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 |---|---|---|---|
 | G1 | The error for an ordering or text-literal compare on a uuid column omits the type name: `of another type cannot be compared with >` | CC | `LimitsProbeTest`. Wording only; belongs with A1. |
 | G2 | `packs/` is empty: zero packs ship, not one | CC | `git ls-files packs` |
+| G4 | `init` gives no warning for a table that `generate` will refuse (inheritance child with no key); the failure comes at `generate` | CC | `docs/COMPAT_MATRIX.md` lab/partitions_views |
+| G5 | `generate` stops at the first unsupported column type, so a schema with several shows one problem per run | CC | lab/pg_types |
 | G3 | Postgres-only probes (A1, B1, B2, B5 on Postgres) cannot run on SQLite and need Docker | CC | Docker down on this machine; SQLite accepts any declared type |
 
 ---
