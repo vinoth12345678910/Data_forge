@@ -112,6 +112,10 @@ final class Live {
             }
         }
         rules = RuleSet.check(conf.rules(), graph);
+        String u = conf.connection().url();
+        if (u.startsWith("sqlite:") || u.startsWith("jdbc:sqlite:")) {
+            RuleSet.noDecimals(rules, "SQLite");
+        }
         verifyRules = new java.util.ArrayList<>(rules);
         verifyRules.addAll(forge.rules.StateRules.expand(conf, graph));
     }
