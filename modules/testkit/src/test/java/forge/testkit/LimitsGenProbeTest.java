@@ -38,6 +38,16 @@ class LimitsGenProbeTest {
                     }
                 }
             }
+            return run(c, dir, rules, rows);
+        } catch (Throwable e) {
+            String m = String.valueOf(e.getMessage()).replace('\n', ' ');
+            return "FAILED " + e.getClass().getSimpleName() + ": " + (m.length() > 260 ? m.substring(0, 260) : m);
+        }
+    }
+
+    /** Generates, loads and verifies on an open connection whose tables exist. */
+    static String run(Connection c, Path dir, String rules, String rows) {
+        try {
             String yaml = "version: 1\nseed: 7\nclock: \"2026-06-01T00:00:00Z\"\nddl: x.sql\ntables:\n" + rows + (rules.isEmpty() ? "" : "rules:\n" + rules);
             Config conf = ConfigReader.read(yaml);
             var g = JdbcReader.read(c);
