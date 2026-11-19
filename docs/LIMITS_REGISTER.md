@@ -58,6 +58,19 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | F6 | **Unknown** | Commit `db1c6be` reconciled README and docs once; what remains was not checked. |
 | F7 | **Confirmed** | `golden/` holds the three goldens and `holdout`; no wider lab yet. |
 
+## Wave 1 progress (2026-11-19, branches w1-*, stacked, tip `w1-a2-limit-where`)
+
+| Row | Outcome |
+|---|---|
+| A1 | **Fixed** (`2283ad9`). Reproduced on Postgres 16 first: `Rule has_account: orders.account_id is a decimal or special type; generation reads whole numbers...` for a `check` over a uuid column. Now a `UUID` type in rules: `=`, `<>`, null tests, grouping by a uuid foreign key. The same three rules now generate 300 rows and verify PASS on Postgres 16. Ordering and text literals are refused by type name (closes G1). Test `UuidRulesTest`. |
+| A2 | **Not built, decision owed.** The grammar already allows `sum(col where cond)` in a limit; `RuleCheck.limit` refuses it (`a limit takes no where or via`). Building it means drawing the filter's child columns before the limited column (`Ruled.order`): generator design, yours. Disabled gate test `LimitWhereTest` records it. |
+| A3 | Not started (decimal arithmetic through the generator, plus the rounding rule; your decision). |
+| A4 | **Mostly refuted, no code.** The generator already evaluates `num_nonnulls`, arithmetic, `OR`, `char_length`, `ANY` checks (`Eval`, probe). Not supported, and refused at generate with a message: `CASE`, regex (`~`), `LIKE` (`~~`), `round`. Regex cannot be satisfied by sampling, so it stays refused. The `init` wording "not fully understood" is misleading for the evaluated shapes. |
+| A7 | Not started (new config key, and cleanup must honour logical relations: your decision). |
+| A8 | **Fixed** (`62d71db`): `init` and `generate` print `Insert triggers found (users: users_profile). ...` before the load collides. Warn-only, as recommended. Test `TriggerWarningTest` (SQLite); Postgres checked by hand on lab `triggers`. |
+| B1 | Not built. The keep-table machinery (`core`, `load`, manifest, cleanup) assumes every table is in the read schema; an `auth.users` stub needs schema-qualified quoting and touches Phase 5 cleanup safety: yours. |
+| B2 | **Improved** (`e29c0f5`): a NULLABLE column of an unsupported type is left NULL (23 Postgres types become usable when nullable). NOT NULL unsupported columns still stop with the message. Test `NullableTypesTest`. |
+
 ### New limits found
 
 | ID | Limit | Src | Evidence |
