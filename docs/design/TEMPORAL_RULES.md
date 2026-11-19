@@ -47,3 +47,6 @@ The language change list for the user (c): `fill` (exact allocation) and `pick .
 
 A rule with a minimum gap (`created_at < event.starts_at by 1h..30d`) fails with a `GenError` when the parent's time is closer to the earliest time the generator can make than the gap: "the parent's time leaves no room for the minimum gap". `GapRuleLimitTest` pins it at forge seed 50, 28 orders (registrations row 27) on events-merch; the generator is unchanged, only the message was corrected (it used to give the cap advice "Fewer children per parent, or a larger cap"). Open design question, listed in `docs/PLAN.md` under Phase 7 hardening: planner headroom for gap rules.
 
+### Update, Wave 3 (A6): headroom built
+
+The open question above is closed. For a clamp `child < parent by LO..HI` (or `<=`), the planner moves the parent time column's earliest value later by LO; for `child > parent by LO..` it moves the latest value earlier by LO (`Ruled.headroom`). The child then always has room. Left alone, so the clear error still appears: a gap as large as the whole range, a parent column that a rule shapes, a unique column. This changes the values of the parent time column for existing seeds (a smaller draw range); `GapRuleLimitTest` pins the new behaviour.

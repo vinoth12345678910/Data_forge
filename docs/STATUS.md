@@ -401,3 +401,10 @@
 - Next: C3 (locale data) after you say go.
 - Decisions: schema only, conservative (2+ values, not a key); output is notes, so forge.output/1 is unchanged.
 - Open: step k (UI smoke) still SKIPPED.
+
+## 2026-11-19 Wave 3, A6 (branch w3-a6-gap-headroom)
+- Done: planner headroom for time-gap rules (`Ruled.headroom`). Seed 50 with 28 orders now generates and verifies; 12 seeds pass; fast and container suites green; determinism-auditor run in a fresh agent.
+- Not done: parents shaped by their own rules, unique time columns and non-column bounds get no headroom.
+- Next: A5 derive-with-join, then D9 MariaDB.
+- Decisions: recommended design (shift the parent's earliest by the minimum gap). It changes the parent time column's values for existing seeds.
+- Open: none new.
