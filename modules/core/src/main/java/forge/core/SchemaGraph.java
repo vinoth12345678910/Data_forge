@@ -8,12 +8,17 @@ public record SchemaGraph(String schema, List<Table> tables) {
     /** The name prefix of a declared relation (it is not a database constraint). */
     public static final String RELATION = "relation:";
 
+    /** Without the external stub tables (foreign keys into other schemas): for the snapshot and drift, which describe the read schema only. */
+    public SchemaGraph withoutExternal() {
+        return new SchemaGraph(schema, tables.stream().filter(t -> !t.external()).toList());
+    }
+
     /** The schema as the database has it: declared relations removed. */
     public SchemaGraph withoutRelations() {
         java.util.List<Table> out = new java.util.ArrayList<>();
         for (Table t : tables) {
             java.util.List<Fk> fks = t.fks().stream().filter(f -> !f.name().startsWith(RELATION)).toList();
-            out.add(fks.size() == t.fks().size() ? t : new Table(t.name(), t.columns(), t.pk(), t.uniques(), fks, t.checks(), t.partKey(), t.parts()));
+            out.add(fks.size() == t.fks().size() ? t : new Table(t.name(), t.columns(), t.pk(), t.uniques(), fks, t.checks(), t.partKey(), t.parts(), t.external()));
         }
         return new SchemaGraph(schema, out);
     }
@@ -31,7 +36,7 @@ public record SchemaGraph(String schema, List<Table> tables) {
                     fks.add(new Fk(RELATION + r.table() + r.columns() + "->" + r.refTable() + r.refColumns(), r.columns(), r.refTable(), r.refColumns(), false, false));
                 }
             }
-            out.add(fks.size() == t.fks().size() ? t : new Table(t.name(), t.columns(), t.pk(), t.uniques(), fks, t.checks(), t.partKey(), t.parts()));
+            out.add(fks.size() == t.fks().size() ? t : new Table(t.name(), t.columns(), t.pk(), t.uniques(), fks, t.checks(), t.partKey(), t.parts(), t.external()));
         }
         return new SchemaGraph(schema, out);
     }

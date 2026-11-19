@@ -24,6 +24,9 @@ public final class Sequences {
     public static List<Manifest.Seq> before(Connection c, SchemaGraph g) throws SQLException {
         List<Manifest.Seq> out = new ArrayList<>();
         for (Table t : g.tables()) {
+            if (t.external()) {
+                continue;
+            }
             List<Column> cols = new ArrayList<>(t.columns());
             cols.sort((a, b) -> a.name().compareTo(b.name()));
             for (Column col : cols) {

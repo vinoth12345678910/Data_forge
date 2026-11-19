@@ -47,7 +47,7 @@ public final class PgLoader {
         List<String> tables = new ArrayList<>();
         for (String name : gen.plan().order()) {
             Config.TableConf tc = conf.tables().get(name);
-            if (!(tc != null && tc.keep()) && gen.rows(name) > 0) {
+            if (!(tc != null && tc.keep()) && !g.table(name).external() && gen.rows(name) > 0) {
                 tables.add(name);
             }
         }
@@ -62,6 +62,9 @@ public final class PgLoader {
         String at = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
         Map<String, Long> pre = new TreeMap<>();
         for (Table t : g.tables()) {
+            if (t.external()) {
+                continue;
+            }
             pre.put(t.name(), existing(c, g, t.name()));
         }
         Manifest m = ManifestBuilder.build(g, conf, gen, configText, at, env, Sequences.before(c, g), pre);
@@ -107,7 +110,8 @@ public final class PgLoader {
     }
 
     private static String full(SchemaGraph g, String table) {
-        return q(g.schema()) + "." + q(table);
+        int dot = table.indexOf('.');
+        return dot > 0 ? q(table.substring(0, dot)) + "." + q(table.substring(dot + 1)) : q(g.schema()) + "." + q(table);
     }
 
     private static long existing(Connection c, SchemaGraph g, String table) throws SQLException {

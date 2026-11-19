@@ -172,7 +172,7 @@ public final class RowGen {
         Map<String, Integer> counts = new TreeMap<>();
         for (Table t : g.tables()) {
             Config.TableConf tc = c.tables().get(t.name());
-            if (tc != null && tc.keep()) {
+            if ((tc != null && tc.keep()) || t.external()) {
                 KeepSet k = keeps.get(t.name());
                 if (k != null && k.count() > Integer.MAX_VALUE) {
                     throw new GenError("cleanup.keep: " + t.name() + " lists " + k.count() + " values; at most " + Integer.MAX_VALUE + " are supported.");
@@ -207,12 +207,13 @@ public final class RowGen {
     private static void keepValues(SchemaGraph g, Config c, Map<String, Integer> counts) {
         for (Table t : g.tables()) {
             Config.TableConf tc = c.tables().get(t.name());
-            if ((tc != null && tc.keep()) || counts.get(t.name()) == 0) {
+            if ((tc != null && tc.keep()) || t.external() || counts.get(t.name()) == 0) {
                 continue;
             }
             for (Fk f : t.fks()) {
                 Config.TableConf pc = c.tables().get(f.refTable());
-                if (pc == null || !pc.keep() || counts.get(f.refTable()) > 0) {
+                Table parent = g.table(f.refTable());
+                if ((parent == null || !parent.external()) && (pc == null || !pc.keep()) || counts.get(f.refTable()) > 0) {
                     continue;
                 }
                 boolean nullShare = true;

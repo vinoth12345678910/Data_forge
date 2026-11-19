@@ -63,6 +63,9 @@ public final class ConfigCheck {
             if (t == null) {
                 throw new ConfigError(path + ": no such table in the schema.");
             }
+            if (t.external() && te.getValue().rows() != null) {
+                throw new ConfigError(path + ".rows: " + t.name() + " is an external table (another schema): Data Forge never generates it. List its ids under cleanup.keep.");
+            }
             for (Map.Entry<String, ColConf> ce : te.getValue().columns().entrySet()) {
                 column(t, ce.getKey(), ce.getValue(), path + ".columns." + ce.getKey());
             }

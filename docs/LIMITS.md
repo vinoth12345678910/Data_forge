@@ -15,6 +15,9 @@ Everything here is a known limit of `1.0.0-rc1`, collected from the status notes
 - Cleanup honours the relations of every open (not cleaned) run in the database, not only the run being cleaned. A stored relation that cannot be read, or whose table or columns no longer exist, makes cleanup refuse (`relations_unreadable`, `relations_stale`) until the schema is restored (an unreadable stored relation has no tool-based way out: fix the `_dataforge` row by hand). These two refusals exit 2 with the error envelope and are not written to the audit log, because they happen before the audit is opened. The relation rows of other open runs are not integrity-checked (changing them needs write access to the `_dataforge` tables).
 - **Relations that were never declared are unprotected.** Data Forge cannot see them, so cleanup can delete a generated parent and leave an orphan. Declare every relation before the load.
 
+## Foreign keys into another schema (Postgres)
+- A foreign key into a schema that is not read (Supabase `auth.users`) works: Data Forge makes an in-memory stub of the target with only its key columns. List the existing ids under `cleanup.keep` (`- { table: auth.users, ids: [...] }`); without ids, `generate` refuses (`keep_values_missing`). It never generates, loads, reads or cleans the external table, and a wrong id fails at load and rolls back. A real table whose name contains a dot is refused on Postgres.
+
 ## Databases
 - **Postgres 16** is the full target (golden schemas and the Pagila holdout). 17 was run for information only.
 - **MySQL 8.4 and SQLite** run translated golden schemas only; not every Postgres type is covered. `forge init` is tested on Postgres and DDL files only (its help says Postgres), so write the table settings yourself for MySQL or SQLite. The `generate` and `verify` help text still says "(Postgres)".

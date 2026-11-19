@@ -371,6 +371,9 @@ final class Guards {
         }
         Map<String, Long> out = new java.util.TreeMap<>();
         for (forge.core.Table t : x.g().tables()) {
+            if (t.external()) {
+                continue;
+            }
             if (!mine.contains(t.name())) {
                 out.put(t.name(), Sql.count(x.ro(), "select count(*) from " + x.tbl(t.name())));
             }

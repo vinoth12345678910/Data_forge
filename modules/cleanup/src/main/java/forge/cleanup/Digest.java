@@ -24,7 +24,7 @@ final class Digest {
     private Digest() {}
 
     static String of(Ctx x) throws SQLException {
-        List<Table> tables = new ArrayList<>(x.g().tables());
+        List<Table> tables = new ArrayList<>(x.g().tables().stream().filter(t -> !t.external()).toList());
         tables.sort(Comparator.comparing(Table::name));
         MessageDigest md = Integrity.digest();
         for (Table t : tables) {

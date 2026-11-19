@@ -65,7 +65,7 @@ public final class OutFiles {
         List<String> tables = new ArrayList<>();
         for (String name : gen.plan().order()) {
             Config.TableConf tc = conf.tables().get(name);
-            if (!(tc != null && tc.keep()) && gen.rows(name) > 0) {
+            if (!(tc != null && tc.keep()) && !g.table(name).external() && gen.rows(name) > 0) {
                 tables.add(name);
             }
         }
