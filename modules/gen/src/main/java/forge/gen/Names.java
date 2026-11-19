@@ -5,45 +5,66 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
- * Name, city and word lists bundled in the jar (no network). A pick is "index into the list",
- * so the order of every list is part of the output; see docs/design/SEEDED_RANDOM.md.
+ * Name, city and word lists bundled in the jar (no network), one set per locale. A pick is "index into
+ * the list", so the order of every list is part of the output; see docs/design/SEEDED_RANDOM.md.
  */
 final class Names {
 
+    /** The default locale, and the only one with phone, pincode and GSTIN generators. */
     static final String LOCALE = "en_IN";
+    static final List<String> LOCALES = List.of("de_DE", "en_GB", "en_IN", "en_US", "fr_FR");
     static final List<String> FILES = List.of("first_names.txt", "last_names.txt", "cities.txt", "words.txt");
 
-    private static final List<String> FIRST = load("first_names.txt");
-    private static final List<String> LAST = load("last_names.txt");
-    private static final List<String> CITIES = load("cities.txt");
-    private static final List<String> WORDS = load("words.txt");
+    private static final Map<String, Names> BY_LOCALE = load();
+    private static final Names DEFAULT = BY_LOCALE.get(LOCALE);
 
-    private Names() {}
+    final List<String> first;
+    final List<String> last;
+    final List<String> cities;
+    final List<String> words;
+
+    private Names(String locale) {
+        this.first = load(locale, "first_names.txt");
+        this.last = load(locale, "last_names.txt");
+        this.cities = load(locale, "cities.txt");
+        this.words = load(locale, "words.txt");
+    }
+
+    /** The lists of a locale, or null when it is not bundled. */
+    static Names of(String locale) {
+        return BY_LOCALE.get(locale);
+    }
 
     static List<String> first() {
-        return FIRST;
+        return DEFAULT.first;
     }
 
     static List<String> last() {
-        return LAST;
+        return DEFAULT.last;
     }
 
     static List<String> cities() {
-        return CITIES;
+        return DEFAULT.cities;
     }
 
     static List<String> words() {
-        return WORDS;
+        return DEFAULT.words;
     }
 
-    /** The raw bytes of a list file, for the checksum test. */
+    /** The raw bytes of a default-locale list file, for the checksum test. */
     static byte[] bytes(String file) {
-        try (InputStream in = Names.class.getResourceAsStream("/data/" + LOCALE + "/" + file)) {
+        return bytes(LOCALE, file);
+    }
+
+    static byte[] bytes(String locale, String file) {
+        try (InputStream in = Names.class.getResourceAsStream("/data/" + locale + "/" + file)) {
             return in.readAllBytes();
         } catch (IOException e) {
-            throw new IllegalStateException("cannot read " + file, e);
+            throw new IllegalStateException("cannot read " + locale + "/" + file, e);
         }
     }
 
@@ -55,9 +76,17 @@ final class Names {
         return n;
     }
 
-    private static List<String> load(String file) {
+    private static Map<String, Names> load() {
+        Map<String, Names> m = new TreeMap<>();
+        for (String loc : LOCALES) {
+            m.put(loc, new Names(loc));
+        }
+        return Map.copyOf(m);
+    }
+
+    private static List<String> load(String locale, String file) {
         List<String> out = new ArrayList<>();
-        for (String line : new String(bytes(file), StandardCharsets.UTF_8).split("\n")) {
+        for (String line : new String(bytes(locale, file), StandardCharsets.UTF_8).split("\n")) {
             String s = line.strip();
             if (!s.isEmpty() && !s.startsWith("#")) {
                 out.add(s);

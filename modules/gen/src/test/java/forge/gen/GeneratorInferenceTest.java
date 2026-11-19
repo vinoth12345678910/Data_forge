@@ -127,8 +127,8 @@ class GeneratorInferenceTest {
     @Test
     void aLocaleWithNoBundledDataIsAClearError() {
         GenError e = assertThrows(GenError.class,
-            () -> RowGen.of(new SchemaGraph("public", List.of(people())), conf(5, 50, Map.of(), "fr_FR")));
-        assertTrue(e.getMessage().contains("fr_FR") && e.getMessage().contains("en_IN"), e.getMessage());
+            () -> RowGen.of(new SchemaGraph("public", List.of(people())), conf(5, 50, Map.of(), "xx_XX")));
+        assertTrue(e.getMessage().contains("xx_XX") && e.getMessage().contains("en_IN"), e.getMessage());
     }
 
     /** A guess that cannot be unique falls back to plain letters instead of failing. */

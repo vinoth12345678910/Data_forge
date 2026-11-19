@@ -401,3 +401,10 @@
 - Next: C3 (locale data) after you say go.
 - Decisions: schema only, conservative (2+ values, not a key); output is notes, so forge.output/1 is unchanged.
 - Open: step k (UI smoke) still SKIPPED.
+
+## 2026-11-19 Wave 3, C3 (branch w3-c3-locales)
+- Done: locales en_US, en_GB, de_DE, fr_FR added beside en_IN (names, cities, words). `Names` is per locale; `Dom` carries its list; the locale of a column picks it. en_IN output unchanged.
+- Not done: per-country phone, postal code and bank-number formats (en_IN only; guessed ones fall back to the type default, asked-for ones are an error); `array` of words still uses the en_IN words.
+- Next: D7 (MySQL and SQLite parity suite).
+- Decisions: lists are append-only like en_IN; German and French spellings are ASCII (Mueller, Koeln) so emails stay valid; an unknown locale lists the bundled ones.
+- Open: the owner may want real phone and postal formats per country.
