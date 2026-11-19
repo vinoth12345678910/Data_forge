@@ -40,6 +40,7 @@ public final class Session {
     });
     private String url;
     private String user = "";
+    private String schemaName = "public";
     private String password = "";
     private Path config;
     private String state = "idle";
@@ -56,8 +57,13 @@ public final class Session {
 
     public record Result(int code, JsonNode envelope) {}
 
-    /** Draft forge.yml with forge init (read only on the database; init refuses a prod label). */
     public synchronized Result connect(String url, String env, String user, String password) throws IOException {
+        return connect(url, env, user, password, "");
+    }
+
+    /** Draft forge.yml with forge init (read only on the database; init refuses a prod label). */
+    public synchronized Result connect(String url, String env, String user, String password, String schemaName) throws IOException {
+        this.schemaName = schemaName == null || schemaName.isBlank() ? "public" : schemaName;
         Files.createDirectories(scratch);
         Path cfg = scratch.resolve("forge.yml");
         this.url = null;
@@ -81,6 +87,8 @@ public final class Session {
                 args.add("--password-env");
                 args.add(PW_VAR);
             }
+            args.add("--schema");
+            args.add(this.schemaName);
             r = scrub(run(args));
         } else {
             r = minimal(cfg, url, env);
@@ -125,15 +133,21 @@ public final class Session {
         if (!password.isEmpty()) {
             y.append("  password_env: ").append(PW_VAR).append("\n");
         }
-        Files.writeString(cfg, y.toString());
+        Files.writeString(cfg, y + "tables: {}\n");
         this.url = url;
+        View v;
         try {
-            schema();
+            v = view();
         } catch (SQLException | RuntimeException e) {
             this.url = null;
             return fail("connect", "sql_error", "cannot connect or read the schema: check the url, user and password");
         }
-        return new Result(0, M.createObjectNode().put("schema", "forge.output/1").put("command", "connect").put("ok", true));
+        ObjectNode env0 = M.createObjectNode().put("schema", "forge.output/1").put("command", "connect").put("ok", true);
+        ObjectNode data = env0.putObject("data");
+        data.set("schemas", M.valueToTree(v.schema.get("schemas")));
+        data.set("init_warnings", M.valueToTree(v.warnings));
+        data.set("schema", M.valueToTree(v.schema));
+        return new Result(0, env0);
     }
 
     /** Connection and SQL errors from forge init carry the driver's own words: replace them with a fixed message. */
@@ -160,38 +174,46 @@ public final class Session {
         return config != null;
     }
 
-    /** Tables, columns, keys and foreign keys of the connected database (a self reference has refTable equal to the table). */
-    public synchronized ObjectNode schema() throws SQLException {
+    private record View(java.util.Map<String, Object> schema, java.util.List<java.util.Map<String, Object>> warnings) {}
+
+    /** The schema view and the init warnings, built by SchemaView (the class forge init uses too). */
+    private View view() throws SQLException {
         Db db = new Db(jdbc(url), user, password);
         SchemaGraph g;
+        List<String> reader = new ArrayList<>();
+        List<String> triggers = new ArrayList<>();
         if (url.startsWith("postgres://")) {
-            g = PgReader.read(db, "public");
+            g = PgReader.read(db, schemaName);
         } else {
             try (Connection c = db.openReadOnly()) {
-                g = JdbcReader.read(c);
+                g = JdbcReader.read(c, reader);
             }
         }
-        ObjectNode out = M.createObjectNode();
-        ArrayNode tables = out.putArray("tables");
-        for (Table t : g.tables()) {
-            ObjectNode o = tables.addObject();
-            o.put("name", t.name());
-            ArrayNode cols = o.putArray("columns");
-            t.columns().forEach(c -> cols.addObject().put("name", c.name()).put("nullable", c.nullable()));
-            ArrayNode pk = o.putArray("pk");
-            t.pk().forEach(pk::add);
-            ArrayNode fks = o.putArray("fks");
-            t.fks().forEach(f -> {
-                ObjectNode fo = fks.addObject();
-                fo.put("name", f.name());
-                ArrayNode fc = fo.putArray("columns");
-                f.columns().forEach(fc::add);
-                fo.put("refTable", f.refTable());
-                ArrayNode rc = fo.putArray("refColumns");
-                f.refColumns().forEach(rc::add);
-            });
+        try (Connection c = db.openReadOnly()) {
+            triggers = forge.schema.Triggers.onInsert(c, g.schema());
+        } catch (SQLException | RuntimeException e) {
+            triggers = new ArrayList<>(); // a trigger list that cannot be read is no warning, never an error
         }
-        return out;
+        List<forge.core.Config.Relation> rels = new ArrayList<>();
+        if (config != null && Files.exists(config)) {
+            try {
+                rels = forge.core.ConfigReader.read(Files.readString(config)).relations();
+            } catch (IOException | RuntimeException e) {
+                rels = new ArrayList<>();
+            }
+        }
+        return new View(forge.cli.SchemaView.schema(g, List.of(g.schema()), rels, triggers, reader),
+            forge.cli.SchemaView.warnings(g, triggers, reader));
+    }
+
+    /** The schema view of docs/design/SERVICE_LAYER.md. */
+    public synchronized ObjectNode schema() throws SQLException {
+        return (ObjectNode) M.valueToTree(view().schema);
+    }
+
+    /** forge generate --preflight: the memory estimate and whether the run fits; loads nothing. */
+    public Result preflight() {
+        return run(List.of("--json", "generate", "--preflight", "-c", configPath()));
     }
 
     /** Starts forge generate in the background; false if one is already running. */

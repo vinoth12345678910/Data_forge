@@ -29,6 +29,13 @@ final class Api {
 
     void mount(Javalin app) {
         get(app, "/api/schema", this::schema);
+        get(app, "/api/preflight", ctx -> {
+            if (!need(ctx)) return;
+            Session.Result r = s.preflight();
+            ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
+            o.set("envelope", r.envelope());
+            json(ctx, 200, o);
+        });
         get(app, "/api/progress", ctx -> json(ctx, 200, s.progress()));
         get(app, "/api/golive", ctx -> {
             if (!need(ctx)) return;
@@ -60,7 +67,7 @@ final class Api {
             json(ctx, 400, M.createObjectNode().put("error", "url and env are required"));
             return;
         }
-        Session.Result r = s.connect(url, env, b.path("user").asText(""), b.path("password").asText(""));
+        Session.Result r = s.connect(url, env, b.path("user").asText(""), b.path("password").asText(""), b.path("schema").asText(""));
         ObjectNode o = M.createObjectNode().put("ok", r.code() == 0);
         o.set("envelope", r.envelope());
         json(ctx, r.code() == 0 ? 200 : 422, o);

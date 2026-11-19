@@ -397,6 +397,13 @@ public final class RowGen {
         return rows.get(table);
     }
 
+    /** Parent rows that tied composite keys hold in an in-memory index (what Preflight estimates from). */
+    public long tiedIndexRows() {
+        return tiedRows;
+    }
+
+    private long tiedRows;
+
     /** The generated columns of a table, in table order. Stored generated columns are left out. */
     public List<String> columns(String table) {
         return names.get(table);
@@ -684,6 +691,9 @@ public final class RowGen {
                     tied |= tie[2] == i && tie[0] < i;
                 }
                 cl.indexed[i] = tied && !f.refTable().equals(t.name()) && !fkGroup.containsKey(t.name() + "." + f.name());
+                if (cl.indexed[i]) {
+                    tiedRows += rows.get(f.refTable());
+                }
                 if (!cl.indexed[i] && !fkGroup.containsKey(t.name() + "." + f.name())) {
                     cl.anchorTries = ANCHOR_TRIES;
                 }

@@ -211,8 +211,8 @@ class ServerTest {
     @Test
     void thereIsNoRouteThatCanDelete() {
         Set<String> routes = new TreeSet<>(server.routes());
-        assertEquals(Set.of("GET /api/golive", "GET /api/progress", "GET /api/schema", "POST /api/connect",
-            "POST /api/generate", "POST /api/verify"), routes, "any new route fails here until the owner reviews it");
+        assertEquals(Set.of("GET /api/golive", "GET /api/preflight", "GET /api/progress", "GET /api/schema", "POST /api/connect",
+            "POST /api/generate", "POST /api/verify"), routes, "any new route fails here until the owner reviews it (GET /api/preflight added in Part 2: it runs generate --preflight, which loads nothing)");
         for (String r : routes) {
             assertFalse(r.matches(".*(?i:cleanup|purge|delete|truncate|backup|drop|run).*") && !r.endsWith("/api/generate"), r);
         }

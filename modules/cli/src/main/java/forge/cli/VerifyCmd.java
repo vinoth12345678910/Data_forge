@@ -56,7 +56,7 @@ final class VerifyCmd implements Callable<Integer> {
                 Report rep = new Report(all);
                 e.out.print(rep.text(live.conf.connection().url()));
                 if (expected != null) {
-                    listOthers(e.out, live);
+                    listOthers(e, live);
                 }
                 e.report(rep, env);
                 int code = rep.exitCode();
@@ -99,7 +99,9 @@ final class VerifyCmd implements Callable<Integer> {
     }
 
     /** Rules the user did not write into forge.yml: never printed as PASS. */
-    private void listOthers(PrintWriter out, Live live) throws java.io.IOException {
+    private void listOthers(Emit e, Live live) throws java.io.IOException {
+        PrintWriter out = e.out;
+        java.util.List<java.util.Map<String, String>> unchecked = new java.util.ArrayList<>();
         Set<String> mine = new HashSet<>();
         for (Rule r : live.rules) {
             mine.add(r.name());
@@ -118,8 +120,13 @@ final class VerifyCmd implements Callable<Integer> {
             } else {
                 skipped++;
                 out.println("  SKIP   " + name + "  not checked in this phase");
+                java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+                m.put("name", name);
+                m.put("reason", "not checked in this phase: the engine cannot express or check this rule yet" + (r.has("description") ? " (" + r.get("description").asText() + ")" : ""));
+                unchecked.add(m);
             }
         }
+        e.data.put("not_checked_rules", unchecked);
         out.println(live.rules.size() + " rule(s) checked, " + byDb + " enforced by the database, " + skipped
             + " not checked in this phase.");
     }

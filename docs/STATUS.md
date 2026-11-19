@@ -443,3 +443,10 @@
 - Next: the owner reviews the roll-up PR (it also carries A3, A4, the lab-script housekeeping commit and the Chinook compat commit, whose licence is unconfirmed); nothing merged by Claude.
 - Decisions: A5 verify-only for the two rules (owner); packs ship as a classpath resource and a name clash is an error (owner); the gen and CLI tests skip the two verify-only rules by name.
 - Open: a floor on `opening_qty` computed from the aggregates would make those two rules generatable (owner's design call); `scripts/verify.sh` results for this tip are in the PR description.
+
+## Close-out session 2026-11-19 (Parts 1 to 5 of the owner's brief), checkpoint after Part 2
+- Branches (stacked, never merged): `w4-closeout-audit` (Part 1 files), `w4-p2-ui-fields` (Part 2, commit 76aaaa5). Next: `w4-p3-web-ui`, `w4-p4-tui`, `w4-p5-docs`.
+- Done: 1a (all 76 PRs merged, 38 stale branches hold no unique patch), 1b (no Chinook file on main), 1d (inventory rules stay verify-only: a floor on opening_qty is a language/engine change, owner decision), 1e (PERF.md), 1g (step k falls back to a cached headless shell; 5 of 5 smoke runs pass; the pinned chromium-1148 is a broken install), Part 2 (fields, preflight built from the measured S4 cells, GET /api/preflight, route-listing test updated for it: owner please review).
+- NOT done: 1c (docs/WAVE_AUDIT.md), 1f check run, 1h verify.sh run, 1i five reviews, Parts 3, 4, 5.
+- Unresolved findings: S3 takes 332 s and 342 s against a 300 s gate (272.8 s at p5.1); cleanup S2 holds 230 MB live against 217 MB (119 MB recorded at P5.6); S1 Postgres +82%, S2 +32%. Cause not found (a bisect worktree would not build). Cleanup code untouched.
+- Open questions: `connection.schemas` is not built (the Connect field is one `schema`); the connect draft for SQLite and MySQL writes `tables: {}` so generation still refuses there.

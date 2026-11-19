@@ -6,12 +6,15 @@ Start: `./gradlew :server:run --args="8787"` (port optional, 0 = free port).
 
 | Route | Body | Answer |
 |---|---|---|
-| `POST /api/connect` | `{url, env, user?, password?}` | 200 `{ok:true, envelope}`; 422 `{ok:false, envelope}` (prod refused, bad url, cannot connect). `env` is dev, test or staging; **prod is refused**. Postgres drafts `forge.yml` with `forge init`; MySQL and SQLite get a connection-only `forge.yml` (no rules, so generate and verify are limited there). The password stays in server memory; it is never written or returned. |
-| `GET /api/schema` | | `{tables:[{name, columns:[{name,nullable}], pk:[...], fks:[{name, columns, refTable, refColumns}]}]}`. A self reference has `refTable == name`. Cycles are for the client to derive from `fks`. 409 if not connected. |
+| `POST /api/connect` | `{url, env, user?, password?, schema?}` | 200 `{ok:true, envelope}`; 422 `{ok:false, envelope}` (prod refused, bad url, cannot connect). `env` is dev, test or staging; **prod is refused**. Postgres drafts `forge.yml` with `forge init`; MySQL and SQLite get a connection-only `forge.yml` (no rules, so generate and verify are limited there). The password stays in server memory; it is never written or returned. `schema` is the one schema to read (default `public`; Postgres only). The envelope's `data` carries `schemas`, `init_warnings` and `schema` (see `SERVICE_LAYER.md`). |
+| `GET /api/schema` | | The schema view of `docs/design/SERVICE_LAYER.md`: `{schemas, tables:[{name, external, has_insert_trigger, columns:[{name,type,nullable,read_as_text}], pk, fks:[{name, columns, refTable, refColumns}]}], relations:[{table, columns, refTable, refColumns, declared:true}]}`. A self reference has `refTable == name`. `external` tables are stubs for a schema that is not read; `relations` are declared in `forge.yml`, not database foreign keys. Cycles are for the client to derive from `fks`. 409 if not connected. |
+| `GET /api/preflight` | | `{envelope}` of `forge generate --preflight`: `data.preflight` has the estimated memory and, when the run would not fit, `ok:false` and `xmx_mb_needed`. Loads nothing. 409 if not connected. |
 | `POST /api/generate` | `{}` | 202 `{state:"running"}`; 409 if one is running or not connected. |
 | `GET /api/progress` | | `{state:"idle"|"running"|"done"|"failed", envelope|null}` (poll). |
 | `POST /api/verify` | `{}` | `{ok, envelope}`. The envelope separates passed, failed and not-checked; show them separately and never count not-checked as passed. 409 if not connected. |
 | `GET /api/golive` | | `{dry_run: envelope, readiness: envelope, checklist:[...], command:"forge cleanup --run ..."}`. `command` is text to copy; the human types it in a terminal. 409 if not connected. |
+
+Field definitions: `docs/design/SERVICE_LAYER.md`.
 
 ## What does not exist
 No route runs a cleanup, a purge, a truncate, a delete, a backup or `--drop-metadata`. `ServerTest.thereIsNoRouteThatCanDelete` lists the routes and fails when one is added.

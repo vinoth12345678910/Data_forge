@@ -143,9 +143,11 @@ final class InitCmd implements Callable<Integer> {
             e.out.println(note);
             notes.add(note);
         }
+        java.util.List<String> trig = new java.util.ArrayList<>();
         if (url != null) {
             try (java.sql.Connection tc = new Db(jdbc(url), user, password).open()) {
-                String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(tc, schema));
+                trig = forge.schema.Triggers.onInsert(tc, schema);
+                String warn = forge.schema.Triggers.warning(trig);
                 if (warn != null) {
                     e.out.println(warn);
                     notes.add(warn);
@@ -163,6 +165,9 @@ final class InitCmd implements Callable<Integer> {
         e.data.put("seed", seed);
         e.data.put("out", out.toString());
         e.data.put("notes", notes);
+        e.data.put("schemas", java.util.List.of(schema));
+        e.data.put("init_warnings", SchemaView.warnings(g, trig, java.util.List.of()));
+        e.data.put("schema", SchemaView.schema(g, java.util.List.of(schema), c.relations(), trig, java.util.List.of()));
         return 0;
     }
 

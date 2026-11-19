@@ -22,4 +22,5 @@ if [ -x "$here/../runtime/bin/java" ]; then
 else
   java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 fi
-exec "$java_bin" -jar "$jar" "$@"
+# FORGE_JAVA_OPTS: extra JVM options, for example FORGE_JAVA_OPTS=-Xmx1024m (left unquoted on purpose so several options split)
+exec "$java_bin" ${FORGE_JAVA_OPTS:-} -jar "$jar" "$@"
