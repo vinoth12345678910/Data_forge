@@ -47,7 +47,7 @@ cleanup: {}                      # reserved (Phase 5)
 | `version` | int | yes | - | File format version. Only `1` is accepted. |
 | `seed` | integer, signed 64-bit | yes | `forge init` writes `42` | The one seed. Same seed and same file give the same data. |
 | `clock` | ISO-8601 instant, UTC | yes | `forge init` writes `2025-01-01T00:00:00Z` | The dataset's "now". Generation never reads the wall clock. Dates and timestamps are placed relative to it. |
-| `locale` | string | no | `en_IN` | Default locale for names, phones, cities, pincodes. A column can override it. |
+| `locale` | string | no | `en_IN` | Default locale for names, cities, emails and words: `en_IN`, `en_US`, `en_GB`, `de_DE` or `fr_FR` (another value is an error that lists these). Phone, pincode and GSTIN have data for `en_IN` only: guessed from a column name they fall back to the type default under another locale; asked for with `gen:` they are an error. A column can override it. |
 | `connection` | map | one of `connection.url` or `ddl` | - | The database. See below. |
 | `ddl` | path, relative to `forge.yml` | one of `connection.url` or `ddl` | - | The DDL file the schema was read from. |
 | `use` | list of strings | no | `[]` | Packs. Reserved. |

@@ -161,7 +161,7 @@ else
   else
     fail "f1. cross-database: SQLite"
   fi
-  if ./gradlew :testkit:containerTest --tests '*DialectMysqlContainerTest'; then
+  if ./gradlew :testkit:containerTest --tests '*DialectMysqlContainerTest' --tests '*ParityContainerTest'; then
     record "PASS   " "f2. cross-database: MySQL"
   else
     fail "f2. cross-database: MySQL"

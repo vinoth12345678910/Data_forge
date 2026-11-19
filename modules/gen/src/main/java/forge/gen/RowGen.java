@@ -1165,20 +1165,20 @@ public final class RowGen {
 
     private static final long B36_6 = 2_176_782_336L;
 
-    private static int worst(String kind) {
-        int first = Names.longest(Names.first());
-        int last = Names.longest(Names.last());
+    private static int worst(String kind, Names n) {
+        int first = Names.longest(n.first);
+        int last = Names.longest(n.last);
         return switch (kind) {
             case "email" -> first + 1 + last + 1 + 6 + "@example.test".length();
-            case "url" -> "https://www.".length() + Names.longest(Names.words()) + ".example.test/".length() + 6;
+            case "url" -> "https://www.".length() + Names.longest(n.words) + ".example.test/".length() + 6;
             case "full_name" -> first + 1 + last;
             case "first_name" -> first;
             case "last_name" -> last;
-            case "city" -> Names.longest(Names.cities());
+            case "city" -> Names.longest(n.cities);
             case "pincode" -> 6;
             case "gstin" -> 15;
             case "iban" -> 24;
-            case "words" -> Names.longest(Names.words());
+            case "words" -> Names.longest(n.words);
             default -> 10;
         };
     }
@@ -1189,24 +1189,34 @@ public final class RowGen {
         int maxLen = maxLen(c, facts);
         Long lo = g == null ? null : g.lo();
         Long hi = g == null ? null : g.hi();
+        String loc = cc != null && cc.locale() != null ? cc.locale() : conf.locale();
+        Names nm = Names.of(loc);
         if (List.of("email", "first_name", "last_name", "full_name", "city", "phone", "pincode", "gstin").contains(gen)) {
-            String loc = cc != null && cc.locale() != null ? cc.locale() : conf.locale();
-            if (!loc.equals(Names.LOCALE)) {
-                throw new GenError(where + " needs locale data for " + loc + ", but only " + Names.LOCALE + " is bundled.");
+            if (nm == null) {
+                throw new GenError(where + " needs locale data for " + loc + ", but only " + String.join(", ", Names.LOCALES) + " are bundled.");
+            }
+            if (List.of("phone", "pincode", "gstin").contains(gen) && !loc.equals(Names.LOCALE)) {
+                if (explicit) {
+                    throw new GenError(where + " gen " + gen + " has data for " + Names.LOCALE + " only, not " + loc + ".");
+                }
+                return null; // guessed from the column name: use the type default instead
             }
         }
+        if (nm == null) {
+            nm = Names.of(Names.LOCALE);
+        }
         Dom d = switch (gen) {
-            case "email" -> new Dom("email", 0, 0, B36_6, 0, null, clock);
-            case "url" -> new Dom("url", 0, 0, B36_6, 0, null, clock);
-            case "first_name" -> new Dom("first_name", 0, 0, Names.first().size(), 0, null, clock);
-            case "last_name" -> new Dom("last_name", 0, 0, Names.last().size(), 0, null, clock);
-            case "full_name" -> new Dom("full_name", 0, 0, (long) Names.first().size() * Names.last().size(), 0, null, clock);
-            case "city" -> new Dom("city", 0, 0, Names.cities().size(), 0, null, clock);
+            case "email" -> new Dom("email", 0, 0, B36_6, 0, null, clock, nm);
+            case "url" -> new Dom("url", 0, 0, B36_6, 0, null, clock, nm);
+            case "first_name" -> new Dom("first_name", 0, 0, nm.first.size(), 0, null, clock, nm);
+            case "last_name" -> new Dom("last_name", 0, 0, nm.last.size(), 0, null, clock, nm);
+            case "full_name" -> new Dom("full_name", 0, 0, (long) nm.first.size() * nm.last.size(), 0, null, clock, nm);
+            case "city" -> new Dom("city", 0, 0, nm.cities.size(), 0, null, clock, nm);
             case "phone" -> new Dom("phone", maxLen == 0 || maxLen >= 13 ? 1 : 0, 0, Phone.SPACE, 0, null, clock);
             case "pincode" -> new Dom("pincode", 0, 0, Pincode.SPACE, 0, null, clock);
             case "gstin" -> new Dom("gstin", 0, 0, Gstin.SPACE, 0, null, clock);
             case "iban" -> new Dom("iban", 0, 0, Iban.SPACE, 0, null, clock);
-            case "text" -> new Dom("words", lo == null ? 1 : lo, hi == null ? 4 : hi, 1, maxLen, null, clock);
+            case "text" -> new Dom("words", lo == null ? 1 : lo, hi == null ? 4 : hi, 1, maxLen, null, clock, nm);
             case "pick" -> g == null || g.values() == null ? null : new Dom("list", 0, 0, g.values().size(), 0, g.values(), clock);
             case "int" -> INT_TYPES.contains(c.type().name()) ? whole(where, c, facts, cc, unique, key, lo, hi) : null;
             case "money_minor" -> whole(where, c, facts, cc, unique, key, lo == null ? 100L : lo, hi == null ? 1_000_000L : hi);
@@ -1221,9 +1231,9 @@ public final class RowGen {
             // Digits written as text are a valid number for an integer column too.
             d = new Dom("pincode", 0, 0, Pincode.SPACE, 0, null, clock);
         }
-        if (maxLen > 0 && TEXT_TYPES.contains(c.type().name()) && worst(d.kind) > maxLen && !d.kind.equals("phone")) {
+        if (maxLen > 0 && TEXT_TYPES.contains(c.type().name()) && worst(d.kind, d.names) > maxLen && !d.kind.equals("phone")) {
             if (explicit) {
-                throw new GenError(where + " holds at most " + maxLen + " characters, but gen " + gen + " can make " + worst(d.kind) + ".");
+                throw new GenError(where + " holds at most " + maxLen + " characters, but gen " + gen + " can make " + worst(d.kind, d.names) + ".");
             }
             return null;
         }

@@ -27,8 +27,15 @@ final class Dom {
     final int scale;
     final List<String> vals;
     final long clock;
+    final Names names;
 
     Dom(String kind, long lo, long hi, long space, int scale, List<String> vals, long clock) {
+        this(kind, lo, hi, space, scale, vals, clock, Names.of(Names.LOCALE));
+    }
+
+    /** names: the name, city and word lists of the column's locale. */
+    Dom(String kind, long lo, long hi, long space, int scale, List<String> vals, long clock, Names names) {
+        this.names = names;
         this.kind = kind;
         this.lo = lo;
         this.hi = hi;
@@ -76,17 +83,17 @@ final class Dom {
             case "text":
                 return text(cell);
             case "email":
-                return Names.first().get((int) cell.below(Names.first().size())).toLowerCase(Locale.ROOT) + "."
-                    + Names.last().get((int) cell.below(Names.last().size())).toLowerCase(Locale.ROOT) + "."
+                return ascii(names.first.get((int) cell.below(names.first.size()))) + "."
+                    + ascii(names.last.get((int) cell.below(names.last.size()))) + "."
                     + Uniq.base36(p, 6) + "@example.test";
             case "first_name":
-                return Names.first().get((int) p);
+                return names.first.get((int) p);
             case "last_name":
-                return Names.last().get((int) p);
+                return names.last.get((int) p);
             case "full_name":
-                return Names.first().get((int) (p % Names.first().size())) + " " + Names.last().get((int) (p / Names.first().size()));
+                return names.first.get((int) (p % names.first.size())) + " " + names.last.get((int) (p / names.first.size()));
             case "city":
-                return Names.cities().get((int) p);
+                return names.cities.get((int) p);
             case "phone":
                 return Phone.make(p, lo == 1);
             case "pincode":
@@ -96,7 +103,7 @@ final class Dom {
             case "iban":
                 return Iban.make(p);
             case "url":
-                return "https://www." + Names.words().get((int) cell.below(Names.words().size())) + ".example.test/" + Uniq.base36(p, 6);
+                return "https://www." + names.words.get((int) cell.below(names.words.size())) + ".example.test/" + Uniq.base36(p, 6);
             case "words":
                 return words(cell);
             case "json":
@@ -116,6 +123,12 @@ final class Dom {
         }
     }
 
+    /** Lower-case a-z only, so an email stays plain ASCII whatever the locale's spelling. */
+    private static String ascii(String s) {
+        String plain = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
+        return plain.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+    }
+
     /** An empty array, or (lo above 0) lo to hi words as a one-level array literal such as {amber,river}. */
     private String array(Cell cell) {
         if (lo == 0) {
@@ -124,7 +137,7 @@ final class Dom {
         int n = (int) (lo + cell.below(hi - lo + 1));
         StringBuilder b = new StringBuilder("{");
         for (int i = 0; i < n; i++) {
-            b.append(i > 0 ? "," : "").append(Names.words().get((int) cell.below(Names.words().size())));
+            b.append(i > 0 ? "," : "").append(names.words.get((int) cell.below(names.words.size())));
         }
         return b.append('}').toString();
     }
@@ -134,7 +147,7 @@ final class Dom {
         int n = (int) (lo + cell.below(hi - lo + 1));
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < n; i++) {
-            String w = Names.words().get((int) cell.below(Names.words().size()));
+            String w = names.words.get((int) cell.below(names.words.size()));
             if (i == 0) {
                 w = Character.toUpperCase(w.charAt(0)) + w.substring(1);
             }
