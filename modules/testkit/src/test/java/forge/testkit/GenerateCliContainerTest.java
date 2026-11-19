@@ -16,6 +16,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -97,6 +99,9 @@ class GenerateCliContainerTest {
     /** The golden's Phase 2 config with its ddl line replaced by a live connection. */
     static Path liveConfig(String name, String db, Path dir, String env) throws Exception {
         String text = Files.readString(golden(name + "/phase2.forge.yml"));
+        for (String r : RuleGenContainerTest.VERIFY_ONLY) {
+            text = text.replaceAll("(?m)^  - name: " + r + "\n(?:    .*\n)+", ""); // verified by the verify pass, not generated (A5)
+        }
         text = text.replace("ddl: schema.sql\n", "connection:\n  url: " + url(db) + "\n  env: " + env
             + "\n  user: postgres\n  password_env: TEST_PG_PASSWORD\n");
         Path yml = dir.resolve("forge.yml");
@@ -127,6 +132,28 @@ class GenerateCliContainerTest {
             assertTrue(files.anyMatch(f -> f.toString().endsWith(".json")), "a manifest file was written");
         }
         assertTrue(one(db, "select count(*) from _dataforge.runs") == 1);
+    }
+
+    /** C2: a forge.yml that only says use: [ecommerce] generates and verifies exactly like the golden's own phase 3 file. */
+    @Test
+    void theEcommercePackGeneratesAndVerifiesLikeThePhase3Golden(@TempDir Path dir) throws Exception {
+        List<List<String>> results = new ArrayList<>();
+        int n = 0;
+        for (String text : List.of(Files.readString(golden("ecommerce/phase3.forge.yml")), PackGoldenTest.viaPack())) {
+            String db = freshDb(golden("ecommerce/schema.sql"));
+            Path yml = Files.createDirectory(dir.resolve("run" + n++)).resolve("forge.yml");
+            Files.writeString(yml, text.replace("ddl: schema.sql\n", "connection:\n  url: " + url(db) + "\n  env: test\n"
+                + "  user: postgres\n  password_env: TEST_PG_PASSWORD\n"));
+            Out gen = forge("generate", "-c", yml.toString());
+            assertEquals(0, gen.code(), gen.out() + gen.err());
+            Out ver = forge("verify", "-c", yml.toString(), "--expected", golden("ecommerce/expected.yml").toString());
+            assertEquals(0, ver.code(), ver.out() + ver.err());
+            results.add(ver.out().lines().map(String::strip)
+                .filter(l -> l.startsWith("PASS") || l.startsWith("FAIL") || l.startsWith("SKIP") || l.startsWith("DB")).toList());
+        }
+        assertTrue(results.get(0).stream().anyMatch(l -> l.startsWith("PASS")), "vacuous: no rule passed " + results.get(0));
+        assertFalse(results.get(0).stream().anyMatch(l -> l.startsWith("FAIL")), results.get(0).toString());
+        assertEquals(results.get(0), results.get(1), "the pack and the phase 3 golden must give the same rule results");
     }
 
     @ParameterizedTest

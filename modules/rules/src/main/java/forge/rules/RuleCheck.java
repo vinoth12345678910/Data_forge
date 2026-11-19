@@ -371,11 +371,14 @@ final class RuleCheck {
         for (RuleExpr a : f.args()) {
             args.add(walk(a, c));
         }
+        if (f.name().equals("round")) {
+            return round(f, args);
+        }
         int min = switch (f.name()) {
             case "coalesce" -> 1;
             case "least", "greatest" -> 2;
             case "abs" -> 1;
-            default -> throw new Problem(f.pos(), "unknown function " + f.name() + " (known: abs, coalesce, greatest, least)");
+            default -> throw new Problem(f.pos(), "unknown function " + f.name() + " (known: abs, coalesce, greatest, least, round)");
         };
         if (args.size() < min || (f.name().equals("abs") && args.size() != 1)) {
             throw new Problem(f.pos(), f.name() + " needs " + (f.name().equals("abs") ? "one value" : "at least " + min + " values"));
@@ -391,6 +394,28 @@ final class RuleCheck {
         return new R(new RuleExpr.Fn(f.pos(), f.name(), es), t);
     }
 
+    /**
+     * round(expr, n): half away from zero, n a literal 0 to 30 (30 is the most places MySQL DECIMAL holds), the value a number.
+     * A float column is refused: Postgres and MySQL round a float differently, and only exact numbers round the same everywhere.
+     */
+    private R round(RuleExpr.Fn f, List<R> args) {
+        if (args.size() != 2) {
+            throw new Problem(f.pos(), "round needs two values: round(expr, n)");
+        }
+        R v = args.get(0);
+        if (!(args.get(1).e() instanceof RuleExpr.Num n)) {
+            throw new Problem(pos(args.get(1).e()), "round needs a whole-number literal for the decimal places, for example round(x, 2); a column or a calculation is not allowed");
+        }
+        if (n.v() < 0 || n.v() > 30) {
+            throw new Problem(pos(n), "round to " + n.v() + " decimal places is not allowed: n must be 0 to 30");
+        }
+        if (v.t() == null || !isNum(v.t())) {
+            Column col = v.e() instanceof RuleExpr.Ref r ? g.table(r.table()).column(r.column()) : null;
+            throw new Problem(pos(v.e()), "round needs a number; " + describe(v.e()) + " is " + (v.t() == null ? "null" : typeName(v.t(), col)));
+        }
+        return new R(new RuleExpr.Fn(f.pos(), f.name(), List.of(v.e(), n)), T.NUM);
+    }
+
     private R agg(RuleExpr.Agg a, Ctx c) {
         if (!c.allowAgg()) {
             throw new Problem(a.pos(), "an aggregate cannot be used here");
@@ -400,7 +425,11 @@ final class RuleCheck {
         }
         String child = null;
         Fk via = null;
-        if (a.viaNames() != null) {
+        RuleExpr.ColJoin join = null;
+        if (a.join() != null) {
+            join = columnJoin(a, c);
+            child = join.key().scope();
+        } else if (a.viaNames() != null) {
             if (a.viaNames().size() != 2) {
                 throw new Problem(a.pos(), "via takes child.column, a foreign key column of the child table");
             }
@@ -482,7 +511,39 @@ final class RuleCheck {
             }
         }
         return new R(new RuleExpr.Agg(a.pos(), a.fn(), arg == null ? null : arg.e(), where == null ? null : where.e(),
-            a.viaNames(), child, via), t);
+            a.viaNames(), child, via, join), t);
+    }
+
+    /**
+     * via child.key = subject.col, in either order. The child side may follow foreign keys (child.fk.col); the subject side is a
+     * plain column of the rule's own table. The two columns must have the same kind of value.
+     */
+    private RuleExpr.ColJoin columnJoin(RuleExpr.Agg a, Ctx c) {
+        List<String> l = a.join().left();
+        List<String> r = a.join().right();
+        boolean swap = r.size() > 2 || !r.get(0).equals(c.subject());
+        List<String> kid = swap ? r : l;
+        List<String> own = swap ? l : r;
+        if (own.size() != 2 || !own.get(0).equals(c.subject()) || kid.get(0).equals(c.subject())) {
+            throw new Problem(a.pos(), "via takes child.column = " + c.subject() + ".column: one side a column of the child table,"
+                + " the other a column of " + c.subject());
+        }
+        String child = kid.get(0);
+        Table ct = table(child, a.pos());
+        if (kid.size() == 2 && ct.column(kid.get(1)) == null) {
+            throw new Problem(a.pos(), child + "." + kid.get(1) + " is not a column of " + child + hint(kid.get(1), names(ct)));
+        }
+        if (g.table(c.subject()).column(own.get(1)) == null) {
+            throw new Problem(a.pos(), c.subject() + "." + own.get(1) + " is not a column of " + c.subject()
+                + hint(own.get(1), names(g.table(c.subject()))));
+        }
+        Ctx inner = new Ctx(c.subject(), child, false);
+        R key = ref(new RuleExpr.Ref(a.pos(), kid, null, null, null, null, null), inner);
+        R mine = ref(new RuleExpr.Ref(a.pos(), own, null, null, null, null, null), inner);
+        if (key.t() != mine.t()) {
+            throw new Problem(a.pos(), "via joins " + String.join(".", kid) + " and " + String.join(".", own) + ", which hold different kinds of value");
+        }
+        return new RuleExpr.ColJoin(l, r, (RuleExpr.Ref) key.e(), own.get(1));
     }
 
     // ---- columns

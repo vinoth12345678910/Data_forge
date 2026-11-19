@@ -62,14 +62,14 @@ class RuleLanguageTest {
     }
 
     @Test
-    void sqlIsPinnedForEachKind() {
+    void sqlIsPinnedForEachKindInTheLegacyForm() {
         List<Rule> rs = ok(
             rc("total", "derive", "orders.total_paise = sum(order_items.quantity * order_items.unit_price_paise)"),
             rc("done", "check", "payments.completed_at >= payments.created_at"),
             rc("cap", "limit", "sum(registrations.quantity) per registrations.ticket_type_id <= ticket_types.quantity"));
         String agg = "coalesce((select sum(c1.\"quantity\" * c1.\"unit_price_paise\") from \"public\".\"order_items\" c1"
             + " where c1.\"order_id\" = t.\"id\"), 0)";
-        RuleSql.Sql derive = RuleSql.compile(rs.get(0), G);
+        RuleSql.Sql derive = RuleSql.compile(rs.get(0), G, forge.core.Dialect.POSTGRES, true);
         assertEquals("select t.\"id\", t.\"total_paise\" as actual, " + agg + " as expected from \"public\".\"orders\" t"
             + " where t.\"total_paise\" is distinct from " + agg, derive.violations());
         assertEquals("select count(*) from (" + derive.violations() + ") v", derive.count());
@@ -77,12 +77,12 @@ class RuleLanguageTest {
         assertEquals(derive.violations() + " order by 1 limit 5", derive.sample(5));
 
         assertEquals("select t.\"id\", t.\"completed_at\", t.\"created_at\" from \"public\".\"payments\" t"
-            + " where (t.\"completed_at\" >= t.\"created_at\") is false", RuleSql.compile(rs.get(1), G).violations());
+            + " where (t.\"completed_at\" >= t.\"created_at\") is false", RuleSql.compile(rs.get(1), G, forge.core.Dialect.POSTGRES, true).violations());
 
         String used = "(select coalesce(sum(c1.\"quantity\"), 0) from \"public\".\"registrations\" c1 where c1.\"ticket_type_id\" = t.\"id\""
             + " and c1.\"event_id\" = t.\"event_id\")";  // the composite foreign key joins on every column
         assertEquals("select t.\"id\", t.\"quantity\" as cap, " + used + " as used from \"public\".\"ticket_types\" t"
-            + " where " + used + " > t.\"quantity\"", RuleSql.compile(rs.get(2), G).violations());
+            + " where " + used + " > t.\"quantity\"", RuleSql.compile(rs.get(2), G, forge.core.Dialect.POSTGRES, true).violations());
     }
 
     @Test

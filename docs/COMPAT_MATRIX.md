@@ -34,7 +34,9 @@ Machine: Apple M4, 10 cores, 16 GB; java version 21.0.12.1 2026-08-18 LTS; forge
 | golden/ecommerce | postgres:18 (server 18.6(Debian18.6-1.pgdg13+2)) | 1401 rows, 15 tables | PASS (1 s) | init: 6 check(s) not fully understood |
 | golden/saas-multitenant | postgres:18 (server 18.6(Debian18.6-1.pgdg13+2)) | 1601 rows, 17 tables | PASS (1 s) | init: 9 check(s) not fully understood |
 | holdout/pagila | postgres:18 (server 18.6(Debian18.6-1.pgdg13+2)) | 1500 rows, 15 tables | PASS (2 s) | - |
-| chinook | - | - | SKIPPED | not downloaded: the download was denied in this session, and its licence is unchecked. Set LAB_CHINOOK to a Postgres .sql file |
+| chinook (Chinook_PostgreSql.sql, schema only) | postgres:16-alpine (server 16.15) | 1100 rows, 11 tables | PASS (2 s) | - |
+| chinook (Chinook_PostgreSql_SerialPKs.sql, schema only) | postgres:16-alpine (server 16.15) | 1100 rows, 11 tables | PASS (2 s) | - |
+| chinook (Chinook_PostgreSql_AutoIncrementPKs.sql, schema only; GENERATED ALWAYS AS IDENTITY keys) | postgres:16-alpine (server 16.15) | 1100 rows, 11 tables | PASS (1 s) | - |
 | supabase demo | - | - | SKIPPED | no connection string given (a local Supabase Postgres container was running, but its credentials were not provided). Set LAB_SUPABASE_URL |
 | MySQL 8.4, SQLite | - | - | SKIPPED | `forge init` is Postgres and DDL files only; MySQL and SQLite run the translated golden subsets in `containerTest` and `test`, not this lab |
 
@@ -45,4 +47,4 @@ Machine: Apple M4, 10 cores, 16 GB; java version 21.0.12.1 2026-08-18 LTS; forge
 | golden/events-merch, ecommerce, saas-multitenant | this project's own schemas |
 | holdout/pagila | the permission notice in `golden/holdout/pagila/LICENSE.txt` (MIT-style, Devrim Gündüz); source in SOURCE.md |
 | lab/*.sql, generated 2,000 tables | written for this project, no third-party licence |
-| chinook | not committed; licence unchecked (SKIPPED) |
+| chinook | not committed; licence unconfirmed by the owner; run from a temporary schema-only copy (INSERTs and DROP/CREATE DATABASE removed), original untouched |

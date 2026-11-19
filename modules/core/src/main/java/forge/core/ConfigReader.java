@@ -60,12 +60,14 @@ public final class ConfigReader {
             throw new ConfigError("clock: not an ISO-8601 UTC instant: " + clock);
         }
         String locale = text(root, "locale", "");
-        JsonNode use = root.get("use");
-        if (use != null && !use.isNull() && !use.isEmpty()) {
-            throw new ConfigError("use: reserved for a later phase; it must be empty or absent for now.");
-        }
+        List<String> use = use(root.get("use"));
         Config.Cleanup cleanup = cleanup(root.get("cleanup"));
         List<Config.RuleConf> rules = rules(root.get("rules"));
+        Map<String, Config.StateConf> states = states(root.get("states"));
+        Map<String, Config.Scenario> scenarios = scenarios(root.get("scenarios"));
+        for (String pack : use) {
+            addPack(pack, rules, states, scenarios);
+        }
         Conn conn = connection(root.get("connection"));
         String ddl = text(root, "ddl", "");
         if (conn == null && ddl == null) {
@@ -91,8 +93,66 @@ public final class ConfigReader {
                 throw new ConfigError("tables." + k.table() + ": a table named in cleanup.keep is never generated, so it must not have rows.");
             }
         }
-        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states(root.get("states")), scenarios(root.get("scenarios")), Config.Run.NONE,
+        return new Config(1, seed.longValue(), clock, locale == null ? "en_IN" : locale, conn, ddl, out, rules, states, scenarios, Config.Run.NONE,
             text(root, "manifest_dir", ""), cleanup, relations(root.get("relations")));
+    }
+
+    /** The packs that ship in the jar (packs/ at the repo root is bundled as resources). */
+    private static final List<String> PACKS = List.of("ecommerce");
+
+    private static List<String> use(JsonNode n) {
+        List<String> out = new ArrayList<>();
+        if (n == null || n.isNull()) {
+            return out;
+        }
+        if (!n.isArray()) {
+            throw new ConfigError("use: a list of pack names is required, for example use: [ecommerce].");
+        }
+        for (JsonNode v : n) {
+            if (!v.isTextual()) {
+                throw new ConfigError("use: each entry is a pack name, for example ecommerce.");
+            }
+            if (!PACKS.contains(v.textValue())) {
+                throw new ConfigError("use: unknown pack " + v.textValue() + ". Packs: " + String.join(", ", PACKS) + ".");
+            }
+            if (out.contains(v.textValue())) {
+                throw new ConfigError("use: pack " + v.textValue() + " is listed twice.");
+            }
+            out.add(v.textValue());
+        }
+        return out;
+    }
+
+    /** Adds the pack's rules, states and scenarios after what the file has. A name in both is an error, never a silent override. */
+    private static void addPack(String name, List<Config.RuleConf> rules, Map<String, Config.StateConf> states, Map<String, Config.Scenario> scenarios) {
+        JsonNode pack;
+        try (java.io.InputStream in = ConfigReader.class.getResourceAsStream("/packs/" + name + ".yml")) {
+            if (in == null) {
+                throw new ConfigError("use: pack " + name + " is missing from this build.");
+            }
+            pack = YAML.readTree(in);
+        } catch (java.io.IOException e) {
+            throw new ConfigError("use: pack " + name + " cannot be read: " + e.getMessage());
+        }
+        keys(pack, "pack " + name, "rules", "states", "scenarios");
+        Set<String> have = new HashSet<>();
+        rules.forEach(r -> have.add(r.name()));
+        for (Config.RuleConf r : rules(pack.get("rules"))) {
+            if (!have.add(r.name())) {
+                throw new ConfigError("use: pack " + name + " has a rule named " + r.name() + ", and so does your forge.yml. Rename yours.");
+            }
+            rules.add(r);
+        }
+        for (Map.Entry<String, Config.StateConf> e : states(pack.get("states")).entrySet()) {
+            if (states.put(e.getKey(), e.getValue()) != null) {
+                throw new ConfigError("use: pack " + name + " has states for " + e.getKey() + ", and so does your forge.yml. Remove yours or do not use the pack.");
+            }
+        }
+        for (Map.Entry<String, Config.Scenario> e : scenarios(pack.get("scenarios")).entrySet()) {
+            if (scenarios.put(e.getKey(), e.getValue()) != null) {
+                throw new ConfigError("use: pack " + name + " has a scenario named " + e.getKey() + ", and so does your forge.yml. Rename yours.");
+            }
+        }
     }
 
     private static Config.Cleanup cleanup(JsonNode n) {

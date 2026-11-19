@@ -422,3 +422,24 @@
 - Next: A5 derive-with-join, then D9 MariaDB.
 - Decisions: recommended design (shift the parent's earliest by the minimum gap). It changes the parent time column's values for existing seeds.
 - Open: none new.
+
+## 2026-11-19 A3 follow-up: round(expr, n) (branch a3-round; stacked on w2-housekeeping)
+- Done: explicit `round(expr, n)`, half away from zero, `n` a literal 0 to 30, never implicit; checker, SQL per dialect (Postgres casts to numeric), generator (`Ruled`), SQLite and float refused. Edge-value table measured on Postgres 16.15 and MySQL 8.4.3: every row agrees with BigDecimal HALF_UP (only difference: MySQL does not pad when n is above the scale). Gates: `RoundRuleTest`, `DecimalRulesTest`, `RoundEdgeContainerTest` (7 tests: table, every x with every n as rules, 2,000 generated rows per database with a mutation caught). `./gradlew test` and the full `containerTest` pass; determinism-auditor and scope-guard (fresh agents) found nothing.
+- Not done: negative `n`, decimal `/` and `%` (so `round(a * b / c, n)` is still not writable), decimal literals (G6), round in SQL check constraints. verify.sh not run on this tip yet.
+- Next: feature 2, grouped-join verify (branch a4-grouped-verify).
+- Decisions: `n` limited to 0 to 30 (MySQL DECIMAL limit); a float argument is refused because Postgres and MySQL round floats differently.
+- Open (rule-language question for the owner, does not block): give decimal `/` a defined scale, so a rounded division can be written.
+
+## 2026-11-19 A4 verify as a grouped join (branch a4-grouped-verify; stacked on a3-round)
+- Done: every aggregate and limit compiles to one grouped derived table left-joined to the rule's table (default); the old correlated-subquery form stays behind `forge verify|generate --legacy-sql` for one release. Gates: `GroupedSqlTest` (pinned SQL, 13 tests), `GroupedEquivalenceContainerTest` (events-merch and ecommerce, seed and every broken fixture, every row compared; hand-written empty-group and NULL answers), `GroupedRandomTest` and `GroupedRandomContainerTest` (random data, SQLite 50 tries, Postgres and MySQL 10 each), `legacySqlReachesTheVerifier`. `./gradlew test` and the full `containerTest` pass; scope-guard found nothing.
+- Measured (`docs/VERIFY_COST.md`, Postgres 16, Apple M4): grouped 1.4 s at 1,000,000 parents with or without an index; legacy without an index 20 s at 20,000 and the 120 s timeout at 100,000 and 1,000,000. One regression: a `when` keeping about 0.1% of the parents with the index present is 0.9 s grouped vs 0.5 s legacy at 1,000,000.
+- Not done: a rule-subset flag; saas-multitenant has no rules in the language so it is not in the equivalence test; MySQL and SQLite timings and Postgres spill behaviour not measured. The JSON report has no `sql` field, so the flag test checks the legacy-only `slow:` note. verify.sh not run on this tip; step k (UI smoke) still SKIPPED (the Playwright Chromium 1148 install did not complete).
+- Next: feature 3, measured limits table and preflight (branch l-limits-preflight).
+- Decisions: the `slow:` index note applies to the legacy form only; the legacy path is removed after the next release.
+
+## 2026-11-19 Wave 3 closed in one roll-up (branch w3-final: A6 + the A3, A4 stack + A5 + C2)
+- Done: A5 `via child.key = subject.col` (keys may follow foreign keys; `ColumnJoinTest` 8; both ecommerce inventory rules pass under both oracles on the seed and every broken fixture). C2 `use: [ecommerce]` (pack bundled in the jar; `PackTest` 6, `PackGoldenTest` 3, generate and verify equal the golden on Postgres, package test runs it on SQLite). A6 S3 pin repinned (`dd972fc5…`): the commit before A6 passes all four pins, A6 changes S3 only, S4 now checked and passes. D9 and E1 marked "on demand". README and `packs.gif` updated.
+- Not done: generation of the two inventory rules (verify-only: `check (reserved <= on_hand)` with both columns derived); the other packs; the `fill` and `pick` rules (11); PERF speed rows not re-measured; PR #75's own checks never ran the scale-tagged pin test.
+- Next: the owner reviews the roll-up PR (it also carries A3, A4, the lab-script housekeeping commit and the Chinook compat commit, whose licence is unconfirmed); nothing merged by Claude.
+- Decisions: A5 verify-only for the two rules (owner); packs ship as a classpath resource and a name clash is an error (owner); the gen and CLI tests skip the two verify-only rules by name.
+- Open: a floor on `opening_qty` computed from the aggregates would make those two rules generatable (owner's design call); `scripts/verify.sh` results for this tip are in the PR description.

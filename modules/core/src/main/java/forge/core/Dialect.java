@@ -90,6 +90,15 @@ public enum Dialect {
         return fn(name) + "(" + String.join(", ", fixed) + ")";
     }
 
+    /**
+     * round(arg, n) on an exact number: half away from zero on Postgres and MySQL. Postgres has no round(bigint, int) and rounds a
+     * double half to even, so the argument is cast to numeric first. SQLite is never asked: its round() returns a binary float, so
+     * a rule that uses round is refused there before any SQL is written (RuleSet.noDecimals).
+     */
+    public String round(String arg, long n) {
+        return this == POSTGRES ? "round((" + arg + ")::numeric, " + n + ")" : "round(" + arg + ", " + n + ")";
+    }
+
     /** Integer division of two integer expressions, truncating toward zero. */
     public String div(String a, String b) {
         return this == MYSQL ? "(" + a + " div " + b + ")" : "(" + a + " / " + b + ")";

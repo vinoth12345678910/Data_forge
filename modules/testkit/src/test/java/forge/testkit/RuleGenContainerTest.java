@@ -81,6 +81,13 @@ class RuleGenContainerTest {
     }
 
     /** forge init's zero-config file (row counts) with the golden's Phase 2 rules put on top. */
+    /**
+     * A5: the two ecommerce inventory rules are checked by verify (both oracles, seed and broken fixtures: RuleGoldenContainerTest,
+     * VerifyOracleContainerTest) but not generated. inventory has check (reserved <= on_hand) and both columns are derived, so the
+     * generator refuses them (a floor on opening_qty would be needed; decided verify-only for now, see docs/LIMITS_REGISTER.md A5).
+     */
+    static final Set<String> VERIFY_ONLY = Set.of("inventory_reserved_matches_active", "stock_on_hand_matches_movements");
+
     static Config configWithRules(String name, Path dir, List<Config.RuleConf> rules) throws Exception {
         Path ddl = golden(name + "/schema.sql");
         Path yml = dir.resolve("forge.yml");
@@ -133,7 +140,7 @@ class RuleGenContainerTest {
         Path ddl = golden(name + "/schema.sql");
         Config p2 = ConfigReader.read(Files.readString(golden(name + "/phase2.forge.yml")));
         SchemaGraph g = DdlReader.read(ddl, new Db(base() + "postgres", "postgres", "pw"));
-        Config conf = configWithRules(name, dir, p2.rules());
+        Config conf = configWithRules(name, dir, p2.rules().stream().filter(r -> !VERIFY_ONLY.contains(r.name())).toList());
         List<Rule> rules = RuleSet.check(conf.rules(), g);
         assertEquals(name.equals("events-merch") ? 6 : 9, rules.size());
 

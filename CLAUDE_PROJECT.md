@@ -59,7 +59,7 @@ Phase 5: add "I wrote the safety tests myself. Run them, report, do not edit." P
 environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts); real-data blocker; count check with rollback; keep list; truncate only at 100% coverage; audit log. Plus sequence reset and manual checklist.
 
 ## Current state (UPDATE EACH SESSION)
-- Date: 2026-11-14
+- Date: 2026-11-19
 - Done and merged to `main`: Phase 5 (cleanup, guards, readiness, purge, drop-metadata), `forge mcp` (stdio, six tools, no delete), the local HTTP API (`modules/server`, contract `docs/design/UI_API.md`), the web UI lite (`ui/`, PR #56). The `phase-5` tag is the owner's (not confirmed).
 - In progress: `p6-tui` (`modules/tui`, a terminal menu over the local API; 6 tests pass; PR open, not merged).
 - Not done: README and release work (README reconcile, docs set, no-network test, events pack, packaging, hygiene scan, version 1.0.0-rc1); the Docker version of the UI smoke test; Run, Verify and Go-live have not been exercised with real data (SQLite and MySQL get no table settings from the UI connect; Postgres needs Docker).
@@ -71,3 +71,5 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Wave 1 of the limits register closed on stacked branches (tip `w1-b1-external-stubs`, PRs open, not merged): A1 A2 A3 A7 A8 B1 B2 built, A4 needed no code. Waiting for the owner's review; Waves 2 to 4 not started.
 
 - Wave 3 item C4 (2026-11-19, branch `w3-c4-state-suggest`, PR to `main`): `init` suggests a state machine for status-like columns (notes only, nothing written to forge.yml). verify.sh PASS except j and k SKIPPED. C3, D7 not started; A5, A6, C2, D9, E1 wait for the owner.
+
+- Wave 3 roll-up (2026-11-19, branch `w3-final`, PR to `main`; C4, C3, D7 already merged in #73 and #74): adds A6 (was #75; S3 pin repinned to `dd972fc5…`, because the pin test is `scale`-tagged and the PR's checks never ran it), A5 (`via child.key = subject.col`; the two ecommerce inventory rules pass under both oracles but are verify-only, generation refuses them), C2 (`use: [ecommerce]`, the pack ships in the jar, a name clash is an error), and the stack under them: A3, A4, plus two older unmerged commits (lab-script housekeeping, Chinook compat matrix with the licence unconfirmed). D9 and E1 stay refused, marked "on demand" in the register. README updated and `packs.gif` recorded from the real tool. Open: a floor on `opening_qty` would let generation make the two inventory rules true (owner's design call). Nothing merged by Claude.

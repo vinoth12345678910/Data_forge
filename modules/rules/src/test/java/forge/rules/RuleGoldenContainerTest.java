@@ -58,7 +58,7 @@ class RuleGoldenContainerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"events-merch,6", "ecommerce,9"})
+    @CsvSource({"events-merch,6", "ecommerce,11"})
     void everyCompiledQueryRuns(String name, int expected) throws Exception {
         String db = "rules_" + (dbs++);
         try (Connection admin = DriverManager.getConnection(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());

@@ -210,8 +210,10 @@ final class RuleReader {
                     arg = visit(es.get(0));
                 }
             }
-            List<String> via = c.colRef() == null ? null : ref(c.colRef()).names();
-            return new RuleExpr.Agg(pos(c.fn), c.fn.getText().toLowerCase(java.util.Locale.ROOT), arg, where, via, null, null);
+            List<RulesParser.ColRefContext> refs = c.colRef();
+            List<String> via = refs.isEmpty() ? null : ref(refs.get(0)).names();
+            RuleExpr.ColJoin join = refs.size() == 2 ? new RuleExpr.ColJoin(via, ref(refs.get(1)).names(), null, null) : null;
+            return new RuleExpr.Agg(pos(c.fn), c.fn.getText().toLowerCase(java.util.Locale.ROOT), arg, where, via, null, null, join);
         }
     }
 }

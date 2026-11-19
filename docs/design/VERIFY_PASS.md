@@ -33,7 +33,7 @@ Honest limit: the parser and type-checker are shared by the generator and the ve
 
 - **Read-only.** The verifier sets `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` and runs one read-only transaction per run; a rule cannot change data. A statement timeout (default 60 s, `--timeout`) stops a runaway query.
 - **Pinned `search_path`** to the configured `connection.schema`; table names are also schema-qualified and double-quoted by the compiler.
-- **Plain SQL only:** scalar subqueries, `coalesce`, `is distinct from`, `case`, `least`, `greatest`. No extensions, no temp tables, no functions the rule language does not list. Needs Postgres 12 or newer (tested on 16 only; older and other versions are NOT tested locally and the report will say so).
+- **Plain SQL only:** grouped joins (derived tables with `group by`, left-joined), scalar primary-key lookups for parent paths, `coalesce`, `is distinct from`, `case`, `least`, `greatest`. No extensions, no temp tables, no functions the rule language does not list. Needs Postgres 12 or newer (tested on 16 only; older and other versions are NOT tested locally and the report will say so).
 - **A user with `SELECT` on the tables is enough.**
 - Each rule runs its own count query and, only on failure, its sample query. A failing query (missing table or column after drift, permission denied, timeout) gives status `ERROR` with the database's message, never PASS. An `ERROR` makes the whole run fail.
 
@@ -81,3 +81,11 @@ Rule names in `forge.yml` equal the names in `expected.yml`, so each pair is mat
 1. **Module walls both ways + SQL judged by the database + the golden oracle, recommended (above).** The parser and AST are shared; the judge and the evaluator are not.
 2. Also write a second, separate parser inside `gen` (no shared AST). Removes the shared-parser gap, but two parsers for one language will drift and double the work; the golden oracle already covers most of that gap.
 3. Verify only through the hand-written golden SQL (no compiler). Fully independent, but then user rules written in `forge.yml` could not be verified at all.
+
+## Aggregates as a grouped join (A4)
+
+Each aggregate (`sum`, `count`, `min`, `max`, and the used amount of a `limit`) is one derived table, grouped by the child's foreign key columns and left-joined to the rule's table, instead of a correlated subquery run once per parent row. The old form needs an index on the child foreign key to be fast (without it the cost is quadratic: 20 s at 20,000 parents, a 120 s timeout at 100,000, `docs/VERIFY_COST.md`); the grouped form reads each table once.
+
+- **Same answers.** A parent with no children still gets a row (left join): `sum` and `count` read it as 0, `min` and `max` as NULL; a NULL argument is ignored by `sum`/`min`/`max` as before; a child with a NULL foreign key is in no group; a `limit` with a NULL cap reports nothing; `when` still filters the rule's own table only. A composite foreign key groups and joins on every column. An aggregate that reads the rule's own row (an outer reference) joins the rule's table inside the derived table. Parent paths stay primary-key lookups.
+- **Proof.** `GroupedEquivalenceContainerTest` runs both forms on every golden seed and every broken fixture of events-merch and ecommerce (saas-multitenant declares no rules in the language) and compares every returned row and count; `GroupedRandomTest` and `GroupedRandomContainerTest` do the same on random data (SQLite, Postgres, MySQL) with empty groups, NULL keys and NULL arguments; the empty-group cases have their answer written out by hand.
+- **The old form, for one release:** `forge verify --legacy-sql` and `forge generate --legacy-sql`. The "slow: add an index" note on a passing rule belongs to the old form only; in the default form an index hint appears only when a query fails. The `sql` field of the report now carries the grouped query. Both the flag and the old emission are removed after the next release.
