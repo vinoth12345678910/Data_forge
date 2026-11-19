@@ -38,4 +38,22 @@ PY
 report="$(cd "$work" && FORGE_JAR="$root/$jar" "$root/scripts/forge" verify)" || fail "forge verify on SQLite exited non-zero"
 echo "$report" | grep -q "forge verify: .* rules on" || fail "forge verify printed no report (output lost?): $report"
 echo "$report" | grep -q "PASS" || fail "forge verify report has no PASS line: $report"
+# C2: the ecommerce pack ships inside the jar, and `use: [ecommerce]` works through the launcher (SQLite, no Docker).
+unzip -Z1 "$jar" packs/ecommerce.yml >/dev/null 2>&1 || fail "packs/ecommerce.yml is not in the jar"
+pk="$work/pack"
+mkdir "$pk"
+python3 - "$root" "$pk" <<'PY'
+import sqlite3, sys
+root, work = sys.argv[1], sys.argv[2]
+c = sqlite3.connect(work + "/app.db")
+c.executescript(open(root + "/golden/ecommerce/schema.sqlite.sql").read())
+c.commit()
+t = open(root + "/golden/ecommerce/phase3.forge.yml").read()
+t = t[:t.index("\nrules:") + 1] + "use: [ecommerce]\n"
+open(work + "/forge.yml", "w").write(t.replace("ddl: schema.sql\n", "connection:\n  url: sqlite:" + work + "/app.db\n  env: test\n"))
+PY
+( cd "$pk" && FORGE_JAR="$root/$jar" "$root/scripts/forge" generate >/dev/null ) || fail "forge generate with use: [ecommerce] on SQLite failed"
+preport="$(cd "$pk" && FORGE_JAR="$root/$jar" "$root/scripts/forge" verify)" || fail "forge verify with use: [ecommerce] exited non-zero"
+echo "$preport" | grep -q "PASS" || fail "forge verify with the ecommerce pack has no PASS line: $preport"
+echo "$preport" | grep -q "^  FAIL" && fail "forge verify with the ecommerce pack has a failing rule: $preport"
 echo "package test: ok ($jar)"
