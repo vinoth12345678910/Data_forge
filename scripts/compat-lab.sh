@@ -4,6 +4,7 @@
 # Needs Docker and Java 21. Usage: bash scripts/compat-lab.sh
 # Env: LAB_PG_IMAGES="postgres:16-alpine postgres:17-alpine"  images to run (default: 16 only; the golden and Pagila schemas
 #                                                              also run on every image listed after the first)
+#      LAB_ONLY=regex       run only the schemas whose name matches (the matrix then holds only those rows)
 #      LAB_TIMEOUT=1200     seconds allowed per command
 #      LAB_CHINOOK=path     a Chinook Postgres .sql file you downloaded (licence checked by you)
 #      LAB_SUPABASE_URL=postgres://host:port/db  LAB_SUPABASE_USER=postgres  (password in PGPASSWORD): the local Supabase demo
@@ -30,6 +31,7 @@ lastline() { grep -v '^[[:space:]]*$' "$1" | tail -1 | tr '|' '/' | cut -c1-240;
 
 run_one() { # image name sqlfile
   local image="$1" name="$2" sql="$3" cname port db wd t0 t1 res="PASS" err="" size="-" step
+  [ -z "${LAB_ONLY:-}" ] || [[ "$name" =~ $LAB_ONLY ]] || return 0
   cname="forge-lab-$$"
   [ -n "${CID:-}" ] || return 1
   db="lab_$(echo "$name" | tr -c 'a-z0-9\n' '_')"
