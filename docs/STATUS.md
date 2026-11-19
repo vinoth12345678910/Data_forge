@@ -436,3 +436,10 @@
 - Not done: a rule-subset flag; saas-multitenant has no rules in the language so it is not in the equivalence test; MySQL and SQLite timings and Postgres spill behaviour not measured. The JSON report has no `sql` field, so the flag test checks the legacy-only `slow:` note. verify.sh not run on this tip; step k (UI smoke) still SKIPPED (the Playwright Chromium 1148 install did not complete).
 - Next: feature 3, measured limits table and preflight (branch l-limits-preflight).
 - Decisions: the `slow:` index note applies to the legacy form only; the legacy path is removed after the next release.
+
+## 2026-11-19 Wave 3 closed in one roll-up (branch w3-final: A6 + the A3, A4 stack + A5 + C2)
+- Done: A5 `via child.key = subject.col` (keys may follow foreign keys; `ColumnJoinTest` 8; both ecommerce inventory rules pass under both oracles on the seed and every broken fixture). C2 `use: [ecommerce]` (pack bundled in the jar; `PackTest` 6, `PackGoldenTest` 3, generate and verify equal the golden on Postgres, package test runs it on SQLite). A6 S3 pin repinned (`dd972fc5…`): the commit before A6 passes all four pins, A6 changes S3 only, S4 now checked and passes. D9 and E1 marked "on demand". README and `packs.gif` updated.
+- Not done: generation of the two inventory rules (verify-only: `check (reserved <= on_hand)` with both columns derived); the other packs; the `fill` and `pick` rules (11); PERF speed rows not re-measured; PR #75's own checks never ran the scale-tagged pin test.
+- Next: the owner reviews the roll-up PR (it also carries A3, A4, the lab-script housekeeping commit and the Chinook compat commit, whose licence is unconfirmed); nothing merged by Claude.
+- Decisions: A5 verify-only for the two rules (owner); packs ship as a classpath resource and a name clash is an error (owner); the gen and CLI tests skip the two verify-only rules by name.
+- Open: a floor on `opening_qty` computed from the aggregates would make those two rules generatable (owner's design call); `scripts/verify.sh` results for this tip are in the PR description.
