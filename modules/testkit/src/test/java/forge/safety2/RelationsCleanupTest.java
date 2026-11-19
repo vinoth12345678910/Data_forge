@@ -65,7 +65,9 @@ class RelationsCleanupTest extends RxBase {
     @Test
     void r6_childTableIsDeletedBeforeParentTable(@TempDir Path dir) throws Exception {
         Rx rx = simple(dir);
-        rx.relationsYaml = SIMPLE_REL;
+        // the logging triggers only write dellog, so they are allowed; dellog is a keep table (not generated)
+        rx.relationsYaml = SIMPLE_REL + "cleanup:\n  allow_triggers: [users, orders]\n";
+        rx.tablesYaml += "  dellog:\n    keep: true\n";
         rx.sql("create table dellog (n bigserial primary key, t text not null)",
             "create function logdel() returns trigger language plpgsql as $$ begin insert into dellog (t) values (tg_table_name); return old; end $$",
             "create trigger users_del after delete on users for each row execute function logdel()",
