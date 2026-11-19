@@ -123,6 +123,7 @@ final class Ruled {
                 gen.info(e.getKey()).ruledCols.add(c);
             }
         }
+        headroom(clamps);
         for (Map.Entry<String, Map<String, List<Limit>>> e : asChild.entrySet()) {
             for (String c : e.getValue().keySet()) {
                 if (derives.getOrDefault(e.getKey(), Map.of()).containsKey(c)) {
@@ -393,6 +394,46 @@ final class Ruled {
             }
             case RuleExpr.Fn x -> x.args().forEach(i -> own(i, table, out));
             default -> { }
+        }
+    }
+
+    /**
+     * A6: a time column that a gap rule reads on the parent side gets headroom. For "child < parent by 1h..", the
+     * parent's earliest value moves later by the minimum gap, so a child drawn at the earliest time still has room
+     * (for "child > parent by ..", the parent's latest moves earlier). This changes the values that parent column
+     * draws, by design. A column that a rule shapes itself, a unique one, or a gap as large as the whole range is left
+     * alone; the last one then fails in ranged() with its clear message.
+     */
+    private void headroom(Map<String, Map<String, List<Clamp>>> clamps) {
+        Map<String, long[]> need = new TreeMap<>();
+        for (Map<String, List<Clamp>> byColumn : clamps.values()) {
+            for (List<Clamp> list : byColumn.values()) {
+                for (Clamp cl : list) {
+                    if (cl.lo() <= 0 || !(cl.bound() instanceof RuleExpr.Ref ref) || ref.table() == null || ref.column() == null) {
+                        continue;
+                    }
+                    long[] n = need.computeIfAbsent(ref.table() + "." + ref.column(), x -> new long[2]);
+                    int i = cl.op().startsWith("<") ? 0 : 1;
+                    n[i] = Math.max(n[i], cl.lo());
+                }
+            }
+        }
+        for (Map.Entry<String, long[]> e : need.entrySet()) {
+            String table = e.getKey().substring(0, e.getKey().indexOf('.'));
+            String column = e.getKey().substring(e.getKey().indexOf('.') + 1);
+            RowGen.Col k = gen.col(table, column);
+            if (k == null || k.dom == null || k.perm != null || k.sequence || gen.info(table).ruledCols.contains(column)
+                || !(k.dom.kind.equals("ts") || k.dom.kind.equals("tstz") || k.dom.kind.equals("date"))) {
+                continue;
+            }
+            long unit = k.dom.kind.equals("date") ? 86_400L : 1L;
+            long earlier = Math.ceilDiv(e.getValue()[0], unit);
+            long later = Math.ceilDiv(e.getValue()[1], unit);
+            if (earlier + later >= k.dom.space) {
+                continue;
+            }
+            Dom d = k.dom;
+            k.dom = new Dom(d.kind, d.lo + later, d.hi, d.space - earlier - later, d.scale, d.vals, d.clock);
         }
     }
 
