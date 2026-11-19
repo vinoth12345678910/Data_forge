@@ -14,3 +14,6 @@
 **Recommendation:** option 1, compiled as `case`. Build after you approve the grammar line.
 
 **Decision for you:** approve `agg(col where cond)` syntax?
+
+## Decision (owner, 2026-11-19) and what was built
+Option 1, with conditions: unfiltered and rules-off output byte-identical (determinism tests green before and after); a filter may not use a column that depends on the aggregate it filters (refused with a message); pre-pass cost measured. Built as `sum(c.col where cond)` / `count(* where cond)` in a limit. Instead of reordering the draw, the filter reads the plain drawn value of its columns, so the columns it may read are restricted (see the register A2 row). Compiled to `... and (cond) is true` in verify.

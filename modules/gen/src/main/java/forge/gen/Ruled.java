@@ -28,7 +28,7 @@ final class Ruled {
     /** A check that pins a column's range from the other side of a comparison. */
     private record Clamp(Rule rule, String column, String op, RuleExpr bound, long lo, long hi) {}
 
-    private record Limit(Rule rule, String child, Fk fk, String childCol, String parent, String cap) {}
+    private record Limit(Rule rule, String child, Fk fk, String childCol, String parent, String cap, RuleExpr where) {}
 
     private record Step(String column, Rule derive, List<Clamp> clamps, List<Limit> asChild, List<Limit> asCap) {}
 
@@ -80,7 +80,7 @@ final class Ruled {
                 }
                 default -> {
                     Rule.Limit l = r.limit();
-                    Limit ls = new Limit(r, l.child(), l.fk(), l.childColumn(), r.subject(), l.cap());
+                    Limit ls = new Limit(r, l.child(), l.fk(), l.childColumn(), r.subject(), l.cap(), l.where());
                     if (r.when() != null) {
                         throw new GenError("Rule " + r.name() + ": a when on a limit is not supported by generation yet.");
                     }
@@ -128,6 +128,11 @@ final class Ruled {
                 }
             }
         }
+        for (Map<String, List<Limit>> byCap : asCap.values()) {
+            for (List<Limit> ls : byCap.values()) {
+                ls.forEach(this::checkFilter);
+            }
+        }
         List<String> tables = new ArrayList<>();
         for (Table t : g.tables()) {
             if (gen.info(t.name()).ruled) {
@@ -145,6 +150,37 @@ final class Ruled {
             throw new GenError("Rule " + r.name() + ": " + k.table.name() + "." + k.col.name()
                 + " is a key, a sequence or already tied to another column by a check, so a rule cannot set it.");
         }
+    }
+
+    /**
+     * A limit with a where counts only the children the where is true for. The where is read from the plain drawn value of its
+     * columns, before any rule shapes the row, so a column a rule computes, limits or redraws cannot be read (it would depend on
+     * the limit it filters).
+     */
+    private void checkFilter(Limit l) {
+        if (l.where() == null) {
+            return;
+        }
+        RowGen.Info ci = gen.info(l.child());
+        TreeSet<String> cols = new TreeSet<>();
+        own(l.where(), l.child(), cols);
+        for (String c : cols) {
+            RowGen.Col k = gen.col(l.child(), c);
+            if (k == null || k.fk != null || ci.ruledCols.contains(c)) {
+                throw new GenError("Rule " + l.rule().name() + ": the where reads " + l.child() + "." + c + ", which depends on a rule"
+                    + " (or is a key), so it may depend on the limit it filters. A where may read only plain columns that no rule"
+                    + " computes, limits or constrains.");
+            }
+        }
+        if (!ci.evals.isEmpty() || !ci.derived.isEmpty() || checks.containsKey(l.child())) {
+            throw new GenError("Rule " + l.rule().name() + ": a where on a limit is not supported while " + l.child()
+                + " has check rules or checks that redraw its rows (the filtered column could change after it is counted).");
+        }
+    }
+
+    /** True when the child row counts against the limit: no where, or the where is true. */
+    private boolean counted(Limit l, long row) {
+        return l.where() == null || Boolean.TRUE.equals(eval(l.where(), new Ctx(l.child(), row, 0, null, null, null)));
     }
 
     /** Aggregates look up the child's parent row with attempt 0, so a redrawn child with a nullable key is not supported. */
@@ -460,7 +496,7 @@ final class Ruled {
                 continue;
             }
             Long cap = capOf(l, p);
-            if (cap != null) {
+            if (cap != null && counted(l, c.row())) {
                 hi = Math.min(hi, Math.floorDiv(cap, counts(l).n()[(int) p]));
                 why += " " + l.rule().name();
             }
@@ -511,7 +547,7 @@ final class Ruled {
         long kids = gen.rows(l.child());
         for (long r = 0; r < kids; r++) {
             long p = gen.parentRow(l.child(), l.fk(), r, 0);
-            if (p < 0) {
+            if (p < 0 || !counted(l, r)) {
                 continue;
             }
             n[(int) p]++;
