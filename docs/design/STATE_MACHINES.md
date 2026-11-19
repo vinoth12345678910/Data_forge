@@ -88,3 +88,7 @@ On generated events-merch and ecommerce: every state machine rule passes under o
 - `?` (0 or 1) was added next to `*` (0 to 2). The `by:` path (a child laid out by a grandparent's status) is **not built**: `reservation_status_matches_order` stays out of P3.1.
 - A language limit found: a `verify`/`check` that has only aggregates and no own column fails with "a check must read at least one column"; the golden file adds `orders.id is not null and (...)`.
 - Only single-column foreign keys can be laid out.
+
+## Suggested by init (Wave 3, C4)
+
+`forge init` notices status-like columns (`StateHints` in `schema`) and prints a note that names them and the `states:` entry to add. It never writes the entry: mix, start and transitions are your design.

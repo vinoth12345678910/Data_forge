@@ -153,4 +153,39 @@ class InitContainerTest {
         assertEquals("mine\n", Files.readString(out));
         assertTrue(r.err().contains("--force"), r.err());
     }
+
+    static java.util.List<String> hints(java.util.List<String> lines) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String l : lines) {
+            if (l.startsWith("Status column ")) {
+                out.add(l.substring("Status column ".length()).split(" ")[0]);
+            }
+        }
+        return out;
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+        "events-merch/schema.sql|events.status,orders.status,payments.status",
+        "ecommerce/schema.sql|orders.status,payments.status,reservations.status,returns.status,shipments.status",
+        "saas-multitenant/schema.sql|invoices.status,members.status,subscriptions.status,tenants.status",
+        "holdout/pagila/pagila-schema.sql|"})
+    void initSuggestsAStateMachineForStatusColumns(String rel, String expected, @TempDir Path dir) throws Exception {
+        java.util.List<String> want = expected == null ? java.util.List.of() : java.util.List.of(expected.split(","));
+        String[] base = {"init", "--ddl", golden(rel).toString(), "--scratch-url", url("postgres"), "--env", "test",
+            "--user", "postgres", "--password-env", "TEST_PG_PASSWORD", "--out", dir.resolve("forge.yml").toString()};
+        Run r = Run.of(base);
+        assertEquals(0, r.code(), r.err());
+        assertEquals(want, hints(r.out().lines().toList()), r.out());
+
+        String[] json = java.util.Arrays.copyOf(base, base.length + 1);
+        json[base.length] = "--json";
+        json[base.length - 1] = dir.resolve("again.yml").toString();
+        Run j = Run.of(json);
+        assertEquals(0, j.code(), j.err());
+        java.util.List<String> notes = new java.util.ArrayList<>();
+        new com.fasterxml.jackson.databind.ObjectMapper().readTree(j.out()).get("data").get("notes")
+            .forEach(n -> notes.add(n.asText()));
+        assertEquals(want, hints(notes));
+    }
 }
