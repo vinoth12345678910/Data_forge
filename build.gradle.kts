@@ -22,7 +22,7 @@ subprojects {
     // Docker-backed tests carry the "containers" tag. They stay out of `test`
     // (so a clean build works without Docker) and run via `containerTest`.
     tasks.named<Test>("test") {
-        useJUnitPlatform { excludeTags("containers", "scale") }
+        useJUnitPlatform { excludeTags("containers", "scale", "probe") }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
     }
     val sourceSets = extensions.getByType<SourceSetContainer>()
@@ -52,6 +52,15 @@ subprojects {
             isFailOnNoMatchingTests = false
         }
         systemProperty("golden.dir", rootProject.file("golden").absolutePath)
+        outputs.upToDateWhen { false }
+    }
+    // Probes record what the tool does today for a limits-register row (docs/LIMITS_REGISTER.md). They never fail on the outcome.
+    tasks.register<Test>("probeTest") {
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform { includeTags("probe") }
+        filter { isFailOnNoMatchingTests = false }
         outputs.upToDateWhen { false }
     }
     // The scale tests (one million rows, minutes long) carry the "scale" tag and run via `scaleTest` (verify.sh step h).
