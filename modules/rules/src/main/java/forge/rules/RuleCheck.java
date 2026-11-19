@@ -547,6 +547,7 @@ final class RuleCheck {
             case "bool", "boolean" -> T.BOOL;
             case "timestamp", "timestamptz", "timestamp with time zone", "timestamp without time zone" -> T.TIME;
             case "date" -> T.DATE;
+            case "uuid" -> T.UUID;
             default -> T.OTHER;
         };
     }
@@ -567,6 +568,7 @@ final class RuleCheck {
             case BOOL -> "true or false";
             case TIME -> "timestamp";
             case DATE -> "date";
+            case UUID -> "uuid";
             case OTHER -> c == null ? "of another type" : "of type " + c.type().name();
         };
     }

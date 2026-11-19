@@ -12,7 +12,7 @@ public sealed interface RuleExpr {
     record Pos(int line, int col) {}
 
     /** Kinds of value. */
-    enum T { INT, NUM, TEXT, BOOL, TIME, DATE, OTHER }
+    enum T { INT, NUM, TEXT, BOOL, TIME, DATE, UUID, OTHER }
 
     record Num(Pos pos, long v) implements RuleExpr {}
 
