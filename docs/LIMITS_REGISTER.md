@@ -22,7 +22,7 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | A7 | **Confirmed** | `relations: unknown key. Allowed here: [version, seed, clock, locale, connection, ddl, use, tables, rules, states, scenarios, cleanup, manifest_dir]`. Does not exist. |
 | A8 | **Confirmed** | No trigger code in `schema`, `cli` or `load`. Lab `lab/triggers` (profile-per-user trigger): `forge generate: loading table profiles failed: ERROR: duplicate key value violates unique constraint "profiles_pkey" Detail: Key (user_id)=(17) already exists. ... Nothing was loaded`. `init` printed no warning. |
 | B1 | **Confirmed** | Lab `lab/multi_schema` fails at `init`: `Foreign key profiles.profiles_id_fkey references table auth.users, which is not in the schema that was read.` `connection.schemas: unknown key`. |
-| B2 | **Confirmed** (differs from the register) | Not read as text: `forge generate` refuses with `Table kinds: column b has type bit, which cannot be generated yet.` One column per run, so the rest of the matrix (jsonb, tsvector, money, inet, hstore, ltree, ranges, arrays, enum, domain, composite) is still unseen behind the first failure. |
+| B2 | **Confirmed** (differs from the register) | Not read as text: `forge generate` refuses with `Table t: column v has type <type>, which cannot be generated yet.` Full matrix, `scripts/lab-types.sh`, [TYPE_MATRIX_RESULTS.md](TYPE_MATRIX_RESULTS.md): 44 Postgres types, **21 PASS, 23 FAIL**. FAIL: tsquery, money, macaddr, hstore, citext, ltree, int4range, int8range, numrange, daterange, tstzrange, bit, varbit, composite, interval, time, timetz, point, box, xml, oid, pg_lsn, txid_snapshot. The same 23 fail when the column is nullable (it is not left NULL). |
 | B3 | **Confirmed** | Lab `lab/partitions_views` fails at `generate`: `table child_t has no primary key or unique not-null key; cleanup could not tell its rows apart. Add a key or mark the table keep in forge.yml.` (inheritance child). `init` gave no warning. Partitions, view and materialized view not reached because of that failure. |
 | B4 | **Refuted** for the CLI | Lab: a generated 2,000-table schema (one foreign key per table) PASSED `init`, `generate` (200,000 rows) and `verify` in 48 s on Postgres 16. UI graph rendering still unmeasured. |
 | B5 | **Refuted** | Lab `lab/identifiers` (`"Order"`, `"select"`, `"Naïve Col"`, `"ünï table"`, `"user"`) PASSED zero-config on Postgres 16. MySQL not run. |
@@ -65,7 +65,7 @@ Probes (tag `probe`, never fail on the outcome, run with `./gradlew probeTest`, 
 | G1 | The error for an ordering or text-literal compare on a uuid column omits the type name: `of another type cannot be compared with >` | CC | `LimitsProbeTest`. Wording only; belongs with A1. |
 | G2 | `packs/` is empty: zero packs ship, not one | CC | `git ls-files packs` |
 | G4 | `init` gives no warning for a table that `generate` will refuse (inheritance child with no key); the failure comes at `generate` | CC | `docs/COMPAT_MATRIX.md` lab/partitions_views |
-| G5 | `generate` stops at the first unsupported column type, so a schema with several shows one problem per run | CC | lab/pg_types |
+| G5 | `generate` stops at the first unsupported column type, so a schema with several shows one problem per run; a NULLABLE column of an unsupported type is refused too, not left NULL | CC | lab/pg_types, TYPE_MATRIX_RESULTS.md |
 | G3 | Postgres-only probes (A1, B1, B2, B5 on Postgres) cannot run on SQLite and need Docker | CC | Docker down on this machine; SQLite accepts any declared type |
 
 ---

@@ -14,3 +14,6 @@
 **Recommendation:** do step 1 first (about half a day, no product change), then decide each type from the measured list.
 
 **Decision for you:** only the `skip` key, if it does not exist yet.
+
+## Measured (step 1 done)
+`scripts/lab-types.sh` -> [../TYPE_MATRIX_RESULTS.md](../TYPE_MATRIX_RESULTS.md): 44 types, 21 PASS, 23 FAIL, identical for not-null and nullable columns. The cheapest first win needs no language change: leave a NULLABLE unsupported column NULL instead of refusing (23 types become usable on nullable columns). Making not-null columns of `citext`, `time`, `interval`, `money`, ranges, `point`, `xml` generate is a generator change (yours to approve).
