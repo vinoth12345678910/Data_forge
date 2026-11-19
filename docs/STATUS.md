@@ -372,3 +372,6 @@
 - Decisions needed: A2 ordering, A3 rounding rule, A7 key and cleanup, B1 stub tables and cleanup. All touch generator design, config, or Phase 5 safety (yours).
 - Next: owner answers those four; then one branch each.
 - Open: Chinook and the Supabase demo lab rows still SKIPPED (`Dev/texus-demo/.env` read was denied; run the lab from your own shell).
+
+## 2026-11-19 A7 safety tests frozen
+-  (27 tests, 24 red, 3 controls) frozen at commit `bc67464` (see scripts/safety2-frozen.txt; verify.sh step i2 fails if they change). Written by the test-first agent in a separate invocation before any A7 code. The builder may not edit them.
