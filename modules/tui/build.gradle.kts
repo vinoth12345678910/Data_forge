@@ -6,6 +6,8 @@ dependencies {
     "implementation"(project(":server"))
     "implementation"(project(":cli"))
     "implementation"(libs.findLibrary("jackson-yaml").get())
+    "testImplementation"(project(":core"))
+    "testImplementation"(project(":schema"))
 }
 
 application { mainClass.set("forge.tui.Tui") }

@@ -49,20 +49,36 @@ final class Render {
         List<List<String>> cycles = cycles(names, next);
         Set<String> inCycle = new HashSet<>();
         cycles.forEach(inCycle::addAll);
-        StringBuilder sb = new StringBuilder(tables.size() + " tables\n");
+        StringBuilder sb = new StringBuilder(tables.size() + " tables");
+        if (answer.path("schemas").size() > 0) sb.append(" (schema read: ").append(join(answer.path("schemas"))).append(")");
+        sb.append('\n');
         for (JsonNode t : tables) {
             String name = t.path("name").asText();
             sb.append("  ").append(name).append(" (").append(t.path("columns").size()).append(" columns");
             if (t.path("pk").size() > 0) sb.append(", pk ").append(join(t.path("pk")));
             sb.append(")");
+            if (t.path("external").asBoolean()) sb.append("  [external: not generated, ids from config]");
+            if (t.path("has_insert_trigger").asBoolean()) sb.append("  [insert trigger]");
             if (inCycle.contains(name)) sb.append("  [in a cycle]");
             sb.append('\n');
+            List<String> marks = new ArrayList<>();
+            for (JsonNode c : t.path("columns")) {
+                String type = c.path("type").asText();
+                if (c.path("read_as_text").asBoolean()) marks.add(c.path("name").asText() + " " + type + " (read as text)");
+                else if (type.equals("uuid")) marks.add(c.path("name").asText() + " uuid");
+            }
+            if (!marks.isEmpty()) sb.append("      types: ").append(String.join(", ", marks)).append('\n');
             for (JsonNode f : t.path("fks")) {
                 String ref = f.path("refTable").asText();
                 sb.append("      ").append(join(f.path("columns"))).append(" -> ").append(ref).append("(").append(join(f.path("refColumns"))).append(")");
                 if (ref.equals(name)) sb.append("  [self reference]");
                 sb.append('\n');
             }
+        }
+        for (JsonNode r : answer.path("relations")) {
+            sb.append("  declared: ").append(r.path("table").asText()).append("(").append(join(r.path("columns"))).append(") -> ")
+                .append(r.path("refTable").asText()).append("(").append(join(r.path("refColumns")))
+                .append(")  [declared, not a database foreign key]\n");
         }
         if (cycles.isEmpty()) {
             sb.append("No foreign-key cycles between tables.\n");
@@ -118,6 +134,36 @@ final class Render {
         }
     }
 
+    /** The init warnings of a connect answer, each with what to do; empty when there are none. */
+    static String warnings(JsonNode envelope) {
+        JsonNode w = envelope.path("data").path("init_warnings");
+        if (!w.isArray() || w.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("Things to know about this schema (").append(w.size()).append(")\n");
+        for (JsonNode x : w) {
+            sb.append("  ").append(x.path("table").asText());
+            if (x.hasNonNull("column")) sb.append('.').append(x.get("column").asText());
+            sb.append(": ").append(x.path("message").asText()).append("\n      What to do: ").append(x.path("what_to_do").asText()).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** The generate preflight: the memory estimate, and the refusal with the -Xmx needed. */
+    static String preflight(JsonNode envelope) {
+        JsonNode p = envelope.path("data").path("preflight");
+        if (!p.isObject()) return errors(envelope);
+        StringBuilder sb = new StringBuilder("Before you generate\n");
+        if (p.path("estimated_live_mb").isNull()) {
+            sb.append("  No tied composite keys, so there is no memory estimate. This run has ").append(p.path("heap_mb").asText()).append(" MB of heap.\n");
+        } else {
+            sb.append("  Estimated live memory: ").append(p.path("estimated_live_mb").asText()).append(" MB of ").append(p.path("heap_mb").asText())
+                .append(" MB of heap (").append(p.path("tied_parent_rows").asText()).append(" tied parent rows).\n");
+        }
+        if (!p.path("ok").asBoolean(true)) {
+            sb.append("  REFUSED: this run does not fit in memory. Nothing will be loaded. Start with -Xmx").append(p.path("xmx_mb_needed").asText()).append("m.\n");
+        }
+        return sb.toString();
+    }
+
     /** The result of a generate run (the envelope of GET /api/progress). */
     static String run(JsonNode progress) {
         String state = progress.path("state").asText("idle");
@@ -144,10 +190,15 @@ final class Render {
             String name = r.path("name").asText(), status = r.path("status").asText();
             if (status.equals("PASS")) passed.add(name);
             else if (status.equals("FAIL") || status.equals("ERROR")) failed.add(name + "  " + status);
-            else notChecked.add(name + "  " + status);
+            else notChecked.add(name + "  " + status + "\n      Why: " + (r.hasNonNull("reason") ? r.get("reason").asText() : "no reason was given"));
+        }
+        for (JsonNode r : env.path("data").path("not_checked_rules")) {
+            notChecked.add(r.path("name").asText() + "  NOT_CHECKED\n      Why: " + r.path("reason").asText());
         }
         if (passed.isEmpty() && failed.isEmpty() && notChecked.isEmpty()) {
-            return sb.append(errors(env)).toString(); // no rules came back: an error, not three empty lists
+            sb.append(errors(env));
+            if (env.path("errors").isEmpty() && env.has("data")) sb.append("forge.yml holds no rules, so nothing was verified. This is not a pass.\n");
+            return sb.toString(); // no rules came back: an error or a plain statement, not three empty lists
         }
         StringBuilder rest = new StringBuilder();
         StringBuilder failedErrors = new StringBuilder();

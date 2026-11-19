@@ -45,18 +45,20 @@ final class Screens {
         out.println("Connect. Reads the schema only. A prod label is refused.");
         out.println("With MySQL or SQLite only the schema screen works for now; Run, Verify and Go-live need a Postgres connection.");
         String url = ask("Database URL: ");
+        String schema = url.startsWith("postgres://") ? ask("Schema to read (blank for public): ") : "";
         String env = ask("Environment label (dev, test, staging): ");
         String user = ask("User (optional): ");
         out.print(hidden ? "Password (not shown, never stored): " : "Password (this terminal cannot hide it, so it will show as you type; it is never stored): ");
         out.flush();
         String password = secret.get();
         if (env.equals("prod")) say("\u001b[1;37;41m", "PROD label selected. Data Forge refuses to connect with it and will not work on a production database from here.");
-        Api.Reply r = api.connect(url, env, user, password == null ? "" : password);
+        Api.Reply r = api.connect(url, env, user, password == null ? "" : password, schema);
         connected = r.status() == 200 && r.body().path("ok").asBoolean();
         if (connected) say("\u001b[32m", "Connected. Schema read.");
         else say("\u001b[31m", "Not connected.");
         JsonNode envelope = r.body().path("envelope");
         if (envelope.isObject()) out.print(Render.errors(envelope));
+        if (connected) out.print(Render.warnings(envelope));
         else if (r.body().has("error")) out.println("  " + r.body().path("error").asText());
     }
 
@@ -69,6 +71,12 @@ final class Screens {
 
     void run() throws IOException {
         if (!need()) return;
+        Api.Reply pf = api.preflight();
+        JsonNode pe = pf.body().path("envelope");
+        if (pe.isObject()) {
+            out.print(Render.preflight(pe));
+            if (!pe.path("data").path("preflight").path("ok").asBoolean(true)) return; // a refused run is not started
+        }
         Api.Reply g = api.generate();
         if (g.status() != 202) {
             out.println("  " + g.body().path("error").asText("request failed"));
