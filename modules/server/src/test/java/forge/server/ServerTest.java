@@ -174,6 +174,8 @@ class ServerTest {
         JsonNode g = M.readTree(api("GET", "/api/golive", null).body());
         assertTrue(g.has("dry_run") && g.has("readiness") && g.get("checklist").isArray(), g.toString());
         assertTrue(g.get("command").asText().startsWith("forge cleanup --run"), "a copyable text only: " + g.get("command"));
+        assertEquals("forge cleanup --run -c forge.yml --confirm-db <database name> --confirm-rows <total rows from the dry run>", g.get("command").asText(),
+            "placeholders only, never pre-filled with a name or a count");
     }
 
     private String raw(int port, String path) throws Exception {

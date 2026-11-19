@@ -40,8 +40,9 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
 export const hasToken = token !== '';
 
 export const api = {
-  connect: (b: { url: string; env: string; user: string; password: string }) => call<Wrapped>('POST', '/api/connect', b),
+  connect: (b: { url: string; env: string; user: string; password: string; schema?: string }) => call<Wrapped>('POST', '/api/connect', b),
   schema: () => call<SchemaAnswer>('GET', '/api/schema'),
+  preflight: () => call<Wrapped>('GET', '/api/preflight'),
   generate: () => call<{ state: string }>('POST', '/api/generate', {}),
   progress: () => call<Progress>('GET', '/api/progress'),
   verify: () => call<Wrapped>('POST', '/api/verify', {}),

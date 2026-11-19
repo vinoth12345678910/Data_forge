@@ -1,11 +1,11 @@
-// Fails if ui/src calls anything but the six routes of docs/design/UI_API.md, uses a method other than GET or POST,
+// Fails if ui/src calls anything but the seven routes of docs/design/UI_API.md, uses a method other than GET or POST,
 // or names a cleanup-run, purge, truncate, delete, backup or drop route.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const allowed = new Set(['/api/connect', '/api/schema', '/api/generate', '/api/progress', '/api/verify', '/api/golive']);
+const allowed = new Set(['/api/connect', '/api/schema', '/api/preflight', '/api/generate', '/api/progress', '/api/verify', '/api/golive']);
 const banned = /(cleanup|purge|truncate|delete|backup|drop|resume)/i;
 
 function files(dir, out = []) {

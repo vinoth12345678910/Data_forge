@@ -255,12 +255,8 @@ public final class Session {
         o.set("readiness", ready.envelope());
         JsonNode list = ready.envelope().path("data").path("manual_checklist");
         o.set("checklist", list.isArray() ? list : M.createArrayNode());
-        long total = 0;
-        for (JsonNode t : dry.envelope().path("data").path("tables")) {
-            total += t.path("manifest_rows").asLong();
-        }
-        o.put("command", "forge cleanup --run -c forge.yml --confirm-db <database name> --confirm-rows "
-            + (total > 0 ? Long.toString(total) : "<total rows from the dry run>"));
+        // Placeholders only: a person reads the database name and the row total from the dry run and types them. Never pre-filled.
+        o.put("command", "forge cleanup --run -c forge.yml --confirm-db <database name> --confirm-rows <total rows from the dry run>");
         return o;
     }
 
