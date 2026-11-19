@@ -358,3 +358,10 @@
 - Next: one push of the three branches (the hook runs verify.sh once), three PRs, no merge.
 - Open: GIF frames were looked at for 5 of 15 (hero, ui, tui, mcp and cleanup partly); the rest were checked by their captured text only. The checksums in RELEASE.md are for the final build of this round (rebuild after any further change).
 
+
+## 2026-11-19 limits register (branches lim-register, lim-compat-lab, lim-wave1-decisions, stacked on rel-gifs)
+- Done: `docs/LIMITS_REGISTER.md` checked row by row (44 rows: 34 Confirmed, 4 Refuted, 6 Unknown); probes tagged `probe` (`./gradlew probeTest`); `scripts/compat-lab.sh` and `docs/COMPAT_MATRIX.md` (Postgres 16/17/18, 2,000 tables PASS in 48 s); 10M-row size probe (`SizeProbeTest`); eight Wave 1 design docs. No product code changed.
+- Not done: Chinook (download denied, licence unchecked), the Supabase demo (no connection string), MySQL and SQLite lab runs, the Postgres type matrix beyond the first unsupported column (`bit`), tied-key parents at 10M rows, 50M and 100M rows.
+- Findings: 10M rows at -Xmx256m: parents+children 65.8 s, 181 MB live; tied composite keys 144.6 s, 231 MB live (90%, over the 85% gate). Triggers collide at load (A8); multi-schema refused at init (B1); inheritance child without a key fails at generate; `bit` not generated.
+- Next: owner answers the eight design docs in `docs/design/` (UUID_RULES, RULE_FILTERS, DECIMAL_RULES, CHECK_CONSTRAINTS, LOGICAL_RELATIONS, TRIGGERS, MULTI_SCHEMA, TYPE_MATRIX); nothing is built before that.
+- Open: the register's A1 failure is not reproduced; the verify.sh result is in the final report.

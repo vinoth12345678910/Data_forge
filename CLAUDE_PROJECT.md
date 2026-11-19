@@ -65,3 +65,5 @@ environment label; dry run within 24h; backup gate (failed `backup_cmd` aborts);
 - Not done: README and release work (README reconcile, docs set, no-network test, events pack, packaging, hygiene scan, version 1.0.0-rc1); the Docker version of the UI smoke test; Run, Verify and Go-live have not been exercised with real data (SQLite and MySQL get no table settings from the UI connect; Postgres needs Docker).
 - Next: owner merges `p6-tui`; then `verify.sh` once on `main`; then the release-lite task (stacked branches, never merge, no tag).
 - Open: owner review of delegated safety design; Backup secret-masking incomplete; five known purge gaps and the picocli `@file` setting in docs/STATUS.md; `npm audit` reports 4 vulnerabilities in the UI dev tooling (not looked at); the web UI shows "This data is partial" even after a failed run.
+
+- Limits register (2026-11-19): branches `lim-register`, `lim-compat-lab`, `lim-wave1-decisions` (stacked on `rel-gifs`, PRs open, not merged). Probes and design docs only; waiting for the owner's reply on the eight Wave 1 design docs before any build.
