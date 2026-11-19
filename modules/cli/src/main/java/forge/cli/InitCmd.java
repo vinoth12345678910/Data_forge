@@ -115,6 +115,15 @@ final class InitCmd implements Callable<Integer> {
                 }
             }
         }
+        if (url != null) {
+            try (java.sql.Connection tc = new Db(jdbc(url), user, password).open()) {
+                String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(tc, schema));
+                if (warn != null) {
+                    e.out.println(warn);
+                    notes.add(warn);
+                }
+            }
+        }
         Path snap = out.toAbsolutePath().normalize().getParent().resolve(DriftCmd.SNAPSHOT);
         boolean wrote = !Files.exists(snap);
         if (wrote) {

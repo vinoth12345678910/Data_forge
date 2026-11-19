@@ -56,6 +56,10 @@ final class GenerateCmd implements Callable<Integer> {
             return files(e, live, gen);
         }
         try (Connection c = live.db.open()) {
+            String warn = forge.schema.Triggers.warning(forge.schema.Triggers.onInsert(c, live.graph.schema()));
+            if (warn != null) {
+                e.out.println(warn);
+            }
             PgLoader.Result r = live.postgres()
                 ? PgLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(), live.manifestDir(manifestDir))
                 : forge.load.JdbcLoader.load(c, live.graph, live.conf, gen, live.text, live.conf.connection().env(),
