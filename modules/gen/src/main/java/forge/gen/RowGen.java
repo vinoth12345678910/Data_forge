@@ -1022,6 +1022,11 @@ public final class RowGen {
             case "tsvector":
                 return new Dom("tsvector", 3, 8, 1, 0, null, clock);
             default:
+                if (c.nullable()) {
+                    // A type the generator cannot make: a nullable column is left NULL in every row (register B2).
+                    k.nullPer10k = 10_000;
+                    return fixed("text", 1);
+                }
                 throw new GenError(where + " has type " + name + ", which cannot be generated yet.");
         }
     }
